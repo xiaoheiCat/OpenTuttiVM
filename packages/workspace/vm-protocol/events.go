@@ -37,6 +37,9 @@ const (
 	TopicAgentShared EventTopic = "agent.shared"
 	// TopicBorrowCommand routes a borrower's command to the owning device.
 	TopicBorrowCommand EventTopic = "agent.borrow_command"
+	// TopicBorrowRevoked tells holders of an old lease generation that
+	// borrowing ended; their in-flight commands are invalid immediately.
+	TopicBorrowRevoked EventTopic = "agent.borrow_revoked"
 	// TopicApprovalRequest routes a permission prompt to the current
 	// borrower, who is the session operator.
 	TopicApprovalRequest EventTopic = "agent.approval_request"

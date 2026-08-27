@@ -17,6 +17,7 @@ import (
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/api"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/borrow"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/config"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/preview"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/realtime"
@@ -61,11 +62,12 @@ func run() error {
 
 	rooms := room.NewService(repo, cfg, room.RealClock{}, nil)
 	previews := preview.NewRegistry()
-	hub := realtime.NewHub(nil, rooms, previews, log)
+	borrows := borrow.NewRegistry()
+	hub := realtime.NewHub(nil, rooms, previews, borrows, log)
 	seq := sequencer.NewManager(repo, cfg, cas, hub, log)
 	hub.SetSequencer(seq)
 	relay := tunnel.NewRelay(log)
-	server := api.New(cfg, rooms, seq, hub, previews, relay, cas, repo, log)
+	server := api.New(cfg, rooms, seq, hub, previews, borrows, relay, cas, repo, log)
 	rooms.SetBroadcaster(hub)
 
 	// The server never restores rooms across restarts: end everything still

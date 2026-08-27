@@ -47,7 +47,7 @@ Two hard rules shape everything:
 | `packages/workspace/vm-protocol` | Wire contracts: `FileOperation`/`Envelope`, snapshots, event topics, `.tutti` hostname parsing, tunnel headers |
 | `packages/workspace/vm-cas` | Content-addressed storage: 4 MiB chunks, SHA-256, self-verifying manifests, local + memory stores |
 | `packages/workspace/vm-sync` | Server-authoritative OT engine: text patch transform/apply, optimistic blob replace, conflict barrier, replica bootstrap/resync, `ConvertChange` (POSIX write → operation) |
-| `services/open-tutti-server` | The bare server: room lifecycle, share/ticket auth, HTTP API, WS hub, sequencer, CAS endpoints, yamux relay |
+| `services/open-tutti-server` | The bare server: room lifecycle, share/ticket auth, HTTP API, WS hub, sequencer, CAS endpoints, yamux relay, agent-borrowing registry (lease fencing + approval routing) |
 | `services/open-tutti-room-sync` | Per-device engine: Full/Lazy replica, WS client with gap-resync, `.tutti` gateway + VIP allocation, local CA, Room FS Protocol host |
 | `services/open-tutti-fs` | FUSE mount (Linux containers) bridging POSIX into the room via the Room FS Protocol |
 
@@ -99,6 +99,40 @@ when unambiguous: ambiguous HTTP(S) renders an H5 session selector
 raw TCP refuses with guidance instead of random routing. Synthetic IPs
 come from 100.96.0.0/12 and never leave the room network. All cross-device
 traffic flows device → server → device over WebSocket + yamux.
+
+## Agent Borrowing (v1, first-class)
+
+Borrowing is a room capability, locked in the design record as a v1
+feature, not a later plugin:
+
+- **Model** — an owner shares one agent instance (`agent.shared`) with its
+  capabilities (skills, MCP servers, tools). File-only skills inject
+  read-only into sessions; MCP servers and tools execute on the **owner's
+  device** through its Capability Broker. Configs and credentials never
+  travel: borrowers can use "Alice's GitHub MCP to look at an issue" but
+  can never read her MCP config, OAuth tokens, or `~/.ssh`.
+- **Flow** — borrower command (`agent.borrow_command`) → server validates
+  the lease → routes to the owner's device → the agent executes there, in
+  the room VM, with results/terminal/file changes streaming to everyone.
+- **Revocation is fencing, not UI** — every share start bumps a lease
+  generation; revoke bumps it again. Commands carrying a stale generation
+  are rejected instantly (`agent.borrow_revoked`), and the current
+  borrowing session learns its generation is dead.
+- **Approvals route to the borrower** — the current borrower is the
+  session operator. Permission prompts (`agent.approval_request`) go to
+  them, never to the owner (a capability provider, not the operator); the
+  decision (`agent.approval_decision`) routes back to the owner's runtime,
+  which resumes or interrupts. Agents continue approval-free work while
+  paused on a prompt.
+- **BorrowSafe gating** — adapters that cannot guarantee the isolation
+  contract (workspace-only filesystem, no host fs, no docker socket, no
+  credential files, no privilege escalation, policy-controlled network)
+  stay self-usable but the server refuses to share them.
+
+Server-side state lives in `services/open-tutti-server/internal/borrow`
+(registry + fencing + approval routing); identities (owner, borrower,
+decider) are always stamped from the authenticated connection, never
+trusted from the wire.
 
 ## Compatibility
 

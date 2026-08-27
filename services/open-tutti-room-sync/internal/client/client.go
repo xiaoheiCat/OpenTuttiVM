@@ -222,6 +222,39 @@ func (s *Session) AnnouncePorts(p vmprotocol.PortsChangedPayload) error {
 	return s.conn.Write(s.ctx, websocket.MessageText, msg)
 }
 
+// writeTyped marshals one typed client message onto the socket.
+func (s *Session) writeTyped(typ string, payload any) error {
+	msg, err := json.Marshal(map[string]any{"type": typ, typ: payload})
+	if err != nil {
+		return err
+	}
+	return s.conn.Write(s.ctx, websocket.MessageText, msg)
+}
+
+// ShareAgent enables or disables borrowing for one local agent instance.
+// The server stamps ownership from the authenticated connection.
+func (s *Session) ShareAgent(p vmprotocol.AgentSharedPayload) error {
+	return s.writeTyped("agent_share", p)
+}
+
+// BorrowCommand sends one instruction to a shared agent; the server
+// validates the lease generation and routes to the owner's device.
+func (s *Session) BorrowCommand(p vmprotocol.BorrowCommandPayload) error {
+	return s.writeTyped("borrow_command", p)
+}
+
+// RequestApproval is used by the owning device's agent runtime to surface
+// a permission prompt to the current borrower (the session operator).
+func (s *Session) RequestApproval(p vmprotocol.ApprovalRequestPayload) error {
+	return s.writeTyped("approval_request", p)
+}
+
+// DecideApproval answers a pending prompt; only the session operator's
+// decision is accepted.
+func (s *Session) DecideApproval(p vmprotocol.ApprovalDecisionPayload) error {
+	return s.writeTyped("approval_decision", p)
+}
+
 // Close ends the session socket.
 func (s *Session) Close() error {
 	s.cancel()

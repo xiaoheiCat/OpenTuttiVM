@@ -11,6 +11,7 @@ import (
 	"github.com/coder/websocket"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 
+	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/borrow"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/preview"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/room"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/sequencer"
@@ -18,10 +19,15 @@ import (
 
 // ClientMessage is anything a room client sends on the business socket.
 type ClientMessage struct {
-	Type     string                          `json:"type"` // "op" | "ports" | "ping" | "conflict_resolved"
-	Envelope json.RawMessage                 `json:"envelope,omitempty"`
-	Ports    *vmprotocol.PortsChangedPayload `json:"ports,omitempty"`
-	Path     string                          `json:"path,omitempty"`
+	Type     string          `json:"type"` // "op" | "ports" | "ping" | "conflict_resolved" | "agent_share" | "borrow_command" | "approval_request" | "approval_decision"
+	Envelope json.RawMessage `json:"envelope,omitempty"`
+
+	Ports            *vmprotocol.PortsChangedPayload     `json:"ports,omitempty"`
+	Path             string                              `json:"path,omitempty"`
+	AgentShare       *vmprotocol.AgentSharedPayload      `json:"agent_share,omitempty"`
+	BorrowCommand    *vmprotocol.BorrowCommandPayload    `json:"borrow_command,omitempty"`
+	ApprovalRequest  *vmprotocol.ApprovalRequestPayload  `json:"approval_request,omitempty"`
+	ApprovalDecision *vmprotocol.ApprovalDecisionPayload `json:"approval_decision,omitempty"`
 }
 
 // ServerMessage is anything the server sends.
@@ -52,6 +58,7 @@ type Hub struct {
 	seq      *sequencer.Manager
 	rooms    *room.Service
 	previews *preview.Registry
+	borrows  *borrow.Registry
 	log      *slog.Logger
 
 	mu    sync.RWMutex
@@ -60,8 +67,11 @@ type Hub struct {
 
 // NewHub wires the hub. Attach the sequencer after construction to break
 // the hub/sequencer cycle.
-func NewHub(seq *sequencer.Manager, rooms *room.Service, previews *preview.Registry, log *slog.Logger) *Hub {
-	return &Hub{seq: seq, rooms: rooms, previews: previews, log: log, conns: map[string]map[string]*Conn{}}
+func NewHub(seq *sequencer.Manager, rooms *room.Service, previews *preview.Registry, borrows *borrow.Registry, log *slog.Logger) *Hub {
+	return &Hub{
+		seq: seq, rooms: rooms, previews: previews, borrows: borrows,
+		log: log, conns: map[string]map[string]*Conn{},
+	}
 }
 
 // SetSequencer attaches the operation sequencer.
@@ -192,6 +202,90 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 			if err := h.seq.ResolveConflict(c.RoomID, msg.Path); err != nil {
 				h.log.Warn("resolve conflict", "room", c.RoomID, "path", msg.Path, "err", err)
 			}
+		case "agent_share":
+			if msg.AgentShare == nil {
+				continue
+			}
+			p := *msg.AgentShare
+			// Only the connection's own agents can be shared.
+			p.OwnerDeviceID = c.DeviceID
+			if p.Shared {
+				out, err := h.borrows.Share(c.RoomID, p)
+				if err != nil {
+					h.log.Warn("agent share", "room", c.RoomID, "err", err)
+					continue
+				}
+				h.BroadcastRoom(c.RoomID, vmprotocol.Event{
+					Topic: vmprotocol.TopicAgentShared, RoomID: c.RoomID, Payload: mustJSON(out),
+				})
+			} else {
+				shared, revoked, err := h.borrows.Revoke(c.RoomID, c.DeviceID, p.AgentInstanceID)
+				if err != nil {
+					h.log.Warn("agent revoke", "room", c.RoomID, "err", err)
+					continue
+				}
+				h.BroadcastRoom(c.RoomID, vmprotocol.Event{
+					Topic: vmprotocol.TopicAgentShared, RoomID: c.RoomID, Payload: mustJSON(shared),
+				})
+				h.BroadcastRoom(c.RoomID, vmprotocol.Event{
+					Topic: vmprotocol.TopicBorrowRevoked, RoomID: c.RoomID, Payload: mustJSON(revoked),
+				})
+			}
+		case "borrow_command":
+			if msg.BorrowCommand == nil {
+				continue
+			}
+			p := *msg.BorrowCommand
+			// Borrower identity comes from the authenticated connection.
+			p.BorrowerDeviceID = c.DeviceID
+			out, err := h.borrows.Command(c.RoomID, p)
+			if err != nil {
+				// Stale or unknown lease: the borrower learns immediately
+				// that their generation is dead.
+				h.SendTo(c.RoomID, c.DeviceID, vmprotocol.Event{
+					Topic: vmprotocol.TopicBorrowRevoked, RoomID: c.RoomID,
+					Payload: mustJSON(vmprotocol.BorrowRevokedPayload{
+						AgentInstanceID: p.AgentInstanceID,
+						Reason:          err.Error(),
+					}),
+				})
+				continue
+			}
+			owner, _ := h.borrows.Agent(c.RoomID, p.AgentInstanceID)
+			if owner == nil {
+				continue
+			}
+			h.SendTo(c.RoomID, owner.OwnerDeviceID, vmprotocol.Event{
+				Topic: vmprotocol.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out),
+			})
+		case "approval_request":
+			if msg.ApprovalRequest == nil {
+				continue
+			}
+			p := *msg.ApprovalRequest
+			operator, err := h.borrows.OpenApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID)
+			if err != nil {
+				h.log.Warn("approval open", "room", c.RoomID, "err", err)
+				continue
+			}
+			p.SessionOperatorDeviceID = operator
+			h.SendTo(c.RoomID, operator, vmprotocol.Event{
+				Topic: vmprotocol.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p),
+			})
+		case "approval_decision":
+			if msg.ApprovalDecision == nil {
+				continue
+			}
+			p := *msg.ApprovalDecision
+			p.DeciderDeviceID = c.DeviceID
+			owner, err := h.borrows.ResolveDecision(p.ApprovalID, c.DeviceID)
+			if err != nil {
+				h.log.Warn("approval decision", "room", c.RoomID, "err", err)
+				continue
+			}
+			h.SendTo(c.RoomID, owner, vmprotocol.Event{
+				Topic: vmprotocol.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p),
+			})
 		case "ping":
 			_ = h.rooms.MarkOnline(c.Ctx, c.RoomID, c.DeviceID)
 		}

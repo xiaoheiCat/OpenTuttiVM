@@ -16,6 +16,7 @@ import (
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 
+	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/borrow"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/config"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/preview"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/realtime"
@@ -45,11 +46,11 @@ func newTestStack(t *testing.T) *testStack {
 	rooms := room.NewService(repo, cfg, room.RealClock{}, nil)
 	previews := preview.NewRegistry()
 	log := testLogger()
-	hub := realtime.NewHub(nil, rooms, previews, log)
+	hub := realtime.NewHub(nil, rooms, previews, borrow.NewRegistry(), log)
 	seq := sequencer.NewManager(repo, cfg, cas, hub, log)
 	hub.SetSequencer(seq)
 	relay := tunnel.NewRelay(log)
-	api := New(cfg, rooms, seq, hub, previews, relay, cas, repo, log)
+	api := New(cfg, rooms, seq, hub, previews, borrow.NewRegistry(), relay, cas, repo, log)
 	rooms.SetBroadcaster(hub)
 	ts := httptest.NewServer(api.Handler())
 	t.Cleanup(ts.Close)
@@ -399,4 +400,145 @@ func TestTransferEndpointsEnforceOwner(t *testing.T) {
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+// wsReadUntil reads from a room socket until an event with the given topic
+// arrives (or the deadline passes) and decodes its payload.
+func wsReadUntil(t *testing.T, ctx context.Context, ws *websocket.Conn, topic vmprotocol.EventTopic, out any) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		readCtx, cancelRead := context.WithTimeout(ctx, 300*time.Millisecond)
+		_, data, err := ws.Read(readCtx)
+		cancelRead()
+		if err != nil {
+			continue
+		}
+		var msg realtime.ServerMessage
+		if json.Unmarshal(data, &msg) != nil || msg.Event.Topic != topic {
+			continue
+		}
+		if out != nil {
+			if err := json.Unmarshal(msg.Event.Payload, out); err != nil {
+				t.Fatalf("decode %s payload: %v", topic, err)
+			}
+		}
+		return
+	}
+	t.Fatalf("event %s never arrived", topic)
+}
+
+func wsWrite(t *testing.T, ctx context.Context, ws *websocket.Conn, msg realtime.ClientMessage) {
+	t.Helper()
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.Write(ctx, websocket.MessageText, data); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAgentBorrowingFlow walks the locked borrowing semantics end to end:
+// owner shares, borrower commands, the owner's runtime prompts, the
+// borrower (session operator) decides, and revocation fences stale
+// generations.
+func TestAgentBorrowingFlow(t *testing.T) {
+	stack := newTestStack(t)
+	created := stack.createRoom(t, "dev_alice")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Bob joins through the share → ticket → join path.
+	var ticketRes struct {
+		Ticket string `json:"ticket"`
+	}
+	stack.post(t, "/api/share/"+created.ShareID+"/join-ticket", map[string]string{"password": created.Password}, &ticketRes)
+	var joinRes struct {
+		SessionToken string `json:"session_token"`
+	}
+	res := stack.post(t, "/api/rooms/"+created.RoomID+"/join", map[string]any{
+		"ticket": ticketRes.Ticket,
+		"device": map[string]string{"id": "dev_bob", "display_name": "Bob", "hostname": "bobs-pc", "public_key": "pk9"},
+	}, &joinRes)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("bob join status %d", res.StatusCode)
+	}
+
+	dial := func(token string) *websocket.Conn {
+		wsURL := strings.Replace(stack.srv.URL, "http://", "ws://", 1) +
+			"/api/rooms/" + created.RoomID + "/ws?token=" + token
+		ws, _, err := websocket.Dial(ctx, wsURL, nil)
+		if err != nil {
+			t.Fatalf("ws dial: %v", err)
+		}
+		t.Cleanup(func() { ws.CloseNow() })
+		return ws
+	}
+	aliceWS, bobWS := dial(created.SessionToken), dial(joinRes.SessionToken)
+
+	// Alice shares her Claude Code instance (BorrowSafe satisfied).
+	share := vmprotocol.AgentSharedPayload{
+		AgentInstanceID: "agent-claude-1", Provider: "claude-code", Borrowable: true, Shared: true,
+		Capabilities: vmprotocol.AgentCapabilities{Skills: []string{"repo-walk"}, MCP: []string{"github"}},
+	}
+	wsWrite(t, ctx, aliceWS, realtime.ClientMessage{Type: "agent_share", AgentShare: &share})
+	var shared vmprotocol.AgentSharedPayload
+	wsReadUntil(t, ctx, aliceWS, vmprotocol.TopicAgentShared, &shared)
+	if !shared.Shared || shared.LeaseGeneration != 1 || shared.OwnerDeviceID != "dev_alice" {
+		t.Fatalf("shared payload %+v", shared)
+	}
+
+	// Bob commands the shared agent on the live lease.
+	cmd := vmprotocol.BorrowCommandPayload{
+		CommandID: "c1", AgentInstanceID: "agent-claude-1",
+		LeaseGeneration: shared.LeaseGeneration, Input: "look at issue 12",
+	}
+	wsWrite(t, ctx, bobWS, realtime.ClientMessage{Type: "borrow_command", BorrowCommand: &cmd})
+	var routed vmprotocol.BorrowCommandPayload
+	wsReadUntil(t, ctx, aliceWS, vmprotocol.TopicBorrowCommand, &routed)
+	if routed.BorrowerDeviceID != "dev_bob" || routed.Input != "look at issue 12" {
+		t.Fatalf("routed command %+v", routed)
+	}
+
+	// The agent runtime on Alice's device hits a permission prompt; it
+	// routes to Bob, the session operator — never to Alice.
+	prompt := vmprotocol.ApprovalRequestPayload{
+		ApprovalID: "ap1", AgentInstanceID: "agent-claude-1", Provider: "claude-code",
+		Prompt: "Run `gh pr view 12`?", Options: []string{"allow once", "deny"},
+	}
+	wsWrite(t, ctx, aliceWS, realtime.ClientMessage{Type: "approval_request", ApprovalRequest: &prompt})
+	var request vmprotocol.ApprovalRequestPayload
+	wsReadUntil(t, ctx, bobWS, vmprotocol.TopicApprovalRequest, &request)
+	if request.SessionOperatorDeviceID != "dev_bob" || request.ApprovalID != "ap1" {
+		t.Fatalf("approval request %+v", request)
+	}
+
+	// Bob decides; the decision routes back to Alice with Bob as decider.
+	decision := vmprotocol.ApprovalDecisionPayload{ApprovalID: "ap1", Choice: 0}
+	wsWrite(t, ctx, bobWS, realtime.ClientMessage{Type: "approval_decision", ApprovalDecision: &decision})
+	var decided vmprotocol.ApprovalDecisionPayload
+	wsReadUntil(t, ctx, aliceWS, vmprotocol.TopicApprovalDecision, &decided)
+	if decided.DeciderDeviceID != "dev_bob" || decided.Choice != 0 {
+		t.Fatalf("decision %+v", decided)
+	}
+
+	// Alice revokes: generation bumps and every old-generation command
+	// dies immediately.
+	wsWrite(t, ctx, aliceWS, realtime.ClientMessage{
+		Type:       "agent_share",
+		AgentShare: &vmprotocol.AgentSharedPayload{AgentInstanceID: "agent-claude-1", Shared: false},
+	})
+	var revoked vmprotocol.BorrowRevokedPayload
+	wsReadUntil(t, ctx, bobWS, vmprotocol.TopicBorrowRevoked, &revoked)
+	if revoked.FinalGeneration != 2 {
+		t.Fatalf("revoked payload %+v", revoked)
+	}
+	stale := cmd
+	stale.CommandID = "c2"
+	wsWrite(t, ctx, bobWS, realtime.ClientMessage{Type: "borrow_command", BorrowCommand: &stale})
+	wsReadUntil(t, ctx, bobWS, vmprotocol.TopicBorrowRevoked, &revoked)
+	if revoked.AgentInstanceID != "agent-claude-1" {
+		t.Fatalf("stale command notice %+v", revoked)
+	}
 }

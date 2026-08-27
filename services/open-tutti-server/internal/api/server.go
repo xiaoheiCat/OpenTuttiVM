@@ -18,6 +18,7 @@ import (
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 
+	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/borrow"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/config"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/preview"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/realtime"
@@ -34,6 +35,7 @@ type Server struct {
 	seq      *sequencer.Manager
 	hub      *realtime.Hub
 	previews *preview.Registry
+	borrows  *borrow.Registry
 	relay    *tunnel.Relay
 	cas      vmcas.Store
 	repo     store.Repository
@@ -42,8 +44,8 @@ type Server struct {
 
 // New wires the API server.
 func New(cfg config.Config, rooms *room.Service, seq *sequencer.Manager, hub *realtime.Hub,
-	previews *preview.Registry, relay *tunnel.Relay, cas vmcas.Store, repo store.Repository, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, rooms: rooms, seq: seq, hub: hub, previews: previews, relay: relay, cas: cas, repo: repo, log: log}
+	previews *preview.Registry, borrows *borrow.Registry, relay *tunnel.Relay, cas vmcas.Store, repo store.Repository, log *slog.Logger) *Server {
+	return &Server{cfg: cfg, rooms: rooms, seq: seq, hub: hub, previews: previews, borrows: borrows, relay: relay, cas: cas, repo: repo, log: log}
 }
 
 // Handler builds the route table.
@@ -192,6 +194,7 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 	if room, err := s.rooms.GetRoom(r.Context(), roomID); err == nil && room.DissolvedAt != nil {
 		s.seq.CloseRoom(roomID)
 		s.previews.ClearRoom(roomID)
+		s.borrows.ClearRoom(roomID)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "left"})
 }
