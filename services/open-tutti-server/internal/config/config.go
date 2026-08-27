@@ -1,0 +1,124 @@
+// Package config loads the open-tutti-server configuration with the fixed
+// precedence: real environment variables override .env, .env overrides
+// program defaults.
+package config
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Config is the resolved server configuration.
+type Config struct {
+	ListenAddr   string
+	PublicURL    string
+	DataDir      string
+	DatabasePath string
+	ObjectsDir   string
+	LogLevel     string
+	Secret       string
+	// ServerInviteCode is optional; when set, room creation requires it.
+	// It is validated per request against the current value — there is no
+	// long-lived server-side grant list.
+	ServerInviteCode string
+	// OwnerGracePeriod is how long an unexpectedly disconnected owner keeps
+	// the room before ownership auto-transfers (or the room dissolves when
+	// nobody is online).
+	OwnerGracePeriod time.Duration
+	// JoinTicketTTL bounds the one-time share join tickets.
+	JoinTicketTTL time.Duration
+	// SnapshotIntervalOps triggers a checkpoint after this many operations.
+	SnapshotIntervalOps int
+}
+
+// Load resolves configuration from env, then envFile (.env), then defaults.
+// envFile may be empty; a missing file is not an error.
+func Load(envFile string) (Config, error) {
+	fileValues, err := parseEnvFile(envFile)
+	if err != nil {
+		return Config{}, err
+	}
+	get := func(key, def string) string {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+		if v := fileValues[key]; v != "" {
+			return v
+		}
+		return def
+	}
+
+	cfg := Config{
+		ListenAddr:          get("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080"),
+		PublicURL:           get("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080"),
+		DataDir:             get("OPEN_TUTTI_DATA_DIR", "/var/lib/open-tutti"),
+		LogLevel:            get("OPEN_TUTTI_LOG_LEVEL", "info"),
+		Secret:              get("OPEN_TUTTI_SECRET", ""),
+		ServerInviteCode:    get("OPEN_TUTTI_SERVER_INVITE_CODE", ""),
+		OwnerGracePeriod:    secondsOrDefault(get("OPEN_TUTTI_OWNER_GRACE_SECONDS", ""), 5*time.Minute),
+		JoinTicketTTL:       secondsOrDefault(get("OPEN_TUTTI_JOIN_TICKET_TTL_SECONDS", ""), 60*time.Second),
+		SnapshotIntervalOps: int(secondsOrDefault(get("OPEN_TUTTI_SNAPSHOT_INTERVAL_OPS", ""), 512)),
+	}
+
+	cfg.DatabasePath = get("OPEN_TUTTI_DATABASE_PATH", filepath.Join(cfg.DataDir, "open-tutti.db"))
+	cfg.ObjectsDir = get("OPEN_TUTTI_OBJECTS_DIR", filepath.Join(cfg.DataDir, "objects"))
+
+	if cfg.Secret == "" {
+		return Config{}, errors.New("OPEN_TUTTI_SECRET must be set (generate one, e.g. `openssl rand -hex 32`)")
+	}
+	if cfg.OwnerGracePeriod <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 {
+		return Config{}, errors.New("grace period, ticket TTL, and snapshot interval must be positive")
+	}
+	return cfg, nil
+}
+
+// parseEnvFile reads KEY=VALUE lines; comments (#) and blank lines are
+// ignored; surrounding quotes are stripped.
+func parseEnvFile(path string) (map[string]string, error) {
+	out := map[string]string{}
+	if path == "" {
+		return out, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return out, nil
+		}
+		return nil, fmt.Errorf("open env file: %w", err)
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.Trim(strings.TrimSpace(v), `"'`)
+		if k != "" {
+			out[k] = v
+		}
+	}
+	return out, sc.Err()
+}
+
+func secondsOrDefault(s string, def time.Duration) time.Duration {
+	if s == "" {
+		return def
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil || v <= 0 {
+		return def
+	}
+	return time.Duration(v) * time.Second
+}
