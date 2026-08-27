@@ -4,7 +4,7 @@ FROM golang:1.24.5-alpine AS build
 WORKDIR /src
 
 # Workspace modules first for layer caching.
-COPY go.work go.work.sum* ./
+COPY go.work.sum* ./
 COPY packages/workspace/vm-protocol/go.mod packages/workspace/vm-protocol/
 COPY packages/workspace/vm-cas/go.mod packages/workspace/vm-cas/
 COPY packages/workspace/vm-sync/go.mod packages/workspace/vm-sync/
@@ -13,7 +13,9 @@ RUN go mod download -C services/open-tutti-server
 
 COPY packages/workspace packages/workspace
 COPY services/open-tutti-server services/open-tutti-server
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+# GOWORK=off: the staged image contains only this server's module graph;
+# the repository-wide go.work references modules that are not copied in.
+RUN GOWORK=off CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
     -o /out/open-tutti-server \
     github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server
 

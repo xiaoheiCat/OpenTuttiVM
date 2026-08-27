@@ -316,6 +316,35 @@ func (c *Client) ResolveRoutes(ctx context.Context, query string) (map[string]an
 	return out, err
 }
 
+// RoomID returns the joined room's id.
+func (c *Client) RoomID() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.roomID
+}
+
+// RoomRoutes lists every live route in the room (gateway proxy sync).
+func (c *Client) RoomRoutes(ctx context.Context) ([]vmprotocol.RouteKey, error) {
+	c.mu.Lock()
+	token, roomID := c.token, c.roomID
+	c.mu.Unlock()
+	var res struct {
+		Routes []struct {
+			DeviceID  string `json:"device_id"`
+			SessionID string `json:"session_id"`
+			Port      int    `json:"port"`
+		} `json:"routes"`
+	}
+	if err := getJSON(ctx, c.http, c.server.BaseURL+"/api/rooms/"+roomID+"/routes?list=1", token, &res); err != nil {
+		return nil, err
+	}
+	out := make([]vmprotocol.RouteKey, 0, len(res.Routes))
+	for _, r := range res.Routes {
+		out = append(out, vmprotocol.RouteKey{RoomID: roomID, DeviceID: r.DeviceID, SessionID: r.SessionID, Port: r.Port})
+	}
+	return out, nil
+}
+
 // Leave exits the room (owner path requires apply + disband/transfer done
 // first, per the meeting rules).
 func (c *Client) Leave(ctx context.Context, workspaceApplied, disband bool) error {

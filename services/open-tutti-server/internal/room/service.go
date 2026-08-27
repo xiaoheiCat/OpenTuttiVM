@@ -169,6 +169,12 @@ func (s *Service) RotatePassword(ctx context.Context, roomID, deviceID string) (
 	return password, nil
 }
 
+// GetRoom exposes room state (lifecycle decisions like post-leave engine
+// teardown check DissolvedAt here).
+func (s *Service) GetRoom(ctx context.Context, roomID string) (store.Room, error) {
+	return s.repo.GetRoom(ctx, roomID)
+}
+
 // IssueJoinTicket verifies the room password from the share page and issues
 // a one-time, short-lived ticket. The password itself never enters the deep
 // link.

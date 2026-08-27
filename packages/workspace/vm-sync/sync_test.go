@@ -325,3 +325,103 @@ func TestEnvironmentPathDetection(t *testing.T) {
 		t.Fatal("wrong path detected")
 	}
 }
+
+func TestRestoreKeepsTextClassForLaterPatches(t *testing.T) {
+	store := vmcas.NewMemoryStore()
+	w := NewWorkspaceState()
+	mustAccept(t, w, vmprotocol.FileOperation{ID: "1", Path: "a.ts", Kind: vmprotocol.OpCreate})
+	if _, err := submit(t, w, 0, "a.ts", mustPatch(t, []byte{}, []byte("hello room")), "a1"); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := w.Snapshot("room", vmprotocol.SnapshotPeriodic, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Bootstrap restores the entry as OT text, not a blob.
+	restored := NewWorkspaceState()
+	if err := restored.RestoreSnapshot(snap); err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.MaterializeTexts(store); err != nil {
+		t.Fatal(err)
+	}
+	info, ok := restored.EntryInfo("a.ts")
+	if !ok || info.IsDir || !info.IsText {
+		t.Fatalf("restored class = %+v (must stay text)", info)
+	}
+	// A later text patch applies on top of the restored revision.
+	next := mustPatch(t, []byte("hello room"), []byte("hello room, patched"))
+	if _, err := submit(t, restored, snap.ServerSeq, "a.ts", next, "a2"); err != nil {
+		t.Fatalf("text patch after bootstrap rejected: %v", err)
+	}
+	if got := string(restored.files["a.ts"].Content); got != "hello room, patched" {
+		t.Fatalf("content = %q", got)
+	}
+}
+
+func TestWorkspacePathTraversalRejected(t *testing.T) {
+	w := NewWorkspaceState()
+	for _, path := range []string{"../escape", "a/../../b", "/abs", "", ".", "..", "a//b"} {
+		env := vmprotocol.Envelope{AuthorDeviceID: "d", Operation: vmprotocol.FileOperation{ID: "x", Path: path, Kind: vmprotocol.OpCreate}}
+		if _, err := w.Accept(env); err == nil {
+			t.Fatalf("path %q accepted", path)
+		}
+	}
+	// Rename targets are validated too.
+	env := vmprotocol.Envelope{AuthorDeviceID: "d", Operation: vmprotocol.FileOperation{
+		ID: "x", Path: "ok.txt", Kind: vmprotocol.OpRename,
+		Rename: &vmprotocol.Rename{OldPath: "ok.txt", NewPath: "../out"},
+	}}
+	if _, err := w.Accept(env); err == nil {
+		t.Fatal("escape rename accepted")
+	}
+	// Snapshot entries with traversal paths cannot be restored.
+	bad := vmprotocol.WorkspaceSnapshot{ServerSeq: 1, Entries: []vmprotocol.TreeEntry{
+		{Path: "../../etc/passwd", Kind: vmprotocol.TreeEntryFile, Manifest: "sha256:x"},
+	}}
+	if err := w.RestoreSnapshot(bad); err == nil {
+		t.Fatal("traversal snapshot entry restored")
+	}
+}
+
+func TestBarrierBindsResolverToDevice(t *testing.T) {
+	w := NewWorkspaceState()
+	mustAccept(t, w, vmprotocol.FileOperation{ID: "1", Path: "cfg.ts", Kind: vmprotocol.OpCreate})
+	base := []byte("port = 3000")
+	if _, err := submit(t, w, 0, "cfg.ts", mustPatch(t, []byte{}, base), "alice"); err != nil {
+		t.Fatal(err)
+	}
+	seedSeq := w.Seq()
+	// Alice and Bob both rewrite the same region from the shared base.
+	aliceWant := []byte("port = ENV")
+	if _, err := submit(t, w, seedSeq, "cfg.ts", mustPatch(t, base, aliceWant), "alice"); err != nil {
+		t.Fatal(err)
+	}
+	// Bob collides from the stale base → barrier opens, alice resolves.
+	if _, err := submit(t, w, seedSeq, "cfg.ts", mustPatch(t, base, []byte("port = 3001")), "bob"); err == nil {
+		t.Fatal("expected semantic conflict")
+	}
+	// Mallory claims alice's session id from another device: fenced.
+	impersonated := vmprotocol.Envelope{
+		AuthorDeviceID: "dev-mallory", AgentSessionID: "alice", BaseSeq: w.Seq(),
+		Operation: vmprotocol.FileOperation{ID: "m", Path: "cfg.ts", Kind: vmprotocol.OpTextPatch,
+			Patch: mustPatch(t, aliceWant, []byte("mallory"))},
+	}
+	if _, err := w.Accept(impersonated); err == nil {
+		t.Fatal("impersonated resolver passed the barrier")
+	}
+	// The real resolver's device passes.
+	if _, err := submit(t, w, w.Seq(), "cfg.ts", mustPatch(t, aliceWant, []byte("fixed")), "alice"); err != nil {
+		t.Fatalf("real resolver fenced: %v", err)
+	}
+}
+
+func mustAccept(t *testing.T, w *WorkspaceState, op vmprotocol.FileOperation) vmprotocol.Envelope {
+	t.Helper()
+	env, err := w.Accept(vmprotocol.Envelope{AuthorDeviceID: "dev-a", Operation: op})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return env
+}

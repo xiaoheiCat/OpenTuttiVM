@@ -151,6 +151,13 @@ func (r *Replica) MaterializePath(path string, store vmcas.Store) ([]byte, error
 		return nil, nil
 	}
 	if f.Kind == kindText {
+		if f.Content == nil && f.Manifest != "" {
+			// Restored-from-snapshot text: materialize from CAS so
+			// text OT keeps working after bootstrap.
+			if err := r.State.materializeText(path, f, store); err != nil {
+				return nil, err
+			}
+		}
 		return f.Content, nil
 	}
 	if f.Materialized && f.Content != nil {
@@ -190,7 +197,9 @@ func (r *Replica) IsFull() bool {
 		if f.IsDir {
 			continue
 		}
-		if f.Kind == kindBlob && !f.Materialized {
+		// Restored-from-snapshot entries (text or blob) with only a
+		// manifest reference are not materialized yet.
+		if f.Content == nil && f.Manifest != "" {
 			return false
 		}
 	}

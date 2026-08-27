@@ -137,7 +137,7 @@ jobs:
     needs: [validate, server-image, client-desktop]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifacts@v4
+      - uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
@@ -145,13 +145,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.validate.outputs.tag }}
+          GITHUB_SHA: ${{ github.sha }}
           OWNER_LC: ${{ github.repository_owner }}
         run: |
           owner=$(echo "$OWNER_LC" | tr '[:upper:]' '[:lower:]')
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" release-assets/* --clobber
           else
+            # --target pins the release to the commit this workflow
+            # validated, even if main advances mid-build.
             gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
               --title "OpenTuttiVM $TAG" \
               --notes "Automated release from main.
 

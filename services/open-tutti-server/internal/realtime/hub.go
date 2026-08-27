@@ -163,9 +163,9 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 				continue
 			}
 			env.RoomID = c.RoomID
-			if env.AuthorDeviceID == "" {
-				env.AuthorDeviceID = c.DeviceID
-			}
+			// Identity is the authenticated connection, never the client's
+			// claim: conflict-barrier authorization rides on this field.
+			env.AuthorDeviceID = c.DeviceID
 			_ = h.seq.Submit(env) // rejections become targeted events
 		case "ports":
 			if msg.Ports == nil {

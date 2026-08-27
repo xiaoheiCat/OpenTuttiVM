@@ -25,14 +25,17 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
+	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/roomfs"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/internal/client"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/internal/gateway"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/internal/replica"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/internal/roomfsbridge"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/internal/tunneldial"
 )
 
 func main() {
@@ -100,6 +103,41 @@ func run() error {
 		}
 		return mgr.Bootstrap(ctx, snap, ops)
 	}
+
+	// Cross-device streams ride the yamux tunnel; the .tutti proxy binds a
+	// synthetic-VIP listener per live room route and pipes through it.
+	tunnelConn, err := tunneldial.Dial(ctx, serverURL, token)
+	if err != nil {
+		return fmt.Errorf("tunnel dial: %w", err)
+	}
+	defer tunnelConn.Close()
+	proxy := gateway.NewProxy(vips, tunnelConn, c, c.RoomID(), deviceID,
+		slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	defer proxy.Close()
+	sess.OnEvent = func(ev vmprotocol.Event) {
+		if ev.Topic == vmprotocol.TopicPortsChanged || ev.Topic == vmprotocol.TopicRoomEnding {
+			if err := proxy.Sync(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "room-sync: gateway sync: %v\n", err)
+			}
+		}
+	}
+	if err := proxy.Sync(ctx); err != nil {
+		return fmt.Errorf("gateway initial sync: %w", err)
+	}
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := proxy.Sync(ctx); err != nil {
+					fmt.Fprintf(os.Stderr, "room-sync: gateway sync: %v\n", err)
+				}
+			}
+		}
+	}()
 
 	fmt.Fprintf(os.Stderr, "room-sync ready: device=%s policy=%s paths=%d vip-block=%s\n",
 		deviceID, policy, len(mgr.Replica.State.Paths()), gateway.ReservedBlock)

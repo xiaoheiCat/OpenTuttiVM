@@ -74,6 +74,9 @@ func (m *Manager) MaterializeMissing(ctx context.Context) error {
 }
 
 // Read returns local content for one path, fetching lazily when needed.
+// Text and blob entries share the path: both restore from snapshots with a
+// manifest reference, so both fetch manifest + chunks from the server CAS
+// on first read.
 func (m *Manager) Read(ctx context.Context, path string) ([]byte, error) {
 	if content, ok := m.Replica.State.CurrentContent(path); ok {
 		return content, nil
@@ -84,15 +87,19 @@ func (m *Manager) Read(ctx context.Context, path string) ([]byte, error) {
 	if m.fetcher == nil {
 		return nil, vmcas.ErrObjectNotFound
 	}
-	// Manifest or chunk missing from the cache: fetch from the server.
-	manifestHash, ok := vmsync.BlobManifestOf(m.Replica.State, path)
-	if !ok {
+	info, ok := m.Replica.State.EntryInfo(path)
+	if !ok || info.IsDir {
+		return nil, fmt.Errorf("path %s not in workspace", path)
+	}
+	if info.Manifest == "" {
 		return nil, fmt.Errorf("path %s has no local content or manifest", path)
 	}
-	if err := m.fetcher.FetchChunk(ctx, manifestHash, m.Cache); err != nil {
-		return nil, err
+	if _, err := m.Cache.Get(info.Manifest); err != nil {
+		if err := m.fetcher.FetchChunk(ctx, info.Manifest, m.Cache); err != nil {
+			return nil, err
+		}
 	}
-	data, err := m.Cache.Get(manifestHash)
+	data, err := m.Cache.Get(info.Manifest)
 	if err != nil {
 		return nil, err
 	}

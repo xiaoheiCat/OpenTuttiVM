@@ -187,8 +187,12 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 		writeErr(w, status, err.Error())
 		return
 	}
-	s.seq.CloseRoom(roomID)
-	s.previews.ClearRoom(roomID)
+	// Only a dissolved room tears down engine state; a participant
+	// leaving while the room lives must not reset the workspace.
+	if room, err := s.rooms.GetRoom(r.Context(), roomID); err == nil && room.DissolvedAt != nil {
+		s.seq.CloseRoom(roomID)
+		s.previews.ClearRoom(roomID)
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "left"})
 }
 
@@ -307,6 +311,19 @@ func (s *Server) handleCASHead(w http.ResponseWriter, r *http.Request, roomID, _
 // for the HTTP H5 selector; raw TCP callers fail client-side).
 func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request, roomID, _ string) {
 	q := r.URL.Query()
+	if q.Get("list") == "1" {
+		// Every live route in the room: the gateway proxy reconciles its
+		// synthetic-VIP listeners from this list.
+		routes := []map[string]any{}
+		for _, e := range s.previews.RoomSessions(roomID) {
+			routes = append(routes, map[string]any{
+				"device_id": e.DeviceID, "session_id": e.SessionID, "port": e.Port,
+				"canonical_host": canonicalHost(e),
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"routes": routes})
+		return
+	}
 	device := q.Get("device")
 	port := 0
 	fmt.Sscanf(q.Get("port"), "%d", &port)

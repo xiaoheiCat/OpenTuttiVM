@@ -62,9 +62,10 @@ func TransformPatch(patch *vmprotocol.TextPatch, concurrent []appliedPatch) Tran
 // splices in the coordinate frame the sequencer used when applying, which is
 // what transform needs.
 type appliedPatch struct {
-	Seq   uint64
-	Agent string
-	Patch vmprotocol.TextPatch
+	Seq    uint64
+	Agent  string
+	Device string
+	Patch  vmprotocol.TextPatch
 }
 
 func appendUnique(list []string, v string) []string {

@@ -1,15 +1,51 @@
 package vmprotocol
 
+import "strings"
+
 // TreeEntryKind distinguishes file entries from directory entries in a
 // workspace snapshot tree.
 type TreeEntryKind string
 
 const (
-	// TreeEntryFile is a regular file tracked by the room workspace.
+	// TreeEntryFile is a binary/large file tracked as a CAS blob.
 	TreeEntryFile TreeEntryKind = "file"
+	// TreeEntryText is a UTF-8 file tracked by text OT; restoring it as
+	// text (not blob) keeps later text patches applicable.
+	TreeEntryText TreeEntryKind = "text"
 	// TreeEntryDir is a directory.
 	TreeEntryDir TreeEntryKind = "dir"
 )
+
+// ValidWorkspacePath reports whether p is a safe workspace-relative path:
+// slash-separated, no empty/./.. segments, no absolute or Windows-style
+// prefixes, no control bytes. Every operation, rename target, and
+// snapshot entry must pass this check before entering workspace state —
+// it is the traversal guard for mirror-style apply-to-workspace.
+func ValidWorkspacePath(p string) bool {
+	if p == "" || len(p) > 4096 {
+		return false
+	}
+	if p[0] == '/' || p[0] == '\\' {
+		return false
+	}
+	if strings.ContainsAny(p, "\x00\\") {
+		return false
+	}
+	if strings.Contains(p, ":") && strings.HasPrefix(p[1:], ":\\") {
+		return false
+	}
+	start := 0
+	for i := 0; i <= len(p); i++ {
+		if i == len(p) || p[i] == '/' {
+			seg := p[start:i]
+			if seg == "" || seg == "." || seg == ".." {
+				return false
+			}
+			start = i + 1
+		}
+	}
+	return true
+}
 
 // TreeEntry describes one path in a workspace snapshot. Text and binary files
 // alike are materialized through CAS manifests at snapshot time; the

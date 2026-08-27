@@ -75,10 +75,11 @@ type seqHash struct {
 
 // barrier is the per-path conflict lock.
 type barrier struct {
-	Locked        bool
-	ResolverAgent string
-	Notified      []string
-	Revision      uint64
+	ResolverDevice string
+	Locked         bool
+	ResolverAgent  string
+	Notified       []string
+	Revision       uint64
 }
 
 // EnvironmentPaths are the environment definition files whose changes must
@@ -132,7 +133,13 @@ func (w *WorkspaceState) fenced(env *vmprotocol.Envelope) bool {
 			continue
 		}
 		b := w.barriers[p]
-		if b != nil && b.Locked && env.AgentSessionID != b.ResolverAgent {
+		if b == nil || !b.Locked {
+			continue
+		}
+		// The resolver is identified by BOTH its agent session and its
+		// device: session ids are client-claimed, device identity is
+		// stamped server-side, so only the real resolver device passes.
+		if env.AgentSessionID != b.ResolverAgent || (b.ResolverDevice != "" && env.AuthorDeviceID != b.ResolverDevice) {
 			return true
 		}
 	}
@@ -144,6 +151,14 @@ func (w *WorkspaceState) fenced(env *vmprotocol.Envelope) bool {
 // to broadcast. On conflict it may open a barrier and returns a
 // *RejectionError.
 func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, error) {
+	if !vmprotocol.ValidWorkspacePath(env.Operation.Path) {
+		return env, &RejectionError{Reason: RejectInvalid}
+	}
+	if op := env.Operation; op.Kind == vmprotocol.OpRename && op.Rename != nil {
+		if !vmprotocol.ValidWorkspacePath(op.Rename.OldPath) || !vmprotocol.ValidWorkspacePath(op.Rename.NewPath) {
+			return env, &RejectionError{Reason: RejectInvalid}
+		}
+	}
 	if w.fenced(&env) {
 		b := w.barriers[env.Operation.Path]
 		return env, &RejectionError{
@@ -370,8 +385,12 @@ func (w *WorkspaceState) applyMetadata(op vmprotocol.FileOperation) error {
 func (w *WorkspaceState) openBarrier(path string, env *vmprotocol.Envelope, conflictedWith []string) error {
 	hist := w.history[path]
 	resolver := ""
+	resolverDevice := env.AuthorDeviceID
 	if n := len(hist); n > 0 {
 		resolver = hist[n-1].Agent
+		if hist[n-1].Device != "" {
+			resolverDevice = hist[n-1].Device
+		}
 	}
 	notified := append([]string{}, conflictedWith...)
 	// The rejected submitter is an affected party: their edit collided.
@@ -384,10 +403,11 @@ func (w *WorkspaceState) openBarrier(path string, env *vmprotocol.Envelope, conf
 		}
 	}
 	w.barriers[path] = &barrier{
-		Locked:        true,
-		ResolverAgent: resolver,
-		Notified:      notified,
-		Revision:      w.seq,
+		Locked:         true,
+		ResolverAgent:  resolver,
+		ResolverDevice: resolverDevice,
+		Notified:       notified,
+		Revision:       w.seq,
 	}
 	return &RejectionError{
 		Reason:         RejectSemanticConflict,
@@ -438,9 +458,10 @@ func (w *WorkspaceState) recordHistory(env *vmprotocol.Envelope) {
 		return
 	}
 	w.history[op.Path] = append(w.history[op.Path], appliedPatch{
-		Seq:   env.ServerSeq,
-		Agent: env.AgentSessionID,
-		Patch: *op.Patch,
+		Seq:    env.ServerSeq,
+		Agent:  env.AgentSessionID,
+		Device: env.AuthorDeviceID,
+		Patch:  *op.Patch,
 	})
 	const perPathHistory = 128
 	if n := len(w.history[op.Path]); n > perPathHistory {
@@ -486,11 +507,14 @@ func (w *WorkspaceState) Snapshot(roomID string, reason vmprotocol.SnapshotReaso
 			}
 			entry.Manifest = m.Hash
 			entry.Size = m.Size
+			entry.Kind = vmprotocol.TreeEntryText
 		} else {
 			entry.Manifest = f.Manifest
 			entry.Size = f.Size
 		}
-		entry.Kind = vmprotocol.TreeEntryFile
+		if entry.Kind == "" {
+			entry.Kind = vmprotocol.TreeEntryFile
+		}
 		treeSrc.WriteString(fmt.Sprintf("%s\t%s\t%s\t%d\t%#o\n", p, entry.Kind, entry.Manifest, entry.Size, entry.Mode))
 		snap.Entries = append(snap.Entries, entry)
 	}
@@ -507,8 +531,17 @@ func (w *WorkspaceState) RestoreSnapshot(snap vmprotocol.WorkspaceSnapshot) erro
 	w.seq = snap.ServerSeq
 	w.files = map[string]*fileState{}
 	for _, e := range snap.Entries {
+		if !vmprotocol.ValidWorkspacePath(e.Path) {
+			return fmt.Errorf("snapshot entry %q: invalid workspace path", e.Path)
+		}
 		if e.Kind == vmprotocol.TreeEntryDir {
 			w.files[e.Path] = &fileState{IsDir: true, Mode: e.Mode}
+			continue
+		}
+		if e.Kind == vmprotocol.TreeEntryText {
+			// Keep OT tracking: later text patches stay applicable after
+			// bootstrap. Content materializes from CAS on demand.
+			w.files[e.Path] = &fileState{Mode: e.Mode, Kind: kindText, Manifest: e.Manifest, Size: e.Size}
 			continue
 		}
 		w.files[e.Path] = &fileState{Mode: e.Mode, Kind: kindBlob, Manifest: e.Manifest, Size: e.Size}
@@ -516,11 +549,50 @@ func (w *WorkspaceState) RestoreSnapshot(snap vmprotocol.WorkspaceSnapshot) erro
 	return nil
 }
 
+// MaterializeTexts loads CAS-backed content for every restored text entry
+// whose content is not yet in memory. The server engine calls this after
+// RestoreSnapshot so replayed text patches apply against real content;
+// lazy replicas call it per path on demand.
+func (w *WorkspaceState) MaterializeTexts(store vmcas.Store) error {
+	for _, p := range w.Paths() {
+		f := w.files[p]
+		if f == nil || f.IsDir || f.Kind != kindText || f.Content != nil || f.Manifest == "" {
+			continue
+		}
+		if err := w.materializeText(p, f, store); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *WorkspaceState) materializeText(path string, f *fileState, store vmcas.Store) error {
+	data, err := store.Get(f.Manifest)
+	if err != nil {
+		return fmt.Errorf("manifest %s for %s: %w", f.Manifest, path, err)
+	}
+	m, err := vmcas.DecodeManifest(data)
+	if err != nil {
+		return fmt.Errorf("manifest %s for %s: %w", f.Manifest, path, err)
+	}
+	content, err := vmcas.Materialize(store, m)
+	if err != nil {
+		return fmt.Errorf("content for %s: %w", path, err)
+	}
+	if content == nil {
+		// Empty files must hold an empty (non-nil) slice so materialized
+		// checks distinguish them from unrestored manifest references.
+		content = []byte{}
+	}
+	f.Content = content
+	return nil
+}
+
 // CurrentContent returns live text content for one path; false for blobs or
 // missing paths. Used by room-sync lazy reads.
 func (w *WorkspaceState) CurrentContent(path string) ([]byte, bool) {
 	f := w.files[path]
-	if f == nil || f.IsDir || f.Kind != kindText {
+	if f == nil || f.IsDir || f.Kind != kindText || f.Content == nil {
 		return nil, false
 	}
 	return f.Content, true
