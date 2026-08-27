@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 // scriptedConn fakes an MCP server over the process connection: it answers

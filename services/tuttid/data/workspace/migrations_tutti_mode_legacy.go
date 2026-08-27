@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
 )
 
 const legacyTuttiModeRepairReason = "legacy_execution_startup_repair"

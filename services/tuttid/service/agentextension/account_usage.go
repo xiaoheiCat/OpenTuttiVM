@@ -12,8 +12,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
 )
 
 const (

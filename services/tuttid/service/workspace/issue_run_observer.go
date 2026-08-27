@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"strings"
 
-	canonical "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	canonical "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 // ObserveAgentSessionState settles Issue runs from the authoritative Agent

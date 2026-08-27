@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	connectorruntime "github.com/tutti-os/tutti/packages/connector/runtime"
+	connectorruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime"
 )
 
 const (

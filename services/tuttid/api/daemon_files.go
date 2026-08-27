@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	workspaceapi "github.com/tutti-os/tutti/services/tuttid/api/workspace"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
+	workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	workspaceapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/workspace"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
 )
 
 type pathAwareWorkspaceFileResponseRootResolver interface {

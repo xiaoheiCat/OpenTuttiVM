@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/apps/cli
+module github.com/xiaoheiCat/OpenTuttiVM/apps/cli
 
 go 1.24.3
 

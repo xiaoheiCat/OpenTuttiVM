@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	workspaceagentbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceagent"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	workspaceagentbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceagent"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 // runtimeContextAliasedAgentTargetIDKey stores the original, pre-rewrite

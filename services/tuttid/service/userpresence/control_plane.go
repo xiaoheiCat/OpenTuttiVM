@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
 )
 
 const (

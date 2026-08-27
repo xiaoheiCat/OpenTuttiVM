@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 
-	admissiondaemon "github.com/tutti-os/tutti/packages/desktop/update-admission/daemon"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
+	admissiondaemon "github.com/xiaoheiCat/OpenTuttiVM/packages/desktop/update-admission/daemon"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
 )
 
 func (api DaemonAPI) GetDesktopUpdateAdmissionSnapshot(

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	workspaceagentbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceagent"
+	workspaceagentbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceagent"
 )
 
 func (s *SQLiteStore) applyWorkspaceAgentsV1(ctx context.Context) error {

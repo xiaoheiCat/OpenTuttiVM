@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	agentextensiondata "github.com/tutti-os/tutti/services/tuttid/data/agentextension"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	agentextensiondata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/agentextension"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func TestAccountUsageServiceUsesDaemonNativeProbeForBuiltinTarget(t *testing.T) {

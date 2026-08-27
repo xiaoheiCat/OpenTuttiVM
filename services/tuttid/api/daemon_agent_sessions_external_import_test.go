@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	userprojectservice "github.com/tutti-os/tutti/services/tuttid/service/userproject"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	userprojectservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/userproject"
 )
 
 func TestScanExternalImportForwardsArchivePath(t *testing.T) {

@@ -3,7 +3,7 @@ package providerstatus
 import (
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
 )
 
 func TestParseAuthStatusOutput(t *testing.T) {

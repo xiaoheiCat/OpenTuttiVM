@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 // CreateIssueWithTasks commits the Plan-derived Issue, its initial task graph,

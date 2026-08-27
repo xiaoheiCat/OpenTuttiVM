@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 func TestDaemonAPIGeneratedRoutesListWorkspaceAppMentionCandidates(t *testing.T) {

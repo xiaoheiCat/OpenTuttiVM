@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 )
 
 func (s *Service) List(ctx context.Context, workspaceID string) ([]Session, error) {

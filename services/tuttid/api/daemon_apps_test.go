@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 func TestDaemonAPIGeneratedRoutesListWorkspaceAppReferences(t *testing.T) {

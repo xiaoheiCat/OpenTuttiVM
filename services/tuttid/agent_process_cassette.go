@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	agentdaemon "github.com/tutti-os/tutti/packages/agent/daemon"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	sessionreplay "github.com/tutti-os/tutti/packages/agent/session-replay"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	agentdaemon "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	sessionreplay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 const (

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	modelbindingbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelbinding"
-	modelpolicybiz "github.com/tutti-os/tutti/services/tuttid/biz/modelpolicy"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	modelbindingbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelbinding"
+	modelpolicybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelpolicy"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 type memoryPolicyStore struct {

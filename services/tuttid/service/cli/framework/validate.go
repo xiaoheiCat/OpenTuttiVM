@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 var kebabNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)

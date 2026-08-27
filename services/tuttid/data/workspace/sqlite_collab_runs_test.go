@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	collabrunbiz "github.com/tutti-os/tutti/services/tuttid/biz/collabrun"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	collabrunbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/collabrun"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func createCollabRunTestWorkspace(t *testing.T, store *SQLiteStore, workspaceID string) {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	agentextensionbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentextension"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	agentextensionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentextension"
 )
 
 type RuntimeProbeStatus string

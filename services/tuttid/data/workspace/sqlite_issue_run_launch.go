@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 // CreateIssueRunWithLaunchIntent atomically claims the task, creates the Run,

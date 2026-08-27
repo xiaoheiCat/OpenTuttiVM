@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
 )
 
 type RuntimeConfigurationRebindDriver interface {

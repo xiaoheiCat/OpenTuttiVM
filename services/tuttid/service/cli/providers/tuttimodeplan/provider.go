@@ -6,13 +6,13 @@ package tuttimodeplan
 import (
 	"context"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	activationbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeactivation"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	tuttimodeexecutionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
-	tuttimodeplanservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeplan"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	activationbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeactivation"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	tuttimodeexecutionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
+	tuttimodeplanservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeplan"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 const appID = "tutti-mode-plan"

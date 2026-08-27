@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tutti-os/tutti/apps/cli/internal/daemon"
+	"github.com/xiaoheiCat/OpenTuttiVM/apps/cli/internal/daemon"
 )
 
 const managedModelInputLimitBytes = 64 * 1024

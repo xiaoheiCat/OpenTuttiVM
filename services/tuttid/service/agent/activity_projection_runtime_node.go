@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentanalytics"
-	agentnoderesult "github.com/tutti-os/tutti/services/tuttid/service/reporter/events/agent/node_result"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentanalytics"
+	agentnoderesult "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter/events/agent/node_result"
 )
 
 func canonicalRailSection(placement *canonical.RailPlacement) *agentactivitybiz.RailSection {

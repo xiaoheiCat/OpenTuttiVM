@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtime/codexproto"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime/codexproto"
 )
 
 func (c *codexAppServerClient) PluginList(

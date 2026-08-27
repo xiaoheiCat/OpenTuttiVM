@@ -1,4 +1,4 @@
-# streamgo (github.com/tutti-os/tutti/packages/events/stream-go)
+# streamgo (github.com/xiaoheiCat/OpenTuttiVM/packages/events/stream-go)
 
 Catalog-agnostic **server-side** core for the business event stream
 (daemon ↔ renderer over WebSocket). The Go counterpart to

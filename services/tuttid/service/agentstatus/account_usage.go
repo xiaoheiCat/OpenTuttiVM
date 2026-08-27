@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	claudecodeservice "github.com/tutti-os/tutti/services/tuttid/service/claudecode"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	claudecodeservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/claudecode"
 )
 
 type ProviderAccountUsageResult struct {

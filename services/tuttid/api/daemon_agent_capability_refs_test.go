@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 func TestAgentSessionRoutesRejectDuplicateCapabilityReferencesAtTransportBoundary(t *testing.T) {

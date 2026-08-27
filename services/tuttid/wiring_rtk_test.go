@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 type fakeRTKProfileResolver struct {

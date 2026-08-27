@@ -1,7 +1,7 @@
 package storesqlite
 
 import (
-	agentactivityprojection "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agentactivityprojection "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func sessionStateReportApplied(input SessionStateReport, session agentactivityprojection.SessionSnapshot) bool {

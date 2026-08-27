@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func runExactTurnCancel(ctx context.Context, driver Driver) error {

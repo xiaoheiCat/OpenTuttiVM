@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
 )
 
 type fakeAgentProviderStatusLister struct {

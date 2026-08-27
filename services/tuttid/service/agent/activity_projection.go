@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	replay "github.com/tutti-os/tutti/packages/agent/session-replay"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
 )
 
 type ActivityProjection struct {

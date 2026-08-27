@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 const (

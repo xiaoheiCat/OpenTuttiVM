@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 // chrome-devtools-mcp launch resolution. The daemon now consumes this command

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 func TestGeneratedIssueManagerContextRefFromDomainScopesTaskID(t *testing.T) {

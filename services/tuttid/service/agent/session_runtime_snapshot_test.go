@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	modelbindingbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelbinding"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	modelgatewayservice "github.com/tutti-os/tutti/services/tuttid/service/modelgateway"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	modelbindingbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelbinding"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	modelgatewayservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelgateway"
 )
 
 type revisionPlanSource struct {

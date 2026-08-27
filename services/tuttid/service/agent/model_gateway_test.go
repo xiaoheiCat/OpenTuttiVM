@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	modelgatewayservice "github.com/tutti-os/tutti/services/tuttid/service/modelgateway"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	modelgatewayservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelgateway"
 )
 
 type fakeModelGateway struct {

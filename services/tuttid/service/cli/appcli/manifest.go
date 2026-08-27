@@ -1,6 +1,6 @@
 package appcli
 
-import appclicore "github.com/tutti-os/tutti/packages/appcli/core"
+import appclicore "github.com/xiaoheiCat/OpenTuttiVM/packages/appcli/core"
 
 const (
 	ManifestSchemaVersion = appclicore.ManifestSchemaVersion

@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	canonical "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	canonical "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func TestMigratedProviderIdentityAndPlanStrategyMatchCanonicalContract(t *testing.T) {

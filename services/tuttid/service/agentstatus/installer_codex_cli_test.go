@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 func TestDisplayNPMRegistryStripsCredentials(t *testing.T) {

@@ -3,8 +3,8 @@ package connectormarket
 import (
 	"context"
 
-	implementationhost "github.com/tutti-os/tutti/packages/connector/runtime/implementationhost"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	implementationhost "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/implementationhost"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 const connectorAvailableCommandID = "connector.available"

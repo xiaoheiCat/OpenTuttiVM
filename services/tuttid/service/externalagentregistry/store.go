@@ -14,8 +14,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 const DefaultSourceURL = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json"

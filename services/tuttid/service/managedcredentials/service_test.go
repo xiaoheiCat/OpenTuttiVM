@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	managedcredentialsbiz "github.com/tutti-os/tutti/services/tuttid/biz/managedcredentials"
+	managedcredentialsbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/managedcredentials"
 )
 
 func TestServiceGrantCodeIsOneTimeAndGrantRefRefreshes(t *testing.T) {

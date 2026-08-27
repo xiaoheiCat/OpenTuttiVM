@@ -5,10 +5,10 @@ import (
 	"errors"
 	"strings"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	agentextensionservice "github.com/tutti-os/tutti/services/tuttid/service/agentextension"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	agentextensionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentextension"
 )
 
 type AgentTargetAccountUsageService interface {

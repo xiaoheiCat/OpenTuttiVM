@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	modelbindingbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelbinding"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	modelpolicybiz "github.com/tutti-os/tutti/services/tuttid/biz/modelpolicy"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	modelbindingbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelbinding"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	modelpolicybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelpolicy"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func createModelPlanTestWorkspace(t *testing.T, store *SQLiteStore, workspaceID string) {

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	builtinapps "github.com/tutti-os/tutti/services/tuttid/builtin-apps"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	builtinapps "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/builtin-apps"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 var ErrInvalidWorkspaceAppRuntimeState = errors.New("invalid workspace app runtime state")

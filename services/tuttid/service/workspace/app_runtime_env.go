@@ -6,9 +6,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 const tuttiAppRuntimeRootEnv = "TUTTI_APP_RUNTIME_ROOT"

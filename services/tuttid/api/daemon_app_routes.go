@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func registerWorkspaceAppRoutes(mux *http.ServeMux, wrapper *tuttigenerated.ServerInterfaceWrapper) {

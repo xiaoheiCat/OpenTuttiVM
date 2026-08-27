@@ -47,8 +47,8 @@ func TestExternalConsumerCompilesWithoutDaemonDependency(t *testing.T) {
 	dependencies := runExternalGo(t, tempDir, "list", "-mod=mod", "-deps", ".")
 	modules := runExternalGo(t, tempDir, "list", "-mod=mod", "-m", "all")
 	for _, forbidden := range []string{
-		"github.com/tutti-os/tutti/packages/agent/daemon",
-		"github.com/tutti-os/tutti/services/tuttid",
+		"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon",
+		"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid",
 		"sidecar",
 	} {
 		if strings.Contains(dependencies, forbidden) || strings.Contains(modules, forbidden) {

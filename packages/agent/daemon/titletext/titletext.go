@@ -2,7 +2,7 @@
 // title derivation is owned by the Agent Host application core.
 package titletext
 
-import agenthost "github.com/tutti-os/tutti/packages/agent/host"
+import agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
 
 const MaxSessionTitleRunes = agenthost.MaxSessionTitleRunes
 

@@ -9,9 +9,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerstatus"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerstatus"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
 )
 
 func TestResolveRemoteAuthEvidenceReadsClaudeOAuthCredential(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/tutti-os/tutti/packages/device-link/internal/interfacebind"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/internal/interfacebind"
 )
 
 func listenUDPOnInterface(ctx context.Context, ip netip.Addr, iface net.Interface) (*net.UDPConn, error) {

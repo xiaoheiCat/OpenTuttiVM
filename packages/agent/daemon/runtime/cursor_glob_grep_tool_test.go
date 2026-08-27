@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 // Cursor ACP streams Glob/Grep as kind=search with descriptive titles

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tutti-os/tutti/services/tuttid/service/usercommand"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/usercommand"
 )
 
 type managedRuntimeEntry = usercommand.Entry

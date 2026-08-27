@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
-	"github.com/tutti-os/tutti/packages/commerce"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/commerce"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
 )
 
 type recordingAccountAnalyticsReporter struct {

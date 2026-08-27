@@ -231,11 +231,11 @@ The following owners do not move:
 Keep five independent Connector modules:
 
 ```text
-github.com/tutti-os/tutti/packages/connector/daemon/core
-github.com/tutti-os/tutti/packages/connector/daemon/application
-github.com/tutti-os/tutti/packages/connector/daemon/adapters/sqlite
-github.com/tutti-os/tutti/packages/connector/daemon/adapters/controlplane
-github.com/tutti-os/tutti/packages/connector/runtime
+github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core
+github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/application
+github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/adapters/sqlite
+github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/adapters/controlplane
+github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime
 ```
 
 The separation is architectural rather than compatible scaffolding:

@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
 )
 
 // CancelWorkspaceAgentTurn is the protocol v2 turn-scoped cancel. Idempotent

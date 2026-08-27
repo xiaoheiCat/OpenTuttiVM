@@ -12,16 +12,16 @@ import (
 	"testing"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	hostconformance "github.com/tutti-os/tutti/packages/agent/host/conformance"
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	userprojectbiz "github.com/tutti-os/tutti/services/tuttid/biz/userproject"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	hostconformance "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host/conformance"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	userprojectbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/userproject"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 func TestServiceAdapterAgentHostConformance(t *testing.T) {

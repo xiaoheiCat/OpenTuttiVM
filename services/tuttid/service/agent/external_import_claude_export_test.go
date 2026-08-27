@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func TestScanClaudeExportArchiveUsesVisibleTextBlocksAndPreservesFileReferences(t *testing.T) {

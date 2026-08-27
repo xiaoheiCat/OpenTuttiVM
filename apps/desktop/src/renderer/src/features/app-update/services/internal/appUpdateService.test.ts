@@ -78,7 +78,7 @@ test("AppUpdateService tracks primary update actions", async () => {
 test("AppUpdateService opens the official changelog for an available update", async () => {
   const opened: string[] = [];
   const releaseNotesUrl =
-    "https://github.com/tutti-os/tutti/releases/tag/v1.3.0";
+    "https://github.com/xiaoheiCat/OpenTuttiVM/releases/tag/v1.3.0";
   const service = new AppUpdateService(
     createClient({
       getState: async () =>

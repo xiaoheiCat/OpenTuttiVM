@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	runtimepaths "github.com/tutti-os/tutti/packages/agent/daemon/internal/runtimepaths"
+	runtimepaths "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/internal/runtimepaths"
 )
 
 type tuttiModeTurnSnapshotContextKey struct{}

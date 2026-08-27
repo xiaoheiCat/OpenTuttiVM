@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	collabrunbiz "github.com/tutti-os/tutti/services/tuttid/biz/collabrun"
-	modelpolicyservice "github.com/tutti-os/tutti/services/tuttid/service/modelpolicy"
+	collabrunbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/collabrun"
+	modelpolicyservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelpolicy"
 )
 
 // RunPolicyReviewConsult executes a policy-triggered review as a consult run

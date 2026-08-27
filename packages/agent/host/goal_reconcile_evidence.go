@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 )
 
 // ReconcileGoalFromEvidence closes the runtime-to-durable loop for an

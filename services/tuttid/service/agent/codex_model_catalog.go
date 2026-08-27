@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/modelcatalog"
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/modelcatalog"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
 )
 
 const (

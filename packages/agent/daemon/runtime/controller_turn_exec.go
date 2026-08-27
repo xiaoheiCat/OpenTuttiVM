@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 func (c *Controller) beginTurn(session Session, turnID string, cancel context.CancelFunc) (Session, error) {

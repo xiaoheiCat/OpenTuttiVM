@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	tuttimodeexecutionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	tuttimodeexecutionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
 )
 
 func TestTuttiModeWatchdogLifecycleStopsBeforeStoreAndAllowsInProcessRestart(

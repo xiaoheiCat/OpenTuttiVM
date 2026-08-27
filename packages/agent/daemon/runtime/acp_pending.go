@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 // ACP permission requests carry provider-defined option IDs. This file owns

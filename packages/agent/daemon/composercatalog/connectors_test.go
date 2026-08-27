@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	connectorhost "github.com/tutti-os/tutti/packages/connector/daemon/core"
+	connectorhost "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
 )
 
 func TestConnectorOptionsProjectsEveryCatalogState(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 type recordingRunCanceller struct {

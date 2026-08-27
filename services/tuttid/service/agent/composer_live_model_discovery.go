@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	claudecodeservice "github.com/tutti-os/tutti/services/tuttid/service/claudecode"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	claudecodeservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/claudecode"
 )
 
 const liveModelDiscoveryPollInterval = 100 * time.Millisecond

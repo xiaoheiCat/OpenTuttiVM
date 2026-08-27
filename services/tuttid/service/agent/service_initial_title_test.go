@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
 )
 
 func TestServiceCreateDerivesInitialTitleOnlyForEligibleRuntimeSession(t *testing.T) {

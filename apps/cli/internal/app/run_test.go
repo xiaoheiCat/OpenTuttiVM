@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tutti-os/tutti/apps/cli/internal/daemon"
+	"github.com/xiaoheiCat/OpenTuttiVM/apps/cli/internal/daemon"
 )
 
 func runDefaultProgram(t *testing.T, args []string, stdout *bytes.Buffer, stderr *bytes.Buffer) int {

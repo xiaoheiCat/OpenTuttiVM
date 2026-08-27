@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 func FormatOutput(spec OutputSpec, mode cliservice.OutputMode, result any) (cliservice.CommandOutput, error) {

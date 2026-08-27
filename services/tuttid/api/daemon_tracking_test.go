@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
 )
 
 type recordingAnalyticsReporter struct {

@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
 )
 
 func TestResolveCodexAuthUsesAppServerAccountRead(t *testing.T) {

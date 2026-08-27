@@ -1,6 +1,6 @@
 package workspace
 
-import workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+import workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 
 func (s *AppCenterService) ensureRevisionStateLocked() {
 	if s.stateRevisions == nil {

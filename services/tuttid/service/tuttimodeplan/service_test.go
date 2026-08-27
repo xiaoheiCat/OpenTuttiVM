@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	activationbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeactivation"
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	activationbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeactivation"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 func TestServiceProposePersistsPlanRevisionAndSingleTaskReviewCheckpoint(t *testing.T) {

@@ -3,7 +3,7 @@
 // store-sqlite/canonical directly.
 package projection
 
-import canonical "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+import canonical "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 
 // Deprecated: use canonical.SessionSnapshot.
 type SessionSnapshot = canonical.SessionSnapshot

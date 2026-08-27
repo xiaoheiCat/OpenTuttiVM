@@ -215,7 +215,7 @@ import (
 	"fmt"
 	"strings"
 
-	agentactivitybiz "github.com/tutti-os/tutti/services/tuttid/biz/agentactivity"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentactivity"
 )
 
 func (s *SQLiteStore) InsertAgentSessionFork(ctx context.Context, fork agentactivitybiz.ForkLineage) error {
@@ -883,7 +883,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	agentactivitybiz "github.com/tutti-os/tutti/services/tuttid/biz/agentactivity"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentactivity"
 )
 
 var (

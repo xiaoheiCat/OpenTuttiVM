@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	collabrunbiz "github.com/tutti-os/tutti/services/tuttid/biz/collabrun"
+	collabrunbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/collabrun"
 )
 
 func TestAgentCollaborationPublisherPublishesRunPayload(t *testing.T) {

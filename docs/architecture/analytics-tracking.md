@@ -335,7 +335,7 @@ services/tuttid/service/reporter/
   events/             # Tutti-owned typed daemon business events
 ```
 
-`github.com/tutti-os/tutti/packages/analytics/reporter-go` is a public Go
+`github.com/xiaoheiCat/OpenTuttiVM/packages/analytics/reporter-go` is a public Go
 module. It is the reusable lower SDK for Tutti products such as TSH. Product
 repositories own their event catalog, HTTP contract, configuration, and
 business emission points; they must not copy the DataFinder adapter.

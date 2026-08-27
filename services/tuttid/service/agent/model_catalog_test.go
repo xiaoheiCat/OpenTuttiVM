@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
-	tuttiagentservice "github.com/tutti-os/tutti/services/tuttid/service/tuttiagent"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
+	tuttiagentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttiagent"
 )
 
 func writeCodexModelCatalogConfig(t *testing.T, contents string) {

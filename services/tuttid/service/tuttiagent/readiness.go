@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"sync"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
 )
 
 const tuttiAgentProvider = "tutti-agent"

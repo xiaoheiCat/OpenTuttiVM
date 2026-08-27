@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 var ErrSourceDeletionFenced = errors.New("source session deletion is fenced")

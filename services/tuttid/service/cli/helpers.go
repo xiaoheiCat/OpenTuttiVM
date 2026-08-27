@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 type WorkspaceCatalog interface {

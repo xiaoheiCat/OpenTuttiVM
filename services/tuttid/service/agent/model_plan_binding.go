@@ -9,11 +9,11 @@ import (
 	"log/slog"
 	"strings"
 
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	modelbindingbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelbinding"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	modelbindingbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelbinding"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
 )
 
 // AgentModelBindingSource resolves the per-workspace agent target binding.

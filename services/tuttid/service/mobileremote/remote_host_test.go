@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
-	devicelink "github.com/tutti-os/tutti/packages/device-link"
-	authenticatedlink "github.com/tutti-os/tutti/packages/device-link/authenticated"
-	"github.com/tutti-os/tutti/packages/device-link/linkmanager"
-	mobileremotebiz "github.com/tutti-os/tutti/services/tuttid/biz/mobileremote"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
+	devicelink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link"
+	authenticatedlink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/authenticated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/linkmanager"
+	mobileremotebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/mobileremote"
 )
 
 type remoteHostControlPlane struct {

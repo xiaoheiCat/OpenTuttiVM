@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	agentquickpromptbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentquickprompt"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	agentquickpromptbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentquickprompt"
 )
 
 type AgentQuickPromptService interface {

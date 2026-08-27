@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	agentquickpromptbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentquickprompt"
+	agentquickpromptbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentquickprompt"
 )
 
 type Store interface {

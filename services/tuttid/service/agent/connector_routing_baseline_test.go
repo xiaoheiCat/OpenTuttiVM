@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
 )
 
 func TestSendInputInjectsConnectorRoutingUpdateWhenIndexDiverges(t *testing.T) {

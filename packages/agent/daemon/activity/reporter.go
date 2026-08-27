@@ -3,7 +3,7 @@ package agentsessionstore
 import (
 	"context"
 
-	replay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 type ActivityReporter interface {

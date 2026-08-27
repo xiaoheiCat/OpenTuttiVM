@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/agent/runtimeprep
+module github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep
 
 go 1.24.3
 

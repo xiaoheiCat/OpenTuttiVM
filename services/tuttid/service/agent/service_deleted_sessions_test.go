@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	userprojectbiz "github.com/tutti-os/tutti/services/tuttid/biz/userproject"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	userprojectbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/userproject"
 )
 
 type deletedSessionAdapterStoreStub struct {

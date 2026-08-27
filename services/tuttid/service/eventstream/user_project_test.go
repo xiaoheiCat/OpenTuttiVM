@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	eventprotocol "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
-	userprojectbiz "github.com/tutti-os/tutti/services/tuttid/biz/userproject"
+	eventprotocol "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
+	userprojectbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/userproject"
 )
 
 func TestUserProjectPublisherPublishesCompleteOrderedGlobalSnapshot(t *testing.T) {

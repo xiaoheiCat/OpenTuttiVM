@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 //go:embed agent_workspace_app_reference/*

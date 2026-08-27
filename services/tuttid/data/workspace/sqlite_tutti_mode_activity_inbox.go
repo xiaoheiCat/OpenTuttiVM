@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	agentstore "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
+	agentstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
 )
 
 // tuttiModeSourceActivityParticipant records only canonical identities. The

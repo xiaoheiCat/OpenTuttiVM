@@ -3,8 +3,8 @@ package workspace
 import (
 	"strings"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	builtinapps "github.com/tutti-os/tutti/services/tuttid/builtin-apps"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	builtinapps "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/builtin-apps"
 )
 
 func (s *AppCenterService) visibleAppPackagesForCatalog(packages []workspacebiz.AppPackage, builtins []builtinapps.App, installationsByAppID map[string]workspacebiz.AppInstallation) []workspacebiz.AppPackage {

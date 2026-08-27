@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 // Cursor's ACP agent surfaces transient upstream failures (its HTTP/2 stream

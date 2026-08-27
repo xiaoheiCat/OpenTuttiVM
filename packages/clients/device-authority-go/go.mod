@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/clients/device-authority-go
+module github.com/xiaoheiCat/OpenTuttiVM/packages/clients/device-authority-go
 
 go 1.24.3
 

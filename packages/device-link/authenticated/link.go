@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	devicelink "github.com/tutti-os/tutti/packages/device-link"
-	"github.com/tutti-os/tutti/packages/device-link/icequic"
+	devicelink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/icequic"
 )
 
 type Role string

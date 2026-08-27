@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"runtime"
 
-	deviceidentitydata "github.com/tutti-os/tutti/services/tuttid/data/deviceidentity"
-	accountservice "github.com/tutti-os/tutti/services/tuttid/service/account"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
-	mobileremoteservice "github.com/tutti-os/tutti/services/tuttid/service/mobileremote"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	deviceidentitydata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/deviceidentity"
+	accountservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/account"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
+	mobileremoteservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/mobileremote"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func buildMobileRemoteService(

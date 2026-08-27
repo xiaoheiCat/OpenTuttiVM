@@ -5,10 +5,10 @@ import (
 	"errors"
 	"net/http"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	globalagentactivityservice "github.com/tutti-os/tutti/services/tuttid/service/globalagentactivity"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	globalagentactivityservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/globalagentactivity"
 )
 
 type GlobalAgentActivityService interface {

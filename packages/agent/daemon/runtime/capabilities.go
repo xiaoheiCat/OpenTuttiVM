@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
 )
 
 // Provider-runtime aliases for the canonical capability vocabulary owned by

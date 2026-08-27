@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	collabrunbiz "github.com/tutti-os/tutti/services/tuttid/biz/collabrun"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	modelplanservice "github.com/tutti-os/tutti/services/tuttid/service/modelplan"
+	collabrunbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/collabrun"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	modelplanservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelplan"
 )
 
 // DefaultMaxConsultRunsPerSourceSession caps consult runs per source session

@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tutti-os/tutti/apps/cli/internal/defaults"
+	"github.com/xiaoheiCat/OpenTuttiVM/apps/cli/internal/defaults"
 )
 
 type Endpoint struct {

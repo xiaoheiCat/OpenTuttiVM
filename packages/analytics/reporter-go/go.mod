@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/analytics/reporter-go
+module github.com/xiaoheiCat/OpenTuttiVM/packages/analytics/reporter-go
 
 go 1.24.3
 

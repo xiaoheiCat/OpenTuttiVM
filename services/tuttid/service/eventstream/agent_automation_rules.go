@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	eventsgenerated "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
+	eventsgenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
 )
 
 const TopicAgentAutomationRulesChanged = "agent.automation.rules.changed"

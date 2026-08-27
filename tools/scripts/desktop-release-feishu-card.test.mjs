@@ -86,9 +86,9 @@ test("release Feishu card clearly marks candidates without claiming public publi
     macUrl: "https://example.com/tutti.dmg",
     publicationStatus: "candidate",
     promotionUrl:
-      "https://github.com/tutti-os/tutti/actions/workflows/desktop-release-promote.yml",
-    releaseUrl: "https://github.com/tutti-os/tutti/releases/tag/v1.12.20",
-    runUrl: "https://github.com/tutti-os/tutti/actions/runs/1",
+      "https://github.com/xiaoheiCat/OpenTuttiVM/actions/workflows/desktop-release-promote.yml",
+    releaseUrl: "https://github.com/xiaoheiCat/OpenTuttiVM/releases/tag/v1.12.20",
+    runUrl: "https://github.com/xiaoheiCat/OpenTuttiVM/actions/runs/1",
     tag: "v1.12.20",
     target: "4039186abcdef0"
   });
@@ -135,8 +135,8 @@ test("release Feishu card includes tsh-aligned release context fields", () => {
     branch: "main",
     linuxUrl: "https://example.com/tutti.AppImage",
     macUrl: "https://example.com/tutti.dmg",
-    releaseUrl: "https://github.com/tutti-os/tutti/releases/tag/v1.12.20",
-    runUrl: "https://github.com/tutti-os/tutti/actions/runs/1",
+    releaseUrl: "https://github.com/xiaoheiCat/OpenTuttiVM/releases/tag/v1.12.20",
+    runUrl: "https://github.com/xiaoheiCat/OpenTuttiVM/actions/runs/1",
     tag: "v1.12.20",
     target: "4039186abcdef0",
     winUrl: "https://example.com/tutti.exe"
@@ -166,8 +166,8 @@ test("release Feishu card uses the mirrored Windows installer URL", () => {
     actor: "jomeswang",
     branch: "main",
     macUrl: "https://example.com/tutti.dmg",
-    releaseUrl: "https://github.com/tutti-os/tutti/releases/tag/v1.12.20-rc.0",
-    runUrl: "https://github.com/tutti-os/tutti/actions/runs/1",
+    releaseUrl: "https://github.com/xiaoheiCat/OpenTuttiVM/releases/tag/v1.12.20-rc.0",
+    runUrl: "https://github.com/xiaoheiCat/OpenTuttiVM/actions/runs/1",
     tag: "v1.12.20-rc.0",
     target: "4039186abcdef0",
     winUrl:
@@ -189,8 +189,8 @@ test("release Feishu card includes Chinese release summary when available", () =
     actor: "jomeswang",
     branch: "main",
     macUrl: "https://example.com/tutti.dmg",
-    releaseUrl: "https://github.com/tutti-os/tutti/releases/tag/v1.12.20",
-    runUrl: "https://github.com/tutti-os/tutti/actions/runs/1",
+    releaseUrl: "https://github.com/xiaoheiCat/OpenTuttiVM/releases/tag/v1.12.20",
+    runUrl: "https://github.com/xiaoheiCat/OpenTuttiVM/actions/runs/1",
     summary: {
       zh: {
         headline: "本次版本聚焦桌面端发布链路稳定性。",

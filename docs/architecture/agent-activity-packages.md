@@ -37,16 +37,16 @@ packages/agent/gui
   @tutti-os/agent-gui
 
 packages/agent/activity-replication
-  github.com/tutti-os/tutti/packages/agent/activity-replication
+  github.com/xiaoheiCat/OpenTuttiVM/packages/agent/activity-replication
 
 packages/agent/host
-  github.com/tutti-os/tutti/packages/agent/host
+  github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host
 
 packages/agent/store-sqlite
-  github.com/tutti-os/tutti/packages/agent/store-sqlite
+  github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite
 
 packages/agent/store-sqlite/canonical
-  github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical
+  github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical
 ```
 
 `packages/agent/store-sqlite/canonical` is the single authority for canonical

@@ -10,9 +10,9 @@ import (
 	"errors"
 	"strings"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	host "github.com/tutti-os/tutti/packages/agent/host"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	host "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 // RuntimeBackend is the daemon controller surface required by Agent Host.

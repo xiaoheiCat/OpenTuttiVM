@@ -17,8 +17,8 @@ import (
 	"runtime"
 	"strings"
 
-	agentextensionbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentextension"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	agentextensionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentextension"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 // UVToolchainResolver returns the directory containing the Tutti-managed uv

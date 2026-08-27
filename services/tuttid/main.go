@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	tuttiapp "github.com/tutti-os/tutti/services/tuttid/app"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttiapp "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/app"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func main() {

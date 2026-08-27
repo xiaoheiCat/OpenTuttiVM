@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	claudecodeservice "github.com/tutti-os/tutti/services/tuttid/service/claudecode"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	claudecodeservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/claudecode"
 )
 
 type ApplicationHostRuntime interface {

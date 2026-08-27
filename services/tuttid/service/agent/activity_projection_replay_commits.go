@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	replay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 type ReplayCommitObserver interface {

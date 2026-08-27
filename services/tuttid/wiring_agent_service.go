@@ -4,9 +4,9 @@ import (
 	"context"
 	"log/slog"
 
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
 )
 
 type workspaceAgentTargetResolverSetter interface {

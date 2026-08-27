@@ -170,5 +170,5 @@ A: 本地版的数据全部在你本地。Tutti · VM 的共享仅以房间为�
 ## 官方链接
 
 - **官网：** www.tutti.sh
-- **GitHub：** https://github.com/tutti-os/tutti
+- **GitHub：** https://github.com/xiaoheiCat/OpenTuttiVM
 - **macOS 下载：** https://tutti.sh/desktop/download?platform=macos&arch=universal&format=dmg

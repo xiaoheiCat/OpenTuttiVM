@@ -15,8 +15,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/liveprotocol"
-	eventsgenerated "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/liveprotocol"
+	eventsgenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
 )
 
 const (

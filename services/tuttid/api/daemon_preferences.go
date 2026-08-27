@@ -4,12 +4,12 @@ import (
 	"context"
 	"strings"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	preferencesapi "github.com/tutti-os/tutti/services/tuttid/api/preferences"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	agentproviderbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	preferencesservice "github.com/tutti-os/tutti/services/tuttid/service/preferences"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	preferencesapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/preferences"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	agentproviderbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	preferencesservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/preferences"
 )
 
 func (api DaemonAPI) GetDesktopPreferences(ctx context.Context, _ tuttigenerated.GetDesktopPreferencesRequestObject) (tuttigenerated.GetDesktopPreferencesResponseObject, error) {

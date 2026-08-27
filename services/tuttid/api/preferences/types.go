@@ -1,8 +1,8 @@
 package preferences
 
 import (
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 )
 
 func GeneratedDesktopPreferencesFromBiz(value preferencesbiz.DesktopPreferences) tuttigenerated.DesktopPreferences {

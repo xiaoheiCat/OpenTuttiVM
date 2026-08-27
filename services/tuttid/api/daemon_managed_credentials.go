@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	managedcredentialsbiz "github.com/tutti-os/tutti/services/tuttid/biz/managedcredentials"
-	managedcredentialsservice "github.com/tutti-os/tutti/services/tuttid/service/managedcredentials"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	managedcredentialsbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/managedcredentials"
+	managedcredentialsservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedcredentials"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 type managedProviderRequest struct {

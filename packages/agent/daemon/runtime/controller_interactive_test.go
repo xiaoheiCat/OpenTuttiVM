@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
 )
 
 func TestControllerRoutesChildInteractionThroughRootLiveSession(t *testing.T) {

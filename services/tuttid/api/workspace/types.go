@@ -3,8 +3,8 @@ package workspace
 import (
 	"time"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func GeneratedSummaryFromBiz(value workspacebiz.Summary) tuttigenerated.WorkspaceSummary {

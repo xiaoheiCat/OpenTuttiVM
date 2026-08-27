@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	modelbindingbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelbinding"
+	modelbindingbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelbinding"
 )
 
 // ErrAgentModelBindingNotFound reports a missing binding row.

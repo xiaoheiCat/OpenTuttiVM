@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agentturnanalyticsbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentturnanalytics"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agentturnanalyticsbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentturnanalytics"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func TestTerminalAnalyticsMarkerIsAtomicWithCanonicalSettlement(t *testing.T) {

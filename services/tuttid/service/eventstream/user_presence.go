@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	userpresenceservice "github.com/tutti-os/tutti/services/tuttid/service/userpresence"
+	userpresenceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/userpresence"
 )
 
 func accountUserPresenceTopicDefinition() TopicDefinition {

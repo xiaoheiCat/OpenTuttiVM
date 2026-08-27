@@ -8,7 +8,7 @@ import (
 
 	"github.com/pion/ice/v4"
 
-	corelink "github.com/tutti-os/tutti/packages/device-link"
+	corelink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link"
 )
 
 // TestICESelectedPathCarriesDeviceLinkQUIC is the M2 vertical slice from the

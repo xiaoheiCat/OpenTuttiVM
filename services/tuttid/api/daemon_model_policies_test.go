@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	modelpolicybiz "github.com/tutti-os/tutti/services/tuttid/biz/modelpolicy"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	modelpolicyservice "github.com/tutti-os/tutti/services/tuttid/service/modelpolicy"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	modelpolicybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelpolicy"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	modelpolicyservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelpolicy"
 )
 
 // notFoundModelPolicyService reports every lookup/mutation as a missing policy

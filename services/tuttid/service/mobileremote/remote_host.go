@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	devicelink "github.com/tutti-os/tutti/packages/device-link"
-	authenticatedlink "github.com/tutti-os/tutti/packages/device-link/authenticated"
-	"github.com/tutti-os/tutti/packages/device-link/candidateexchange"
-	"github.com/tutti-os/tutti/packages/device-link/linkmanager"
-	mobileremotebiz "github.com/tutti-os/tutti/services/tuttid/biz/mobileremote"
+	devicelink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link"
+	authenticatedlink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/authenticated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/candidateexchange"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/linkmanager"
+	mobileremotebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/mobileremote"
 )
 
 const (

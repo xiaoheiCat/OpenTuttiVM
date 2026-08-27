@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	tuttiapi "github.com/tutti-os/tutti/services/tuttid/api"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
-	preferencesservice "github.com/tutti-os/tutti/services/tuttid/service/preferences"
+	tuttiapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
+	preferencesservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/preferences"
 )
 
 type mobileRemotePreferencesStore struct {

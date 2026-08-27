@@ -1,6 +1,6 @@
 package main
 
-import "github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
+import "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
 
 func tuttiDesktopCommandNetworkAccessPolicy(provider string) bool {
 	descriptor, ok := providerregistry.Find(provider)

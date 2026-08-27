@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	userprojectbiz "github.com/tutti-os/tutti/services/tuttid/biz/userproject"
-	userprojectservice "github.com/tutti-os/tutti/services/tuttid/service/userproject"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	userprojectbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/userproject"
+	userprojectservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/userproject"
 )
 
 type stubUserProjectService struct {

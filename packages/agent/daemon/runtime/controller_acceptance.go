@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 // ProviderTurnAcceptanceInput is an authoritative history observation. This

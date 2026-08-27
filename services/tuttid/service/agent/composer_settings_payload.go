@@ -3,7 +3,7 @@ package agent
 import (
 	"strings"
 
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 )
 
 // ComposerSettingsToMap serializes composer settings for activity persistence

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 
-	agentdaemon "github.com/tutti-os/tutti/packages/agent/daemon"
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
+	agentdaemon "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
 )
 
 // agentRunOutcomeReporter decorates the activity reporter so a runtime

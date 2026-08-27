@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
 )
 
 const (

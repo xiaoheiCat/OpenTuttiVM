@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	mobileremotebiz "github.com/tutti-os/tutti/services/tuttid/biz/mobileremote"
-	mobileremoteservice "github.com/tutti-os/tutti/services/tuttid/service/mobileremote"
+	mobileremotebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/mobileremote"
+	mobileremoteservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/mobileremote"
 )
 
 type stubMobileRemoteService struct {

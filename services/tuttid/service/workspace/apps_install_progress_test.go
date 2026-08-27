@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func TestInstallProgressTrackerAggregatesParallelRuntimeDownloads(t *testing.T) {

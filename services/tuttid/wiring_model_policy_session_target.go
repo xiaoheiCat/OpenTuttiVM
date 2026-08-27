@@ -1,6 +1,6 @@
 package main
 
-import agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+import agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 
 // modelPolicySessionTargetResolver lets the review engine resolve a session's
 // agent target from the persisted activity projection when a state report

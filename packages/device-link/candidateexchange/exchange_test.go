@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/device-link/authenticated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/authenticated"
 )
 
 func TestExchangeReportsParticipantCloseBeforeGatheringCompletion(t *testing.T) {

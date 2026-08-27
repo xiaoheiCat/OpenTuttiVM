@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 func (api DaemonAPI) ListCliCapabilities(ctx context.Context, request tuttigenerated.ListCliCapabilitiesRequestObject) (tuttigenerated.ListCliCapabilitiesResponseObject, error) {

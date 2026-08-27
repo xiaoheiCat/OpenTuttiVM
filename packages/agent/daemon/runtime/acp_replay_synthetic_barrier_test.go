@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	sessionreplay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	sessionreplay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 func TestACPClientDrainsSyntheticGoalGetWhileProviderCursorHeld(t *testing.T) {

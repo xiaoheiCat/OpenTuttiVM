@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tuttimodeplanservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeplan"
+	tuttimodeplanservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeplan"
 )
 
 func TestTuttiModePlanFeedbackPromptCarriesReviseInstructions(t *testing.T) {

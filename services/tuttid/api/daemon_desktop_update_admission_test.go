@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	admissiondaemon "github.com/tutti-os/tutti/packages/desktop/update-admission/daemon"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
+	admissiondaemon "github.com/xiaoheiCat/OpenTuttiVM/packages/desktop/update-admission/daemon"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
 )
 
 type stubDesktopUpdateAdmissionService struct {

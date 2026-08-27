@@ -1,5 +1,5 @@
 // Package eventstream is the tutti workspace binding of the catalog-agnostic
-// event-stream registry (github.com/tutti-os/tutti/packages/events/stream-go).
+// event-stream registry (github.com/xiaoheiCat/OpenTuttiVM/packages/events/stream-go).
 //
 // The pub/sub registry, scope routing and session fan-out live in stream-go.
 // This package only fixes the scope axis to the workspace (EventScope) and keeps
@@ -11,7 +11,7 @@ package eventstream
 import (
 	"strings"
 
-	streamgo "github.com/tutti-os/tutti/packages/events/stream-go"
+	streamgo "github.com/xiaoheiCat/OpenTuttiVM/packages/events/stream-go"
 )
 
 // EventScope is the workspace scope axis used to route events.

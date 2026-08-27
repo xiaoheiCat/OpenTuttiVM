@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
+	workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
 )
 
 const defaultWorkspaceFileSearchBudget = 1500 * time.Millisecond

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
 )
 
 // NativeSubscriptionProbe verifies an official provider subscription through

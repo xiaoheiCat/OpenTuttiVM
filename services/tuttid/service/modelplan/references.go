@@ -3,7 +3,7 @@ package modelplan
 import (
 	"context"
 
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
 )
 
 // CompositeReferenceResolver fans a plan-reference lookup out to each

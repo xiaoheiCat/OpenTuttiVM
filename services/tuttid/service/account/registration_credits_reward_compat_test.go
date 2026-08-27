@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/commerce"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/commerce"
 )
 
 func TestRegistrationCreditsRewardStateReadsLegacyPendingReceipt(t *testing.T) {

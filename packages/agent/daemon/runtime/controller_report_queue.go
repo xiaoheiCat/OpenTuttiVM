@@ -3,7 +3,7 @@ package agentruntime
 import (
 	"sync"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
 )
 
 // reportRequestQueue is an unbounded FIFO with a single non-blocking wake-up

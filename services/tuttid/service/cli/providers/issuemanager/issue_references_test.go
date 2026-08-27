@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 // fakeIssueManagerWithOutputs overrides GetIssueDetail to drive task-source handle expansion,

@@ -623,10 +623,10 @@ test("WorkspaceAppCenterService opens external URLs through host files", async (
     hostWorkspaceApi: createHostWorkspaceApi()
   });
 
-  await service.openExternalUrl(" https://github.com/tutti-os/tutti ");
+  await service.openExternalUrl(" https://github.com/xiaoheiCat/OpenTuttiVM ");
   await service.openExternalUrl("   ");
 
-  assert.deepEqual(openedUrls, ["https://github.com/tutti-os/tutti"]);
+  assert.deepEqual(openedUrls, ["https://github.com/xiaoheiCat/OpenTuttiVM"]);
 });
 
 test("WorkspaceAppCenterService does not open package folders for builtin apps", async () => {

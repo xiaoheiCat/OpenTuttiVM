@@ -7,7 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
 )
 
 const codexColdStartProbeTimeout = 10 * time.Second

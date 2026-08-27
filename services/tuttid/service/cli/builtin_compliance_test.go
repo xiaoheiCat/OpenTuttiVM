@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/providers/agentcontext"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/providers/browser"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/providers/computer"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/providers/diagnostics"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/providers/issuemanager"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/providers/managedmodels"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/providers/agentcontext"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/providers/browser"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/providers/computer"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/providers/diagnostics"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/providers/issuemanager"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/providers/managedmodels"
 )
 
 func TestBuiltinProviderCapabilitiesAreFrameworkCompliant(t *testing.T) {

@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	tuttimodeactivationbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeactivation"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	tuttimodeactivationservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeactivation"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	tuttimodeactivationbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeactivation"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	tuttimodeactivationservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeactivation"
 )
 
 func TestGetTuttiModeActivationReturnsSessionNotFound(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	claudecodeservice "github.com/tutti-os/tutti/services/tuttid/service/claudecode"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	claudecodeservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/claudecode"
 )
 
 func TestDefaultRegistryAllowsClaudeAuthStatusToFinish(t *testing.T) {

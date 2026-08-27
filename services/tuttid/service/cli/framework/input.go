@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 func FromStruct[T any]() InputSpec {

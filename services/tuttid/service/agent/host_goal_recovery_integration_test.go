@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 // These cases intentionally stay in tuttid: they exercise the concrete

@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	workspaceagentbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceagent"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	workspaceagentservice "github.com/tutti-os/tutti/services/tuttid/service/workspaceagent"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	workspaceagentbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceagent"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	workspaceagentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspaceagent"
 )
 
 type WorkspaceAgentService interface {

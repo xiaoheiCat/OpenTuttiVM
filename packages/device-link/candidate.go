@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/device-link/internal/netfilter"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/internal/netfilter"
 )
 
 var (

@@ -12,7 +12,7 @@ import (
 )
 
 func TestTuttidDoesNotImportLegacyAgentActivityFacade(t *testing.T) {
-	const legacyImportPath = "github.com/tutti-os/tutti/services/tuttid/biz/agentactivity"
+	const legacyImportPath = "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentactivity"
 
 	var violations []string
 	err := filepath.WalkDir(".", func(path string, entry fs.DirEntry, walkErr error) error {

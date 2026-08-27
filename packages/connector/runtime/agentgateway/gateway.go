@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	connectormcpserver "github.com/tutti-os/tutti/packages/connector/runtime/mcpserver"
+	connectormcpserver "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/mcpserver"
 )
 
 const connectorMCPPath = "/mcp/connector"

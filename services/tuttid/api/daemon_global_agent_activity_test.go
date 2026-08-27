@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
 )
 
 type globalAgentActivityServiceStub struct {

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	eventprotocol "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
+	eventprotocol "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
 )
 
 func validateWorkspaceIssueUpdatedPayload(payload []byte) error {

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 const acpMethodWriteTextFile = "fs/write_text_file"

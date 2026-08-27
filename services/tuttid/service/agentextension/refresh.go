@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 // Refresh reconciles sources one at a time so preference-driven activation

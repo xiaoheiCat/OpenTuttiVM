@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func registerWorkspaceAppUploadRoutes(mux *http.ServeMux, wrapper *tuttigenerated.ServerInterfaceWrapper) {

@@ -2,7 +2,7 @@
 
 package workspace
 
-import workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
+import workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
 
 // nativeSearchIgnoredDirectoryNames is intentionally narrower than the
 // provider-independent guard. These high-cardinality directories are safe and

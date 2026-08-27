@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	hostservicespkg "github.com/tutti-os/tutti/packages/agent/daemon/internal/hostservices"
-	runtimepaths "github.com/tutti-os/tutti/packages/agent/daemon/internal/runtimepaths"
+	hostservicespkg "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/internal/hostservices"
+	runtimepaths "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/internal/runtimepaths"
 )
 
 const ServiceGroup = "agent-context"

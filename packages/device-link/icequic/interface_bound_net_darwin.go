@@ -11,8 +11,8 @@ import (
 	"github.com/pion/transport/v4"
 	"github.com/pion/transport/v4/stdnet"
 
-	"github.com/tutti-os/tutti/packages/device-link/internal/interfacebind"
-	"github.com/tutti-os/tutti/packages/device-link/internal/netfilter"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/internal/interfacebind"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/internal/netfilter"
 )
 
 type interfaceBoundNet struct {

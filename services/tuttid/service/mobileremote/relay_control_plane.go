@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	agenthttpx "github.com/tutti-os/tutti/packages/agent/daemon/httpx"
-	deviceauthority "github.com/tutti-os/tutti/packages/clients/device-authority-go"
+	agenthttpx "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
+	deviceauthority "github.com/xiaoheiCat/OpenTuttiVM/packages/clients/device-authority-go"
 )
 
 // NewDeviceAuthorityClient adapts the existing desktop account cookie and

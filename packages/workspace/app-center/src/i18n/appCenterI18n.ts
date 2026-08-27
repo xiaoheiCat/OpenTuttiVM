@@ -269,7 +269,7 @@ export const appCenterEn = {
       title: ".tutti files not found"
     },
     repairPrompt:
-      'Load the skill https://github.com/tutti-os/tutti-agent-skills/tree/main/plugins/tutti/skills/tutti-workspace-app-factory and adapt project directory "{{cwd}}" into a Tutti local debug app. Generate .tutti/dev-app/; bootstrap.sh must read the host-injected TUTTI_APP_HOST and TUTTI_APP_PORT, and must not hard-code a port.'
+      'Load the skill https://github.com/xiaoheiCat/OpenTuttiVM-agent-skills/tree/main/plugins/tutti/skills/tutti-workspace-app-factory and adapt project directory "{{cwd}}" into a Tutti local debug app. Generate .tutti/dev-app/; bootstrap.sh must read the host-injected TUTTI_APP_HOST and TUTTI_APP_PORT, and must not hard-code a port.'
   },
   messages: {
     appInstallFailed:
@@ -557,7 +557,7 @@ export const appCenterZhCN = {
       title: "目录未识别到 .tutti 文件"
     },
     repairPrompt:
-      "加载 skill https://github.com/tutti-os/tutti-agent-skills/tree/main/plugins/tutti/skills/tutti-workspace-app-factory，将项目目录“{{cwd}}”适配成本地调试 Tutti 应用。生成 .tutti/dev-app/；bootstrap.sh 必须读取宿主注入的 TUTTI_APP_HOST 和 TUTTI_APP_PORT，不要硬编码端口。"
+      "加载 skill https://github.com/xiaoheiCat/OpenTuttiVM-agent-skills/tree/main/plugins/tutti/skills/tutti-workspace-app-factory，将项目目录“{{cwd}}”适配成本地调试 Tutti 应用。生成 .tutti/dev-app/；bootstrap.sh 必须读取宿主注入的 TUTTI_APP_HOST 和 TUTTI_APP_PORT，不要硬编码端口。"
   },
   messages: {
     appInstallFailed: "应用安装失败，请重试或查看日志",

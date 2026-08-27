@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
 )
 
 func (s *Service) Get(ctx context.Context, input GetInput) (workflowbiz.Snapshot, error) {

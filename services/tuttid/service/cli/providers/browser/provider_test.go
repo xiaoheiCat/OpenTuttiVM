@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	browsersvc "github.com/tutti-os/tutti/services/tuttid/service/browser"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	browsersvc "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/browser"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 type fakeBrowserService struct {

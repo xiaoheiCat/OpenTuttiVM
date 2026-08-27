@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 type providerRuntimeResolution struct {

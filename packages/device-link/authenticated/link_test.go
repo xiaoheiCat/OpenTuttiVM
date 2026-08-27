@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	authenticated "github.com/tutti-os/tutti/packages/device-link/authenticated"
+	authenticated "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/authenticated"
 )
 
 func TestAuthenticatedParticipantsCarryBidirectionalStream(t *testing.T) {

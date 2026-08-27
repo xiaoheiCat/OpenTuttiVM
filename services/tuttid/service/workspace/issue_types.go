@@ -3,9 +3,9 @@ package workspace
 import (
 	"context"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
 )
 
 // IssueAssignmentAgentTargetReader resolves a task's assigned agent target at

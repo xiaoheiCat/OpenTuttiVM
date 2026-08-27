@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	mobileremoteservice "github.com/tutti-os/tutti/services/tuttid/service/mobileremote"
-	userpresenceservice "github.com/tutti-os/tutti/services/tuttid/service/userpresence"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	mobileremoteservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/mobileremote"
+	userpresenceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/userpresence"
 )
 
 const (

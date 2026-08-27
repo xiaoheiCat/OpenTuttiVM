@@ -14,7 +14,7 @@ const { spawnSync } = require("node:child_process");
 
 const DEFAULT_TIMESTAMP_URL = "http://time.certum.pl";
 const DEFAULT_DISPLAY_NAME = "Tutti";
-const DEFAULT_DISPLAY_URL = "https://github.com/tutti-os/tutti";
+const DEFAULT_DISPLAY_URL = "https://github.com/xiaoheiCat/OpenTuttiVM";
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();

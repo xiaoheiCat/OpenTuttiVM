@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	replay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 // AuditProjectedProcessCassetteFrames verifies that a persisted Provider tape

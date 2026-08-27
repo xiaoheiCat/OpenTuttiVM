@@ -3,8 +3,8 @@ package conformance
 import (
 	"encoding/json"
 
-	activityreplication "github.com/tutti-os/tutti/packages/agent/activity-replication"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	activityreplication "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/activity-replication"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 // ProjectionFixtures exercise canonical snapshot construction. Tutti SQLite

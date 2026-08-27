@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/liveprotocol"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/liveprotocol"
 )
 
 func TestRemoteProtocolRoundTripsAllowedAgentRequest(t *testing.T) {

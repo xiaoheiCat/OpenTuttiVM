@@ -17,13 +17,13 @@ import (
 
 	"golang.org/x/mod/semver"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
-	agentextensionbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentextension"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
+	agentextensionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentextension"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 var safeKey = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$`)

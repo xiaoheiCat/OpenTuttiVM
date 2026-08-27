@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	agentextensionbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentextension"
+	agentextensionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentextension"
 )
 
 var runtimeBinaryNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)

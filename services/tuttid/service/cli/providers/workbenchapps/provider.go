@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	workbenchbiz "github.com/tutti-os/tutti/services/tuttid/biz/workbench"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	workbenchbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workbench"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 const (

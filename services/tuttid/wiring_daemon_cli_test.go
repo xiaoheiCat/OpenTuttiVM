@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	appclicli "github.com/tutti-os/tutti/services/tuttid/service/cli/appcli"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	appclicli "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/appcli"
 )
 
 func TestBuildDaemonCLIRegistryOmitsAgentTuttiModeMutation(t *testing.T) {

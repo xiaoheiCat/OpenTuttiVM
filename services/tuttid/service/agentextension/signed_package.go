@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"strings"
 
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func persistSignedPackageAuthority(root string, release Release, artifact []byte) error {

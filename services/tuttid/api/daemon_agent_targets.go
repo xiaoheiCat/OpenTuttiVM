@@ -5,12 +5,12 @@ import (
 	"errors"
 	"strings"
 
-	agenttargetapi "github.com/tutti-os/tutti/services/tuttid/api/agenttarget"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	agenttargetservice "github.com/tutti-os/tutti/services/tuttid/service/agenttarget"
+	agenttargetapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/agenttarget"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	agenttargetservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agenttarget"
 )
 
 type AgentTargetService interface {

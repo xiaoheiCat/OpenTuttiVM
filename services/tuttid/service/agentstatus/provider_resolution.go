@@ -10,10 +10,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
-	externalagentregistry "github.com/tutti-os/tutti/services/tuttid/service/externalagentregistry"
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
+	externalagentregistry "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/externalagentregistry"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 const ReasonExternalAgentRegistryUnavailable = "external_agent_registry_unavailable"

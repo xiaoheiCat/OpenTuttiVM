@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	automationrulebiz "github.com/tutti-os/tutti/services/tuttid/biz/automationrule"
-	workspaceagentbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceagent"
+	automationrulebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/automationrule"
+	workspaceagentbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceagent"
 )
 
 const schemaMigrationAutomationRulesV1 = "automation_rules_v1"

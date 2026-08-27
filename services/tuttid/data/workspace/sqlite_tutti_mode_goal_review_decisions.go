@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
 )
 
 func (s *SQLiteStore) AdmitTuttiModeGoalReviewComplete(

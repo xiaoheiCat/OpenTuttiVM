@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
 )
 
 type stubAgentStatusService struct {

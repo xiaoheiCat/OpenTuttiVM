@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	appclicore "github.com/tutti-os/tutti/packages/appcli/core"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	appclicore "github.com/xiaoheiCat/OpenTuttiVM/packages/appcli/core"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 func TestRegistryActivateExposesAppCapabilities(t *testing.T) {

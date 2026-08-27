@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	replaybiz "github.com/tutti-os/tutti/services/tuttid/biz/agentsessionreplay"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	replaybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentsessionreplay"
 )
 
 const tuttiReplayStateSchemaVersion = replaybiz.SchemaVersion

@@ -15,9 +15,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 const tuttiAppRuntimeRootEnv = "TUTTI_APP_RUNTIME_ROOT"

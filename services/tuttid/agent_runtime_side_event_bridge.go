@@ -7,10 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	"github.com/tutti-os/tutti/packages/agent/daemon/liveprotocol"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/liveprotocol"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
 )
 
 // agentRuntimeSideEventBridge keeps the ephemeral Side stream out of the

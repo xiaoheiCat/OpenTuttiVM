@@ -382,7 +382,7 @@ describe("AgentMessageMarkdown", () => {
   });
 
   it("keeps JSON fields after a bare URL outside the link", () => {
-    const url = "https://github.com/tutti-os/tutti/pull/1355";
+    const url = "https://github.com/xiaoheiCat/OpenTuttiVM/pull/1355";
     const content = JSON.stringify({
       result: "mr_created",
       prUrl: url,

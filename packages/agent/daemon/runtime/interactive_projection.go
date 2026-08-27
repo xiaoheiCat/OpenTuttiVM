@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 func cloneOptionMaps(in []map[string]any) []map[string]any {

@@ -219,8 +219,8 @@ Catalog merge semantics:
 
 Catalog-only can be exposed by the app repository caller workflow, or run from the Tutti catalog workflows:
 
-- Production: <https://github.com/tutti-os/tutti/actions/workflows/publish-tutti-app-catalog.yml>
-- Staging: <https://github.com/tutti-os/tutti/actions/workflows/publish-tutti-app-catalog-staging.yml>
+- Production: <https://github.com/xiaoheiCat/OpenTuttiVM/actions/workflows/publish-tutti-app-catalog.yml>
+- Staging: <https://github.com/xiaoheiCat/OpenTuttiVM/actions/workflows/publish-tutti-app-catalog-staging.yml>
 
 Recommended inputs for refresh/repair:
 

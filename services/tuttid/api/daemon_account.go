@@ -5,11 +5,11 @@ import (
 	"errors"
 	"time"
 
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
-	"github.com/tutti-os/tutti/packages/commerce"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	accountservice "github.com/tutti-os/tutti/services/tuttid/service/account"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/commerce"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	accountservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/account"
 )
 
 type AccountService interface {

@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
 )
 
 var (

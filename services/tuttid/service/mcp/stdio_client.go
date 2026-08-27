@@ -2,7 +2,7 @@
 // extraction. New consumers should import packages/connector/runtime/mcp.
 package mcp
 
-import runtimemcp "github.com/tutti-os/tutti/packages/connector/runtime/mcp"
+import runtimemcp "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/mcp"
 
 type RPCError = runtimemcp.RPCError
 type ServerRequest = runtimemcp.ServerRequest

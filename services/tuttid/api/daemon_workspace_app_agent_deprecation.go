@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	reporterevents "github.com/tutti-os/tutti/services/tuttid/service/reporter/events"
+	reporterevents "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter/events"
 )
 
 const deprecatedWorkspaceAppAgentAPIUsedEvent = "deprecated_workspace_app_agent_api_used"

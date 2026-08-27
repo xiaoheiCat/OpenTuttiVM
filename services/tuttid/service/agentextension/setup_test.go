@@ -17,12 +17,12 @@ import (
 	"testing"
 	"time"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	runtimecmd "github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
-	agentextensionbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentextension"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	agentextensiondata "github.com/tutti-os/tutti/services/tuttid/data/agentextension"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	runtimecmd "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
+	agentextensionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentextension"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	agentextensiondata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/agentextension"
 )
 
 func TestAgentTargetSetupInstallsGenericExtensionRuntime(t *testing.T) {

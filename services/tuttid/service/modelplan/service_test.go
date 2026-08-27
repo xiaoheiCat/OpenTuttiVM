@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 type memoryPlanStore struct {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func (s *SQLiteStore) GetWorkbenchSnapshot(ctx context.Context, workspaceID string) (workspacebiz.WorkbenchSnapshot, error) {

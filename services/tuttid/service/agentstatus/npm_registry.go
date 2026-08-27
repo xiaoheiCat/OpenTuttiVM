@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/managednpm"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/managednpm"
 )
 
 const (

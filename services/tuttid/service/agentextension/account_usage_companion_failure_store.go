@@ -3,7 +3,7 @@ package agentextension
 import (
 	"context"
 
-	agentextensionbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentextension"
+	agentextensionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentextension"
 )
 
 type AccountUsageCompanionFailureStore interface {

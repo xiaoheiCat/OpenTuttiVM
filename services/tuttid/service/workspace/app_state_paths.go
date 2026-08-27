@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func (s *AppCenterService) packageCacheDir(appID string, version string) string {

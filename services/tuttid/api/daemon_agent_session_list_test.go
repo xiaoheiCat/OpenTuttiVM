@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 func TestDaemonAPIGeneratedRoutesListAgentSessionsForwardsQuery(t *testing.T) {

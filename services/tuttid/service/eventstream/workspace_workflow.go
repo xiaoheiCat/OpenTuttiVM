@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	eventprotocol "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
+	eventprotocol "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
 )
 
 type WorkspaceWorkflowPublisher struct {

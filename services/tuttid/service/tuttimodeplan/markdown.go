@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 	"gopkg.in/yaml.v3"
 )
 

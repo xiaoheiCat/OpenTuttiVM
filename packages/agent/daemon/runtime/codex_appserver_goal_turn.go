@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 // adoptServerInitiatedTurn registers a turn that codex started on its own

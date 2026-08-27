@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	automationrulebiz "github.com/tutti-os/tutti/services/tuttid/biz/automationrule"
+	automationrulebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/automationrule"
 )
 
 const nativeProviderProbeTimeout = 5 * time.Minute

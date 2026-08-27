@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	replay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 const (

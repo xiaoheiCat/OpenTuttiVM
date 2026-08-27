@@ -3,7 +3,7 @@ package workspace
 import (
 	"context"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func (s *AppCenterService) beginInstallJob(workspaceID string, appID string, options InstallOptions) bool {

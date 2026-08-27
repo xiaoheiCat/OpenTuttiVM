@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 //go:embed generated/**

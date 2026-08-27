@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	collabrunbiz "github.com/tutti-os/tutti/services/tuttid/biz/collabrun"
+	collabrunbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/collabrun"
 )
 
 // AgentCollaborationPublisher broadcasts collaboration run lifecycle changes

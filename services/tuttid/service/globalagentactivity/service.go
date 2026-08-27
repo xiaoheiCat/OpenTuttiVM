@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
 )
 
 const defaultControlPlaneBaseURL = "https://api.tutti.sh"

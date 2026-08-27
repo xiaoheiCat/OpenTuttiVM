@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	agentextensionservice "github.com/tutti-os/tutti/services/tuttid/service/agentextension"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	agentextensionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentextension"
 )
 
 type agentExtensionStartupTargetStore struct{}

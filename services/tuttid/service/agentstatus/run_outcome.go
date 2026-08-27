@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerstatus"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerstatus"
 )
 
 // RunOutcomeStore remembers the latest provider-backed authentication evidence

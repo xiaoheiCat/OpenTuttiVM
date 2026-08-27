@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	eventprotocol "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	eventprotocol "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func validateWorkspaceAppUpdatedPayload(payload []byte) error {

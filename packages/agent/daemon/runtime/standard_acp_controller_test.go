@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
 )
 
 func TestControllerUpdateSettingsAppliesOpenProviderPermissionMode(t *testing.T) {

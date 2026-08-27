@@ -1,6 +1,6 @@
 package agentextension
 
-import agentextensionbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentextension"
+import agentextensionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentextension"
 
 type InstallationStore interface {
 	AgentDir(agentKey string) (string, error)

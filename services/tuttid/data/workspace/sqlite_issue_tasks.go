@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 func (s *SQLiteStore) ListTasks(ctx context.Context, filter workspaceissues.TaskListFilter) (workspaceissues.TaskList, error) {

@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	devicelink "github.com/tutti-os/tutti/packages/device-link"
-	"github.com/tutti-os/tutti/packages/device-link/authenticated"
-	"github.com/tutti-os/tutti/packages/device-link/candidateexchange"
+	devicelink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/authenticated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/candidateexchange"
 )
 
 func TestEncodeLocalDescriptionUsesEmptyCandidateArray(t *testing.T) {

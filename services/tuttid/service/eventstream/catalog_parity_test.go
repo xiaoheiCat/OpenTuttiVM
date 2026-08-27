@@ -3,7 +3,7 @@ package eventstream
 import (
 	"testing"
 
-	eventprotocol "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
+	eventprotocol "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
 )
 
 func TestDefaultCatalogMatchesGeneratedEventDefinitions(t *testing.T) {

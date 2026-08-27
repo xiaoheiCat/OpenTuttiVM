@@ -13,7 +13,7 @@ test("desktop stable release alias body points at the concrete stable release", 
     body: "## Release Summary\n\nStable notes",
     name: "v0.1.16",
     tagName: "v0.1.16",
-    url: "https://github.com/tutti-os/tutti/releases/tag/v0.1.16"
+    url: "https://github.com/xiaoheiCat/OpenTuttiVM/releases/tag/v0.1.16"
   });
 
   assert.match(body, new RegExp(SECTION_START));
@@ -39,7 +39,7 @@ test("desktop stable release alias rejects prerelease tags", () => {
     () =>
       normalizeStableRelease({
         tagName: "v0.1.17-rc.2",
-        url: "https://github.com/tutti-os/tutti/releases/tag/v0.1.17-rc.2"
+        url: "https://github.com/xiaoheiCat/OpenTuttiVM/releases/tag/v0.1.17-rc.2"
       }),
     /requires a stable version tag/
   );

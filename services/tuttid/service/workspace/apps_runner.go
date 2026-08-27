@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
 )
 
 const defaultAppHealthcheckTimeout = 30 * time.Second

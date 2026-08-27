@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/workspace/files
+module github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files
 
 go 1.24.3
 

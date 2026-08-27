@@ -1,6 +1,6 @@
 package providerregistry
 
-import canonical "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+import canonical "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 
 const (
 	CodexProviderID                = canonical.CodexProviderID

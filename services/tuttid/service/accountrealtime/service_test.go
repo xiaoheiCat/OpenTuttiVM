@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
-	userpresenceservice "github.com/tutti-os/tutti/services/tuttid/service/userpresence"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
+	userpresenceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/userpresence"
 )
 
 type fixedSessionSource struct {

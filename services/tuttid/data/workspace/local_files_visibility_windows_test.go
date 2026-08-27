@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
+	workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
 	"golang.org/x/sys/windows"
 )
 

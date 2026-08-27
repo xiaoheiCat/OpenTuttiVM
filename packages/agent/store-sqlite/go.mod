@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/agent/store-sqlite
+module github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite
 
 go 1.24.3
 
@@ -6,8 +6,8 @@ toolchain go1.24.5
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/tutti-os/tutti/packages/agent/activity-replication v0.0.0
-	github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/agent/activity-replication v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical v0.0.0
 	modernc.org/sqlite v1.45.0
 )
 
@@ -24,6 +24,6 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/tutti-os/tutti/packages/agent/activity-replication => ../activity-replication
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/agent/activity-replication => ../activity-replication
 
-replace github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical => ./canonical
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical => ./canonical

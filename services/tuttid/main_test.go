@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func TestRunHelpExitsBeforeCreatingState(t *testing.T) {

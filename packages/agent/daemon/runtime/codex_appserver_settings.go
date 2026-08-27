@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func (a *CodexAppServerAdapter) ApplyPermissionMode(_ context.Context, session Session) error {

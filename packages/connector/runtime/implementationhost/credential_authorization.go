@@ -12,9 +12,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	connectorruntime "github.com/tutti-os/tutti/packages/connector/runtime"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	connectorruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime"
 )
 
 const credentialBrokerInitialEventTimeout = 30 * time.Second

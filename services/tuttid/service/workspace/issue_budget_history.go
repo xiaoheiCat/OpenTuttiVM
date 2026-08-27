@@ -5,7 +5,7 @@ import (
 	"math"
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 // historicalTaskTokenEstimate averages the observed token usage of completed

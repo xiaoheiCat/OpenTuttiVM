@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"reflect"
 
-	activityreplication "github.com/tutti-os/tutti/packages/agent/activity-replication"
+	activityreplication "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/activity-replication"
 )
 
 // ProjectionBuilder seeds canonical state and builds its wire projection. It

@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/services/tuttid
+module github.com/xiaoheiCat/OpenTuttiVM/services/tuttid
 
 go 1.24.3
 
@@ -12,28 +12,28 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.17.7
 	github.com/oapi-codegen/runtime v1.4.1
-	github.com/tutti-os/tutti/packages/agent/daemon v0.0.0
-	github.com/tutti-os/tutti/packages/agent/host v0.0.0
-	github.com/tutti-os/tutti/packages/agent/runtimeprep v0.0.0
-	github.com/tutti-os/tutti/packages/agent/session-replay v0.0.0
-	github.com/tutti-os/tutti/packages/agent/store-sqlite v0.0.0
-	github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical v0.0.0
-	github.com/tutti-os/tutti/packages/analytics/reporter-go v0.0.0
-	github.com/tutti-os/tutti/packages/appcli/core v0.0.0
-	github.com/tutti-os/tutti/packages/auth/bridge-go v0.0.0
-	github.com/tutti-os/tutti/packages/clients/device-authority-go v0.0.0
-	github.com/tutti-os/tutti/packages/commerce v0.0.0
-	github.com/tutti-os/tutti/packages/connector/daemon/adapters/controlplane v0.0.0
-	github.com/tutti-os/tutti/packages/connector/daemon/adapters/sqlite v0.0.0
-	github.com/tutti-os/tutti/packages/connector/daemon/application v0.0.0
-	github.com/tutti-os/tutti/packages/connector/daemon/core v0.0.0
-	github.com/tutti-os/tutti/packages/connector/runtime v0.0.0
-	github.com/tutti-os/tutti/packages/desktop/update-admission v0.0.0
-	github.com/tutti-os/tutti/packages/device-link v0.0.0
-	github.com/tutti-os/tutti/packages/events/stream-go v0.0.0
-	github.com/tutti-os/tutti/packages/workbench/service v0.0.0
-	github.com/tutti-os/tutti/packages/workspace/files v0.0.0
-	github.com/tutti-os/tutti/packages/workspace/issues v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/analytics/reporter-go v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/appcli/core v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/clients/device-authority-go v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/commerce v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/adapters/controlplane v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/adapters/sqlite v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/application v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/desktop/update-admission v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/device-link v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/events/stream-go v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/workbench/service v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues v0.0.0
 	golang.org/x/mod v0.33.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.41.0
@@ -41,29 +41,29 @@ require (
 	modernc.org/sqlite v1.45.0
 )
 
-replace github.com/tutti-os/tutti/packages/events/stream-go => ../../packages/events/stream-go
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/events/stream-go => ../../packages/events/stream-go
 
-replace github.com/tutti-os/tutti/packages/analytics/reporter-go => ../../packages/analytics/reporter-go
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/analytics/reporter-go => ../../packages/analytics/reporter-go
 
-replace github.com/tutti-os/tutti/packages/workbench/service => ../../packages/workbench/service
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/workbench/service => ../../packages/workbench/service
 
-replace github.com/tutti-os/tutti/packages/agent/activity-replication => ../../packages/agent/activity-replication
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/agent/activity-replication => ../../packages/agent/activity-replication
 
-replace github.com/tutti-os/tutti/packages/agent/daemon => ../../packages/agent/daemon
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon => ../../packages/agent/daemon
 
-replace github.com/tutti-os/tutti/packages/agent/host => ../../packages/agent/host
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host => ../../packages/agent/host
 
-replace github.com/tutti-os/tutti/packages/agent/runtimeprep => ../../packages/agent/runtimeprep
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep => ../../packages/agent/runtimeprep
 
-replace github.com/tutti-os/tutti/packages/agent/session-replay => ../../packages/agent/session-replay
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay => ../../packages/agent/session-replay
 
-replace github.com/tutti-os/tutti/packages/agent/store-sqlite => ../../packages/agent/store-sqlite
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite => ../../packages/agent/store-sqlite
 
-replace github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical => ../../packages/agent/store-sqlite/canonical
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical => ../../packages/agent/store-sqlite/canonical
 
-replace github.com/tutti-os/tutti/packages/workspace/files => ../../packages/workspace/files
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files => ../../packages/workspace/files
 
-replace github.com/tutti-os/tutti/packages/workspace/issues => ../../packages/workspace/issues
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues => ../../packages/workspace/issues
 
 require (
 	github.com/Shopify/sarama v1.34.1 // indirect
@@ -115,8 +115,8 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/speakeasy-api/jsonpath v0.6.3 // indirect
 	github.com/speakeasy-api/openapi v1.19.2 // indirect
-	github.com/tutti-os/tutti/packages/agent/activity-replication v0.0.0 // indirect
-	github.com/tutti-os/tutti/packages/clients/market-go v0.0.0 // indirect
+	github.com/xiaoheiCat/OpenTuttiVM/packages/agent/activity-replication v0.0.0 // indirect
+	github.com/xiaoheiCat/OpenTuttiVM/packages/clients/market-go v0.0.0 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
 	github.com/volcengine/datarangers-sdk-go v1.1.8 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
@@ -144,26 +144,26 @@ require (
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
-replace github.com/tutti-os/tutti/packages/appcli/core => ../../packages/appcli/core
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/appcli/core => ../../packages/appcli/core
 
-replace github.com/tutti-os/tutti/packages/auth/bridge-go => ../../packages/auth/bridge-go
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go => ../../packages/auth/bridge-go
 
-replace github.com/tutti-os/tutti/packages/clients/device-authority-go => ../../packages/clients/device-authority-go
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/clients/device-authority-go => ../../packages/clients/device-authority-go
 
-replace github.com/tutti-os/tutti/packages/commerce => ../../packages/commerce
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/commerce => ../../packages/commerce
 
-replace github.com/tutti-os/tutti/packages/clients/market-go => ../../packages/clients/market-go
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/clients/market-go => ../../packages/clients/market-go
 
-replace github.com/tutti-os/tutti/packages/connector/daemon/adapters/controlplane => ../../packages/connector/daemon/adapters/controlplane
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/adapters/controlplane => ../../packages/connector/daemon/adapters/controlplane
 
-replace github.com/tutti-os/tutti/packages/connector/daemon/adapters/sqlite => ../../packages/connector/daemon/adapters/sqlite
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/adapters/sqlite => ../../packages/connector/daemon/adapters/sqlite
 
-replace github.com/tutti-os/tutti/packages/connector/daemon/application => ../../packages/connector/daemon/application
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/application => ../../packages/connector/daemon/application
 
-replace github.com/tutti-os/tutti/packages/connector/daemon/core => ../../packages/connector/daemon/core
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core => ../../packages/connector/daemon/core
 
-replace github.com/tutti-os/tutti/packages/connector/runtime => ../../packages/connector/runtime
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime => ../../packages/connector/runtime
 
-replace github.com/tutti-os/tutti/packages/device-link => ../../packages/device-link
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/device-link => ../../packages/device-link
 
-replace github.com/tutti-os/tutti/packages/desktop/update-admission => ../../packages/desktop/update-admission
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/desktop/update-admission => ../../packages/desktop/update-admission

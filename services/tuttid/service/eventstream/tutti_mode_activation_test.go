@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	eventprotocol "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
-	tuttimodeactivationbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeactivation"
+	eventprotocol "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
+	tuttimodeactivationbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeactivation"
 )
 
 func TestTuttiModeActivationPublisherEmitsScopedInvalidation(t *testing.T) {

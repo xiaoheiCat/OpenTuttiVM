@@ -1,9 +1,9 @@
 package workspace
 
 import (
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 func GeneratedIssueManagerIssueFromDomain(item workspaceissues.Issue) tuttigenerated.IssueManagerIssue {
