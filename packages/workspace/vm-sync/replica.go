@@ -1,0 +1,198 @@
+package vmsync
+
+import (
+	"fmt"
+	"sort"
+
+	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
+	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
+)
+
+// ApplySequenced applies an already-sequenced server envelope structurally,
+// without transformation, base validation, or barrier fencing — the server
+// already canonicalized it. Replicas use this to mirror authoritative state.
+func (w *WorkspaceState) ApplySequenced(env vmprotocol.Envelope) error {
+	op := env.Operation
+	switch op.Kind {
+	case vmprotocol.OpCreate:
+		if _, exists := w.files[op.Path]; !exists {
+			w.applyCreate(op)
+		}
+	case vmprotocol.OpRemove:
+		w.applyRemove(op)
+	case vmprotocol.OpMkdir:
+		w.applyMkdir(op)
+	case vmprotocol.OpRmdir:
+		w.applyRmdir(op)
+	case vmprotocol.OpRename:
+		w.applyRename(op)
+	case vmprotocol.OpMetadataChange:
+		w.applyMetadata(op)
+	case vmprotocol.OpTextPatch:
+		f := w.files[op.Path]
+		if f == nil || f.IsDir {
+			return nil // path removed concurrently; snapshot resync heals
+		}
+		if f.Kind == kindBlob {
+			// Text edit on a file that became a blob server-side: fetch the
+			// current state via CAS on next read.
+			return nil
+		}
+		if op.Patch != nil {
+			if next, err := ApplyPatch(f.Content, *op.Patch); err == nil {
+				f.Content = next
+			}
+		}
+	case vmprotocol.OpBlobReplace:
+		f := w.files[op.Path]
+		if f == nil || f.IsDir {
+			return nil
+		}
+		f.Kind = kindBlob
+		f.Manifest = op.Blob.Manifest
+		f.Content = nil
+		f.Materialized = false
+	default:
+		return fmt.Errorf("unknown operation kind %q", op.Kind)
+	}
+	return nil
+}
+
+// Replica is the client-side projection of one room workspace used by
+// room-sync. It applies already-sequenced server operations, correlates
+// acknowledgements of its own submissions, and materializes blob content
+// from CAS on demand.
+//
+// Replica policy follows the room role: the owner device keeps a full
+// replica strong enough to survive a server failure (Apply to Workspace);
+// participants keep a working cache.
+type Replica struct {
+	State *WorkspaceState
+	// DeviceID identifies this replica's author for ack correlation.
+	DeviceID string
+	// AppliedSeq is the highest server sequence applied locally.
+	AppliedSeq uint64
+	// pending tracks locally submitted operation IDs awaiting their server
+	// acknowledgement.
+	pending map[string]bool
+}
+
+// NewReplica returns a replica over an empty workspace.
+func NewReplica(deviceID string) *Replica {
+	return &Replica{State: NewWorkspaceState(), DeviceID: deviceID, pending: map[string]bool{}}
+}
+
+// Bootstrap loads a snapshot plus the operations after it. The snapshot's
+// entries carry the tree and manifest hashes, so lazy replicas bootstrap
+// without any CAS reads; content materializes on demand.
+func (r *Replica) Bootstrap(snap vmprotocol.WorkspaceSnapshot, ops []vmprotocol.Envelope) error {
+	if err := r.State.RestoreSnapshot(snap); err != nil {
+		return err
+	}
+	r.AppliedSeq = snap.ServerSeq
+	for _, env := range ops {
+		if _, err := r.ApplyServerOp(env); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Submit records a locally authored operation as pending acknowledgement.
+func (r *Replica) Submit(operationID string) { r.pending[operationID] = true }
+
+// PendingAcks lists operation IDs still awaiting acknowledgement.
+func (r *Replica) PendingAcks() []string {
+	out := make([]string, 0, len(r.pending))
+	for id := range r.pending {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ErrSeqGap reports a missing operation; the caller must resync from a
+// snapshot or replay window before applying further operations.
+var ErrSeqGap = errSeqGap{}
+
+type errSeqGap struct{}
+
+func (errSeqGap) Error() string { return "replica sequence gap: resync required" }
+
+// ApplyServerOp applies one sequenced envelope. It returns true when the
+// envelope acknowledged one of this replica's pending operations. Duplicates
+// are skipped idempotently; gaps reject with ErrSeqGap so the caller resyncs.
+func (r *Replica) ApplyServerOp(env vmprotocol.Envelope) (acked bool, err error) {
+	if env.ServerSeq == 0 || env.ServerSeq <= r.AppliedSeq {
+		return false, nil
+	}
+	if env.ServerSeq != r.AppliedSeq+1 {
+		return false, ErrSeqGap
+	}
+	if env.AuthorDeviceID == r.DeviceID && r.pending[env.OperationID] {
+		delete(r.pending, env.OperationID)
+		acked = true
+	}
+	if err := r.State.ApplySequenced(env); err != nil {
+		return acked, err
+	}
+	r.AppliedSeq = env.ServerSeq
+	return acked, nil
+}
+
+// MaterializePath fetches blob content for one path from CAS. Text files are
+// always local. Returns the content and whether it is cached locally.
+func (r *Replica) MaterializePath(path string, store vmcas.Store) ([]byte, error) {
+	f := r.State.files[path]
+	if f == nil {
+		return nil, vmcas.ErrObjectNotFound
+	}
+	if f.IsDir {
+		return nil, nil
+	}
+	if f.Kind == kindText {
+		return f.Content, nil
+	}
+	if f.Materialized && f.Content != nil {
+		return f.Content, nil
+	}
+	data, err := store.Get(f.Manifest)
+	if err != nil {
+		return nil, err
+	}
+	m, err := vmcas.DecodeManifest(data)
+	if err != nil {
+		return nil, err
+	}
+	content, err := vmcas.Materialize(store, m)
+	if err != nil {
+		return nil, err
+	}
+	f.Content = content
+	f.Materialized = true
+	return content, nil
+}
+
+// MaterializeAll eagerly fetches every blob; the full-replica policy used by
+// room owners and ownership-transfer candidates.
+func (r *Replica) MaterializeAll(store vmcas.Store) error {
+	for _, p := range r.State.Paths() {
+		if _, err := r.MaterializePath(p, store); err != nil {
+			return fmt.Errorf("materialize %s: %w", p, err)
+		}
+	}
+	return nil
+}
+
+// IsFull reports whether every path is materialized locally.
+func (r *Replica) IsFull() bool {
+	for _, f := range r.State.files {
+		if f.IsDir {
+			continue
+		}
+		if f.Kind == kindBlob && !f.Materialized {
+			return false
+		}
+	}
+	return true
+}
