@@ -402,6 +402,89 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+// TestOwnerPrivilegesRevokeShareAndKick covers the two remaining owner
+// powers from the design record: revoking the share link stops new joins,
+// and kicking a member kills their session immediately.
+func TestOwnerPrivilegesRevokeShareAndKick(t *testing.T) {
+	stack := newTestStack(t)
+	created := stack.createRoom(t, "dev_alice")
+
+	// Bob joins once (membership + session token).
+	var ticketRes struct {
+		Ticket string `json:"ticket"`
+	}
+	stack.post(t, "/api/share/"+created.ShareID+"/join-ticket", map[string]string{"password": created.Password}, &ticketRes)
+	var joinRes struct {
+		SessionToken string `json:"session_token"`
+	}
+	res := stack.post(t, "/api/rooms/"+created.RoomID+"/join", map[string]any{
+		"ticket": ticketRes.Ticket,
+		"device": map[string]string{"id": "dev_bob", "display_name": "Bob", "hostname": "bobs-pc", "public_key": "pk7"},
+	}, &joinRes)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("bob join status %d", res.StatusCode)
+	}
+
+	// Non-owner cannot revoke or kick.
+	auth := func(path, token string) *http.Response {
+		req, _ := http.NewRequest("POST", stack.srv.URL+path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		res, err := stack.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res
+	}
+	if code := auth("/api/rooms/"+created.RoomID+"/share/revoke", joinRes.SessionToken).StatusCode; code != http.StatusForbidden {
+		t.Fatalf("non-owner revoke status %d", code)
+	}
+	if code := auth("/api/rooms/"+created.RoomID+"/members/dev_bob/kick", joinRes.SessionToken).StatusCode; code != http.StatusForbidden {
+		t.Fatalf("non-owner kick status %d", code)
+	}
+
+	// Owner cannot kick themselves.
+	if code := auth("/api/rooms/"+created.RoomID+"/members/dev_alice/kick", created.SessionToken).StatusCode; code != http.StatusForbidden {
+		t.Fatalf("self-kick status %d", code)
+	}
+
+	// Owner kicks Bob: his session token dies with the membership row.
+	if code := auth("/api/rooms/"+created.RoomID+"/members/dev_bob/kick", created.SessionToken).StatusCode; code != http.StatusOK {
+		t.Fatalf("kick status %d", code)
+	}
+	boot, _ := http.NewRequest("GET", stack.srv.URL+"/api/rooms/"+created.RoomID+"/bootstrap", nil)
+	boot.Header.Set("Authorization", "Bearer "+joinRes.SessionToken)
+	res2, err := stack.client.Do(boot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res2.Body.Close()
+	if res2.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("kicked member bootstrap status %d", res2.StatusCode)
+	}
+
+	// Owner revokes the share link: the share page no longer mints tickets.
+	if code := auth("/api/rooms/"+created.RoomID+"/share/revoke", created.SessionToken).StatusCode; code != http.StatusOK {
+		t.Fatalf("revoke status %d", code)
+	}
+	res3 := stack.post(t, "/api/share/"+created.ShareID+"/join-ticket", map[string]string{"password": created.Password}, nil)
+	if res3.StatusCode != http.StatusGone {
+		t.Fatalf("post-revoke ticket status %d", res3.StatusCode)
+	}
+
+	// The still-member owner keeps access after revocation.
+	own, _ := http.NewRequest("GET", stack.srv.URL+"/api/rooms/"+created.RoomID+"/bootstrap", nil)
+	own.Header.Set("Authorization", "Bearer "+created.SessionToken)
+	res4, err := stack.client.Do(own)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res4.Body.Close()
+	if res4.StatusCode != http.StatusOK {
+		t.Fatalf("owner bootstrap after revoke status %d", res4.StatusCode)
+	}
+}
+
 // wsReadUntil reads from a room socket until an event with the given topic
 // arrives (or the deadline passes) and decodes its payload.
 func wsReadUntil(t *testing.T, ctx context.Context, ws *websocket.Conn, topic vmprotocol.EventTopic, out any) {

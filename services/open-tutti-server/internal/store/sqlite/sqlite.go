@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" driver
@@ -41,7 +42,8 @@ CREATE TABLE IF NOT EXISTS rooms (
 	owner_device_id TEXT NOT NULL,
 	created_at INTEGER NOT NULL,
 	dissolved_at INTEGER,
-	pending_transfer_to_device TEXT NOT NULL DEFAULT ''
+	pending_transfer_to_device TEXT NOT NULL DEFAULT '',
+	share_revoked_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS devices (
 	id TEXT PRIMARY KEY,
@@ -88,20 +90,28 @@ CREATE INDEX IF NOT EXISTS idx_cas_refs_hash ON cas_refs(hash);
 	if err != nil {
 		return fmt.Errorf("apply schema: %w", err)
 	}
+	// Databases created before share revocation existed gain the column;
+	// fresh ones already have it.
+	if _, err := db.Exec(`ALTER TABLE rooms ADD COLUMN share_revoked_at INTEGER`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate share_revoked_at: %w", err)
+		}
+	}
 	return nil
 }
 
 // Close closes the database.
 func (r *Repo) Close() error { return r.db.Close() }
 
-const roomCols = "id, share_id, password_hash, owner_device_id, created_at, dissolved_at, pending_transfer_to_device"
+const roomCols = "id, share_id, password_hash, owner_device_id, created_at, dissolved_at, pending_transfer_to_device, share_revoked_at"
 
 func scanRoom(row interface{ Scan(...any) error }) (store.Room, error) {
 	var room store.Room
 	var created int64
 	var dissolved sql.NullInt64
+	var shareRevoked sql.NullInt64
 	err := row.Scan(&room.ID, &room.ShareID, &room.PasswordHash, &room.OwnerDeviceID,
-		&created, &dissolved, &room.PendingTransferToDevice)
+		&created, &dissolved, &room.PendingTransferToDevice, &shareRevoked)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.Room{}, store.ErrNotFound
 	}
@@ -113,14 +123,19 @@ func scanRoom(row interface{ Scan(...any) error }) (store.Room, error) {
 		t := time.Unix(dissolved.Int64, 0).UTC()
 		room.DissolvedAt = &t
 	}
+	if shareRevoked.Valid {
+		t := time.Unix(shareRevoked.Int64, 0).UTC()
+		room.ShareRevokedAt = &t
+	}
 	return room, nil
 }
 
 func (r *Repo) CreateRoom(ctx context.Context, room store.Room) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?)`,
+		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?)`,
 		room.ID, room.ShareID, room.PasswordHash, room.OwnerDeviceID,
-		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice)
+		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice,
+		nilTime(room.ShareRevokedAt))
 	return err
 }
 
@@ -134,8 +149,9 @@ func (r *Repo) GetRoomByShareID(ctx context.Context, shareID string) (store.Room
 
 func (r *Repo) UpdateRoom(ctx context.Context, room store.Room) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE rooms SET password_hash=?, owner_device_id=?, dissolved_at=?, pending_transfer_to_device=? WHERE id=?`,
-		room.PasswordHash, room.OwnerDeviceID, nilTime(room.DissolvedAt), room.PendingTransferToDevice, room.ID)
+		`UPDATE rooms SET password_hash=?, owner_device_id=?, dissolved_at=?, pending_transfer_to_device=?, share_revoked_at=? WHERE id=?`,
+		room.PasswordHash, room.OwnerDeviceID, nilTime(room.DissolvedAt), room.PendingTransferToDevice,
+		nilTime(room.ShareRevokedAt), room.ID)
 	if err != nil {
 		return err
 	}

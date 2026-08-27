@@ -60,6 +60,8 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("POST /api/rooms/{roomID}/leave", s.authRoom(s.handleLeave))
 	mux.HandleFunc("POST /api/rooms/{roomID}/password/rotate", s.authRoomOwner(s.handleRotatePassword))
+	mux.HandleFunc("POST /api/rooms/{roomID}/share/revoke", s.authRoomOwner(s.handleRevokeShareLink))
+	mux.HandleFunc("POST /api/rooms/{roomID}/members/{deviceID}/kick", s.authRoomOwner(s.handleKickMember))
 	mux.HandleFunc("GET /api/rooms/{roomID}/bootstrap", s.authRoom(s.handleBootstrap))
 	mux.HandleFunc("PUT /api/rooms/{roomID}/cas/{hash}", s.authRoom(s.handleCASPut))
 	mux.HandleFunc("HEAD /api/rooms/{roomID}/cas/{hash}", s.authRoom(s.handleCASHead))
@@ -124,6 +126,8 @@ func (s *Server) handleJoinTicket(w http.ResponseWriter, r *http.Request) {
 		status := http.StatusInternalServerError
 		if errors.Is(err, store.ErrNotFound) {
 			status = http.StatusNotFound
+		} else if strings.Contains(err.Error(), "revoked") {
+			status = http.StatusGone
 		} else if strings.Contains(err.Error(), "password") {
 			status = http.StatusUnauthorized
 		}
@@ -206,6 +210,31 @@ func (s *Server) handleRotatePassword(w http.ResponseWriter, r *http.Request, ro
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"password": password})
+}
+
+func (s *Server) handleRevokeShareLink(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
+	if err := s.rooms.RevokeShareLink(r.Context(), roomID, deviceID); err != nil {
+		status := http.StatusForbidden
+		if errors.Is(err, store.ErrNotFound) {
+			status = http.StatusNotFound
+		}
+		writeErr(w, status, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "share_link_revoked"})
+}
+
+func (s *Server) handleKickMember(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
+	target := r.PathValue("deviceID")
+	if err := s.rooms.KickMember(r.Context(), roomID, deviceID, target); err != nil {
+		status := http.StatusForbidden
+		if errors.Is(err, store.ErrNotFound) {
+			status = http.StatusNotFound
+		}
+		writeErr(w, status, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "kicked", "device_id": target})
 }
 
 func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, roomID, _ string) {

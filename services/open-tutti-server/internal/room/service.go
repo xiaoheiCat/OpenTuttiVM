@@ -175,6 +175,52 @@ func (s *Service) GetRoom(ctx context.Context, roomID string) (store.Room, error
 	return s.repo.GetRoom(ctx, roomID)
 }
 
+// RevokeShareLink invalidates the room's share link: no new joins can
+// mint tickets. Existing members keep access until the room ends. Owner
+// only.
+func (s *Service) RevokeShareLink(ctx context.Context, roomID, deviceID string) error {
+	room, _, err := s.authorizeOwnerOf(ctx, roomID, deviceID)
+	if err != nil {
+		return err
+	}
+	if room.ShareRevokedAt == nil {
+		now := s.clock.Now()
+		room.ShareRevokedAt = &now
+		if err := s.repo.UpdateRoom(ctx, room); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// KickMember removes one member from the room: their membership and
+// session token die immediately. Owners cannot kick themselves (leave or
+// transfer instead). Owner only.
+func (s *Service) KickMember(ctx context.Context, roomID, ownerDeviceID, targetDeviceID string) error {
+	if _, _, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID); err != nil {
+		return err
+	}
+	if targetDeviceID == ownerDeviceID {
+		return errors.New("owners leave via leave/transfer, not kick")
+	}
+	if _, err := s.repo.GetMembership(ctx, roomID, targetDeviceID); err != nil {
+		return err
+	}
+	if err := s.repo.DeleteMembership(ctx, roomID, targetDeviceID); err != nil {
+		return err
+	}
+	if s.bcast != nil {
+		s.bcast.BroadcastRoom(roomID, vmprotocol.Event{
+			Topic:  vmprotocol.TopicPresence,
+			RoomID: roomID,
+			Payload: mustJSON(vmprotocol.PresenceDevice{
+				DeviceID: targetDeviceID, Online: false,
+			}),
+		})
+	}
+	return nil
+}
+
 // IssueJoinTicket verifies the room password from the share page and issues
 // a one-time, short-lived ticket. The password itself never enters the deep
 // link.
@@ -182,6 +228,9 @@ func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string)
 	room, err := s.repo.GetRoomByShareID(ctx, shareID)
 	if err != nil {
 		return "", time.Time{}, err
+	}
+	if room.ShareRevokedAt != nil {
+		return "", time.Time{}, errors.New("share link revoked")
 	}
 	if !VerifyRoomPassword(password, room.PasswordHash) {
 		return "", time.Time{}, errors.New("wrong room password")

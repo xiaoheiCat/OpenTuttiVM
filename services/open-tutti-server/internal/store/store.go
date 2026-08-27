@@ -23,6 +23,9 @@ type Room struct {
 	OwnerDeviceID string
 	CreatedAt     time.Time
 	DissolvedAt   *time.Time
+	// ShareRevokedAt marks a revoked share link: no new joins, existing
+	// members stay until the room ends.
+	ShareRevokedAt *time.Time
 	// PendingTransferToDevice marks a 3-phase ownership transfer in flight.
 	PendingTransferToDevice string
 }
