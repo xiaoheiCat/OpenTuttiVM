@@ -60,11 +60,16 @@ Hybrid, by content class:
   order; authors see rejections only when their base hash no longer
   matches and re-diff automatically.
 - **Binary / large** — CAS blob replace with optimistic version check
-  (`BaseHash`); losers re-upload against the current manifest.
+  (`BaseHash`); losers re-upload against the current manifest. Before a
+  replacement becomes authoritative, the server verifies the manifest's
+  object graph (manifest decodes, self-hash matches, every chunk is in
+  CAS), so replicas never chase dangling references.
 - **Semantic conflicts** (same-point edits, racing replaces) — server
   opens a **conflict barrier**: the path is fenced, the last author
   becomes resolver, everyone else is notified; the barrier resolves
-  explicitly. Fencing is enforced by the server, not by UI promises.
+  explicitly. Fencing is enforced by the server, not by UI promises,
+  and `conflict_resolved` is only honored from the assigned resolver's
+  own connection.
 - **Persistence** — periodic snapshots (text→CAS manifests) referenced by
   sequence number; bootstrap = snapshot + replay window; a sequence gap
   triggers snapshot resync, never partial guessing.

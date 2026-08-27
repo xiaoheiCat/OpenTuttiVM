@@ -64,6 +64,16 @@ func (m *Manager) Submit(env vmprotocol.Envelope) error {
 		return err
 	}
 	env.TimestampMS = m.clock()
+	// A blob replacement commits a manifest hash into authoritative state:
+	// the referenced object graph (manifest + every chunk) must already
+	// exist in CAS, or every replica and the final workspace apply would
+	// fail permanently on the lookup.
+	if env.Operation.Kind == vmprotocol.OpBlobReplace && env.Operation.Blob != nil {
+		if err := m.validateBlobGraph(env.Operation.Blob.Manifest); err != nil {
+			m.reject(env, &vmsync.RejectionError{Reason: vmsync.RejectInvalid, CurrentHash: err.Error()})
+			return err
+		}
+	}
 	accepted, err := eng.state.Accept(env)
 	if err != nil {
 		m.reject(env, err)
@@ -125,14 +135,45 @@ func (m *Manager) reject(env vmprotocol.Envelope, err error) {
 	})
 }
 
+// validateBlobGraph verifies a replacement manifest decodes and every
+// referenced chunk exists in the room's CAS before the operation becomes
+// authoritative.
+func (m *Manager) validateBlobGraph(manifestHash string) error {
+	if manifestHash == "" {
+		return errors.New("blob manifest hash required")
+	}
+	data, err := m.cas.Get(manifestHash)
+	if err != nil {
+		return fmt.Errorf("manifest %s not in CAS: %w", manifestHash, err)
+	}
+	manifest, err := vmcas.DecodeManifest(data)
+	if err != nil {
+		return fmt.Errorf("manifest %s undecodable: %w", manifestHash, err)
+	}
+	if manifest.Hash != manifestHash {
+		return fmt.Errorf("manifest %s self-hash mismatch", manifestHash)
+	}
+	for _, chunk := range manifest.Chunks {
+		if _, err := m.cas.Get(chunk); err != nil {
+			return fmt.Errorf("chunk %s of %s not in CAS: %w", chunk, manifestHash, err)
+		}
+	}
+	return nil
+}
+
 // ResolveConflict lifts a barrier after the resolver committed the fix and
-// notifies every blocked agent with the resolved revision.
-func (m *Manager) ResolveConflict(roomID, path string) error {
+// notifies every blocked agent with the resolved revision. The connection
+// identity must match the barrier's assigned resolver: a blocked
+// participant cannot lift the server-enforced fence.
+func (m *Manager) ResolveConflict(roomID, path, deviceID, agentSessionID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	eng, err := m.engine(roomID)
 	if err != nil {
 		return err
+	}
+	if !eng.state.BarrierResolverMatches(path, deviceID, agentSessionID) {
+		return errors.New("only the assigned resolver may resolve this barrier")
 	}
 	// The resolver's own patches already sequenced; lift the barrier.
 	notified, ok := eng.state.ResolveBarrier(path)

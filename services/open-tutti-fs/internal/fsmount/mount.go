@@ -210,6 +210,8 @@ type fileNode struct {
 	mu     sync.Mutex
 	buffer []byte
 	loaded bool
+	// mode carries a setattr mode change into the next flush.
+	mode uint32
 }
 
 func (f *fileNode) load() syscall.Errno {
@@ -276,10 +278,34 @@ func (f *fileNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out.Attr.Size = uint64(len(f.buffer))
-	out.Attr.Mode = 0o644 | syscall.S_IFREG
+	if f.mode != 0 {
+		out.Attr.Mode = f.mode
+	} else {
+		out.Attr.Mode = 0o644 | syscall.S_IFREG
+	}
 	return 0
 }
 
 func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
+	// Honor truncation: a requested size change resizes the buffered
+	// content so a later flush cannot resurrect the old tail. Mode
+	// changes ride the next flush's metadata.
+	if sz, ok := in.GetSize(); ok {
+		f.mu.Lock()
+		switch {
+		case int(sz) < len(f.buffer):
+			f.buffer = append([]byte(nil), f.buffer[:sz]...)
+		case int(sz) > len(f.buffer):
+			grown := make([]byte, sz)
+			copy(grown, f.buffer)
+			f.buffer = grown
+		}
+		f.mu.Unlock()
+	}
+	if mode, ok := in.GetMode(); ok {
+		f.mu.Lock()
+		f.mode = mode
+		f.mu.Unlock()
+	}
 	return f.Getattr(ctx, fh, out)
 }

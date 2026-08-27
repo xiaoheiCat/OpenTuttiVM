@@ -38,20 +38,45 @@ func (w *WorkspaceState) ApplySequenced(env vmprotocol.Envelope) error {
 			// current state via CAS on next read.
 			return nil
 		}
-		if op.Patch != nil {
-			if next, err := ApplyPatch(f.Content, *op.Patch); err == nil {
-				f.Content = next
+		if op.Patch == nil {
+			return nil
+		}
+		// A restored-from-snapshot entry still holding only a manifest
+		// must materialize before the patch applies: applying to nil
+		// would silently drop the base (offset 0) or mis-handle offsets.
+		if f.Content == nil && f.Manifest != "" {
+			if err := w.materializeViaHook(op.Path); err != nil {
+				return fmt.Errorf("materialize %s for patch: %w", op.Path, err)
 			}
 		}
+		next, err := ApplyPatch(f.Content, *op.Patch)
+		if err != nil {
+			// Authoritative offsets no longer line up with local state:
+			// surface the divergence so the caller gap-resyncs instead of
+			// advancing AppliedSeq over a permanently skewed replica.
+			return fmt.Errorf("apply patch to %s: %w", op.Path, err)
+		}
+		f.Content = next
 	case vmprotocol.OpBlobReplace:
 		f := w.files[op.Path]
 		if f == nil || f.IsDir {
 			return nil
 		}
+		if op.Blob == nil {
+			return nil
+		}
 		f.Kind = kindBlob
 		f.Manifest = op.Blob.Manifest
 		f.Content = nil
+		f.Size = 0
 		f.Materialized = false
+		// Full-policy owners eagerly fetch accepted replacements so the
+		// promised server-failure-survival copy exists immediately.
+		if w.Materializer != nil {
+			if err := w.Materializer(op.Path); err != nil {
+				return fmt.Errorf("materialize replaced blob %s: %w", op.Path, err)
+			}
+		}
 	default:
 		return fmt.Errorf("unknown operation kind %q", op.Kind)
 	}

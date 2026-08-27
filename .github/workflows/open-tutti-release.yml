@@ -34,18 +34,20 @@ jobs:
         run: |
           go build github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
           go vet github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
-          go test github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
+          go test github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
       - name: Compute next version tag
         id: version
         run: |
-          last=$(git tag -l 'v*' --sort=-v:refname | head -1 || true)
+          # OpenTuttiVM owns its own tag namespace (otv-v*) so the
+          # repository-wide desktop v* tags stay untouched.
+          last=$(git tag -l 'otv-v*' --sort=-v:refname | head -1 || true)
           if [ -z "$last" ]; then
-            tag="v0.1.0"
+            tag="otv-v0.1.0"
           else
             tag=$(python3 - "$last" <<'EOF'
           import sys
-          major, minor, patch = sys.argv[1][1:].split(".")
-          print(f"v{major}.{minor}.{int(patch)+1}")
+          major, minor, patch = sys.argv[1][len("otv-v"):].split(".")
+          print(f"otv-v{major}.{minor}.{int(patch)+1}")
           EOF
             )
           fi

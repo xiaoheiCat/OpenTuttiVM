@@ -56,16 +56,21 @@ func (c *Client) call(req Request, body []byte) (*Response, error) {
 	req.ID = c.next
 	ch := make(chan Response, 1)
 	c.pending[req.ID] = ch
-	c.mu.Unlock()
-
+	// The complete write+flush sequence stays under the lock: FUSE issues
+	// concurrent calls, and interleaved frames would corrupt the shared
+	// bufio writer and misframe every response.
 	if err := WriteFrame(c.rw.Writer, req, body); err != nil {
+		c.mu.Unlock()
 		c.fail(req.ID, err)
 		return nil, err
 	}
 	if err := c.rw.Writer.Flush(); err != nil {
+		c.mu.Unlock()
 		c.fail(req.ID, err)
 		return nil, err
 	}
+	c.mu.Unlock()
+
 	res := <-ch
 	if !res.OK {
 		if res.Error == "rejected" {

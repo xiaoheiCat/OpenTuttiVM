@@ -93,6 +93,11 @@ type DeviceInput struct {
 	DisplayName string `json:"display_name"`
 	Hostname    string `json:"hostname"`
 	PublicKey   string `json:"public_key"`
+	// Proof is the base64 Ed25519 signature over "open-tutti-join:"+ticket
+	// with the device's private key. Required when the device id is
+	// already enrolled: the one-time ticket is the challenge, so token
+	// refresh proves key possession instead of just knowing an id.
+	Proof string `json:"proof"`
 }
 
 // CreatedRoom is returned exactly once to the creator: the share URL and
@@ -260,6 +265,19 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	}
 	if err := s.repo.MarkTicketRedeemed(ctx, rec.Hash); err != nil {
 		return "", "", err
+	}
+	// Existing device ids must prove possession of their enrolled key
+	// before anything refreshes: the one-time ticket is the challenge.
+	if existing, err := s.repo.GetDevice(ctx, device.ID); err == nil {
+		if device.Proof == "" || existing.PublicKeyPEM == "" {
+			return "", "", errors.New("device identity proof required")
+		}
+		if !VerifyDeviceProof(existing.PublicKeyPEM, ticket, device.Proof) {
+			return "", "", errors.New("device identity proof failed")
+		}
+		// The claimed key must be the enrolled key; a new key cannot ride
+		// an existing device id.
+		device.PublicKey = existing.PublicKeyPEM
 	}
 	if err := s.upsertDevice(ctx, device); err != nil {
 		return "", "", err

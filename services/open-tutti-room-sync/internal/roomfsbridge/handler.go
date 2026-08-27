@@ -1,7 +1,7 @@
 // Package roomfsbridge adapts the Room FS Protocol onto the local replica:
 // reads come from the replica (lazy CAS fetch), writes convert into Room
-// File Operations and submit through the room socket, and local changes
-// broadcast invalidations to every connected mount.
+// File Operations and submit through the room socket, and mutations report
+// success only after the authoritative acknowledgement.
 package roomfsbridge
 
 import (
@@ -49,6 +49,14 @@ func New(mgr *replica.Manager, submitter Submitter, uploader ChunkUploader, devi
 	}
 }
 
+// InvalidateRemote drops mount caches for a path changed by another
+// participant; called after the operation applied locally.
+func (h *Handler) InvalidateRemote(path string) {
+	if h.inval != nil {
+		h.inval(path)
+	}
+}
+
 func (h *Handler) nextOpID() string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -58,26 +66,32 @@ func (h *Handler) nextOpID() string {
 
 // Stat implements roomfs.Handler.
 func (h *Handler) Stat(path string) (*roomfs.Stat, error) {
-	info, ok := h.mgr.Replica.State.EntryInfo(path)
-	if !ok {
+	var stat roomfs.Stat
+	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
+		info, ok := state.EntryInfo(path)
+		if !ok {
+			return
+		}
+		mode := info.Mode
+		if mode == 0 {
+			if info.IsDir {
+				mode = 0o755
+			} else {
+				mode = 0o644
+			}
+		}
+		stat = roomfs.Stat{Dir: info.IsDir, Mode: mode, Exists: true}
+	})
+	if !stat.Exists {
 		return &roomfs.Stat{}, nil
 	}
-	mode := info.Mode
-	if mode == 0 {
-		if info.IsDir {
-			mode = 0o755
-		} else {
-			mode = 0o644
-		}
-	}
-	var size int64
-	if !info.IsDir {
+	if !stat.Dir {
 		// Cheap for materialized text; lazy blobs read on demand.
 		if content, err := h.mgr.Read(context.Background(), path); err == nil {
-			size = int64(len(content))
+			stat.Size = int64(len(content))
 		}
 	}
-	return &roomfs.Stat{Dir: info.IsDir, Size: size, Mode: mode, Exists: true}, nil
+	return &stat, nil
 }
 
 // Read implements roomfs.Handler.
@@ -91,31 +105,34 @@ func (h *Handler) List(path string) ([]roomfs.DirEntry, error) {
 	if path != "" {
 		prefix = path + "/"
 	}
-	type childInfo struct{ dir bool }
-	children := map[string]*childInfo{}
-	for _, p := range h.mgr.Replica.State.Paths() {
-		if !strings.HasPrefix(p, prefix) || len(p) == len(prefix) {
-			continue
-		}
-		rest := p[len(prefix):]
-		if idx := strings.IndexByte(rest, '/'); idx >= 0 {
-			name := rest[:idx]
-			c := children[name]
-			if c == nil {
-				c = &childInfo{}
-				children[name] = c
+	var out []roomfs.DirEntry
+	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
+		type childInfo struct{ dir bool }
+		children := map[string]*childInfo{}
+		for _, p := range state.Paths() {
+			if !strings.HasPrefix(p, prefix) || len(p) == len(prefix) {
+				continue
 			}
-			c.dir = true
-			continue
+			rest := p[len(prefix):]
+			if idx := strings.IndexByte(rest, '/'); idx >= 0 {
+				name := rest[:idx]
+				c := children[name]
+				if c == nil {
+					c = &childInfo{}
+					children[name] = c
+				}
+				c.dir = true
+				continue
+			}
+			if children[rest] == nil {
+				children[rest] = &childInfo{}
+			}
 		}
-		if children[rest] == nil {
-			children[rest] = &childInfo{}
+		out = make([]roomfs.DirEntry, 0, len(children))
+		for name, c := range children {
+			out = append(out, roomfs.DirEntry{Name: name, Dir: c.dir})
 		}
-	}
-	out := make([]roomfs.DirEntry, 0, len(children))
-	for name, c := range children {
-		out = append(out, roomfs.DirEntry{Name: name, Dir: c.dir})
-	}
+	})
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
@@ -155,11 +172,18 @@ func (h *Handler) Mkdir(path string, mode uint32) error {
 	})
 }
 
-// Remove implements roomfs.Handler.
+// Remove implements roomfs.Handler. Directory intent comes from replica
+// state so the authoritative remove matches the target's kind.
 func (h *Handler) Remove(path string) error {
-	return h.submit(vmprotocol.FileOperation{
+	op := vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: path, Kind: vmprotocol.OpRemove,
+	}
+	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
+		if info, ok := state.EntryInfo(path); ok && info.IsDir {
+			op.IsDir = true
+		}
 	})
+	return h.submit(op)
 }
 
 // Rename implements roomfs.Handler.
@@ -170,13 +194,18 @@ func (h *Handler) Rename(from, to string) error {
 	})
 }
 
+// submit sends one operation and reports success only after the server
+// accepted it (broadcast acknowledgement); rejections surface as errors.
 func (h *Handler) submit(op vmprotocol.FileOperation) error {
 	env := vmprotocol.Envelope{
 		OperationID: op.ID, Operation: op,
 		AuthorDeviceID: h.deviceID, AgentSessionID: h.sessionID,
 		BaseSeq: h.mgr.Replica.AppliedSeq,
 	}
-	if err := h.submitter.Submit(env); err != nil {
+	err := h.mgr.SubmitAndWait(context.Background(), env, func() error {
+		return h.submitter.Submit(env)
+	})
+	if err != nil {
 		return err
 	}
 	if h.inval != nil {

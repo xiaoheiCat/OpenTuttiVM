@@ -55,15 +55,16 @@ func Load(envFile string) (Config, error) {
 	}
 
 	cfg := Config{
-		ListenAddr:          get("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080"),
-		PublicURL:           get("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080"),
-		DataDir:             get("OPEN_TUTTI_DATA_DIR", "/var/lib/open-tutti"),
-		LogLevel:            get("OPEN_TUTTI_LOG_LEVEL", "info"),
-		Secret:              get("OPEN_TUTTI_SECRET", ""),
-		ServerInviteCode:    get("OPEN_TUTTI_SERVER_INVITE_CODE", ""),
-		OwnerGracePeriod:    secondsOrDefault(get("OPEN_TUTTI_OWNER_GRACE_SECONDS", ""), 5*time.Minute),
-		JoinTicketTTL:       secondsOrDefault(get("OPEN_TUTTI_JOIN_TICKET_TTL_SECONDS", ""), 60*time.Second),
-		SnapshotIntervalOps: int(secondsOrDefault(get("OPEN_TUTTI_SNAPSHOT_INTERVAL_OPS", ""), 512)),
+		ListenAddr:       get("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080"),
+		PublicURL:        get("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080"),
+		DataDir:          get("OPEN_TUTTI_DATA_DIR", "/var/lib/open-tutti"),
+		LogLevel:         get("OPEN_TUTTI_LOG_LEVEL", "info"),
+		Secret:           get("OPEN_TUTTI_SECRET", ""),
+		ServerInviteCode: get("OPEN_TUTTI_SERVER_INVITE_CODE", ""),
+		OwnerGracePeriod: secondsOrDefault(get("OPEN_TUTTI_OWNER_GRACE_SECONDS", ""), 5*time.Minute),
+		JoinTicketTTL:    secondsOrDefault(get("OPEN_TUTTI_JOIN_TICKET_TTL_SECONDS", ""), 60*time.Second),
+		// An operation count, not a duration.
+		SnapshotIntervalOps: intOrDefault(get("OPEN_TUTTI_SNAPSHOT_INTERVAL_OPS", ""), 512),
 	}
 
 	cfg.DatabasePath = get("OPEN_TUTTI_DATABASE_PATH", filepath.Join(cfg.DataDir, "open-tutti.db"))
@@ -76,6 +77,19 @@ func Load(envFile string) (Config, error) {
 		return Config{}, errors.New("grace period, ticket TTL, and snapshot interval must be positive")
 	}
 	return cfg, nil
+}
+
+// intOrDefault parses a plain positive integer override (defaults on
+// empty or invalid input).
+func intOrDefault(v string, def int) int {
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n <= 0 {
+		return def
+	}
+	return n
 }
 
 // parseEnvFile reads KEY=VALUE lines; comments (#) and blank lines are

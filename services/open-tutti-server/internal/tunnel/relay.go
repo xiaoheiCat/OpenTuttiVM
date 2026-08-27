@@ -53,7 +53,7 @@ func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, dev
 		if err != nil {
 			return nil // session closed
 		}
-		go r.handleStream(stream)
+		go r.handleStream(stream, roomID)
 	}
 }
 
@@ -69,6 +69,10 @@ func (r *Relay) register(roomID, deviceID string, sess *yamux.Session) {
 func (r *Relay) unregister(roomID, deviceID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.unregisterLocked(roomID, deviceID)
+}
+
+func (r *Relay) unregisterLocked(roomID, deviceID string) {
 	if devs := r.sessions[roomID]; devs != nil {
 		delete(devs, deviceID)
 		if len(devs) == 0 {
@@ -77,7 +81,19 @@ func (r *Relay) unregister(roomID, deviceID string) {
 	}
 }
 
-func (r *Relay) handleStream(stream net.Conn) {
+// DropDevice closes and removes one device's tunnel session (membership
+// revoked, device kicked, or room ending). Live streams die with the
+// yamux session.
+func (r *Relay) DropDevice(roomID, deviceID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if sess := r.sessions[roomID][deviceID]; sess != nil {
+		sess.Close()
+	}
+	r.unregisterLocked(roomID, deviceID)
+}
+
+func (r *Relay) handleStream(stream net.Conn, authenticatedRoom string) {
 	header, err := readHeader(stream)
 	if err != nil {
 		stream.Close()
@@ -87,6 +103,9 @@ func (r *Relay) handleStream(stream net.Conn) {
 		stream.Close()
 		return
 	}
+	// The route is bound to the authenticated room: a client-supplied
+	// cross-room RoomID never reaches the dial.
+	header.Route.RoomID = authenticatedRoom
 	target := r.dial(header.Route)
 	if target == nil {
 		writeHeaderError(stream, fmt.Sprintf("route %s:%d unreachable", header.Route.DeviceID, header.Route.Port))

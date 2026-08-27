@@ -160,9 +160,18 @@ func (c *Client) Dial(ctx context.Context) (*Session, error) {
 	return &Session{conn: conn, client: c, ctx: sctx, cancel: cancel}, nil
 }
 
+// OpApplier applies one sequenced envelope to the replica. *vmsync.Replica
+// satisfies it; the replica.Manager wrapper serializes Room FS access
+// against server events.
+type OpApplier interface {
+	ApplyServerOp(env vmprotocol.Envelope) (bool, error)
+}
+
 // Run pumps events until the socket dies. It applies envelope events to
-// the replica, resyncing via OnGap on sequence gaps.
-func (s *Session) Run(replica *vmsync.Replica) error {
+// the replica, resyncing via OnGap on sequence gaps. TopicOperation events
+// reach OnEvent only after they were applied, so invalidation callbacks
+// observe post-apply state.
+func (s *Session) Run(replica OpApplier) error {
 	for {
 		_, data, err := s.conn.Read(s.ctx)
 		if err != nil {
@@ -178,24 +187,23 @@ func (s *Session) Run(replica *vmsync.Replica) error {
 		if msg.Type != "event" {
 			continue
 		}
-		if s.OnEvent != nil {
-			s.OnEvent(msg.Event)
-		}
-		if msg.Event.Topic != vmprotocol.TopicOperation {
-			continue
-		}
-		var env vmprotocol.Envelope
-		if err := json.Unmarshal(msg.Event.Payload, &env); err != nil {
-			continue
-		}
-		if _, err := replica.ApplyServerOp(env); err == vmsync.ErrSeqGap {
-			if s.OnGap != nil {
-				if err := s.OnGap(); err != nil {
+		if msg.Event.Topic == vmprotocol.TopicOperation {
+			var env vmprotocol.Envelope
+			if err := json.Unmarshal(msg.Event.Payload, &env); err != nil {
+				continue
+			}
+			if _, err := replica.ApplyServerOp(env); err == vmsync.ErrSeqGap {
+				if s.OnGap != nil {
+					if err := s.OnGap(); err != nil {
+						return err
+					}
+				} else {
 					return err
 				}
-			} else {
-				return err
 			}
+		}
+		if s.OnEvent != nil {
+			s.OnEvent(msg.Event)
 		}
 	}
 }

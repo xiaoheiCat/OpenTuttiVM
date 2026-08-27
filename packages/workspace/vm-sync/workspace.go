@@ -105,6 +105,10 @@ type WorkspaceState struct {
 	hashLog  map[string][]seqHash
 	barriers map[string]*barrier
 	ops      []vmprotocol.Envelope
+	// Materializer, when set, fetches CAS-referenced content for a path
+	// into memory (text restore, eager full-replica blob fetch). The
+	// replica owner wires it; the server leaves it nil.
+	Materializer func(path string) error
 }
 
 // NewWorkspaceState returns an empty workspace at sequence 0.
@@ -119,6 +123,18 @@ func NewWorkspaceState() *WorkspaceState {
 
 // Seq returns the current server sequence.
 func (w *WorkspaceState) Seq() uint64 { return w.seq }
+
+// BarrierResolverMatches reports whether the connection identity is the
+// assigned resolver for an open barrier. Used to authorize explicit
+// conflict_resolved submissions.
+func (w *WorkspaceState) BarrierResolverMatches(path, deviceID, agentSessionID string) bool {
+	b := w.barriers[path]
+	if b == nil || !b.Locked {
+		return false
+	}
+	return agentSessionID == b.ResolverAgent &&
+		(b.ResolverDevice == "" || deviceID == b.ResolverDevice)
+}
 
 // fenced reports whether the operation is blocked by an open barrier on any
 // path it touches. The assigned resolver passes.
@@ -158,6 +174,17 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 		if !vmprotocol.ValidWorkspacePath(op.Rename.OldPath) || !vmprotocol.ValidWorkspacePath(op.Rename.NewPath) {
 			return env, &RejectionError{Reason: RejectInvalid}
 		}
+	}
+	// Kind-specific payloads must be present before dispatch: a nil deref
+	// here would crash the authoritative sequencer instead of rejecting
+	// one malformed operation.
+	switch {
+	case env.Operation.Kind == vmprotocol.OpTextPatch && env.Operation.Patch == nil:
+		return env, &RejectionError{Reason: RejectInvalid}
+	case env.Operation.Kind == vmprotocol.OpBlobReplace && env.Operation.Blob == nil:
+		return env, &RejectionError{Reason: RejectInvalid}
+	case env.Operation.Kind == vmprotocol.OpRename && env.Operation.Rename == nil:
+		return env, &RejectionError{Reason: RejectInvalid}
 	}
 	if w.fenced(&env) {
 		b := w.barriers[env.Operation.Path]
@@ -269,6 +296,11 @@ func (w *WorkspaceState) applyTextPatch(env *vmprotocol.Envelope) error {
 			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
 		}
 	}
+	// A base older than the retained transform window cannot be safely
+	// transformed: the dropped patches would skew every offset.
+	if hist := w.history[op.Path]; len(hist) == transformHistoryWindow && env.BaseSeq < hist[0].Seq {
+		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
+	}
 
 	concurrent := w.concurrentPatches(op.Path, env.BaseSeq)
 	if res := TransformPatch(&patch, concurrent); res.Conflict {
@@ -365,7 +397,42 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 	}
 	w.files[r.NewPath] = f
 	delete(w.files, r.OldPath)
+	if f.IsDir {
+		// A nonempty directory rename moves every descendant with it;
+		// leaving them under the old prefix corrupts snapshots and
+		// Apply-to-Workspace output.
+		prefix := r.OldPath + "/"
+		descendants := make([]string, 0, 8)
+		for p := range w.files {
+			if strings.HasPrefix(p, prefix) {
+				descendants = append(descendants, p)
+			}
+		}
+		sort.Strings(descendants) // deterministic replay across replicas
+		for _, p := range descendants {
+			moved := r.NewPath + p[len(r.OldPath):]
+			w.files[moved] = w.files[p]
+			delete(w.files, p)
+			w.rekeyHistory(p, moved)
+		}
+		if len(descendants) > 0 {
+			w.rekeyHistory(r.OldPath, r.NewPath)
+		}
+	}
 	return nil
+}
+
+// rekeyHistory moves per-path transform/hash history after a rename so
+// later patches against the new path keep their OT context.
+func (w *WorkspaceState) rekeyHistory(oldPath, newPath string) {
+	if h, ok := w.history[oldPath]; ok {
+		w.history[newPath] = h
+		delete(w.history, oldPath)
+	}
+	if hl, ok := w.hashLog[oldPath]; ok {
+		w.hashLog[newPath] = hl
+		delete(w.hashLog, oldPath)
+	}
 }
 
 func (w *WorkspaceState) applyMetadata(op vmprotocol.FileOperation) error {
@@ -463,10 +530,24 @@ func (w *WorkspaceState) recordHistory(env *vmprotocol.Envelope) {
 		Device: env.AuthorDeviceID,
 		Patch:  *op.Patch,
 	})
-	const perPathHistory = 128
-	if n := len(w.history[op.Path]); n > perPathHistory {
-		w.history[op.Path] = w.history[op.Path][n-perPathHistory:]
+	if n := len(w.history[op.Path]); n > transformHistoryWindow {
+		w.history[op.Path] = w.history[op.Path][n-transformHistoryWindow:]
 	}
+}
+
+// transformHistoryWindow bounds the retained per-path patch history. A
+// submission whose base predates the retained window cannot be safely
+// transformed (earlier edits would be missing from its offsets), so it is
+// rejected instead of mis-applied.
+const transformHistoryWindow = 128
+
+// materializeViaHook pulls CAS-referenced content for one path through the
+// configured Materializer hook; without a hook the caller must resync.
+func (w *WorkspaceState) materializeViaHook(path string) error {
+	if w.Materializer == nil {
+		return fmt.Errorf("no materializer configured for %s", path)
+	}
+	return w.Materializer(path)
 }
 
 // Snapshot materializes the current state into CAS and returns the snapshot.

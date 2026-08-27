@@ -8,6 +8,7 @@ package borrow
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 )
@@ -36,8 +37,11 @@ type AgentInstance struct {
 	LastBorrower string
 }
 
-// Registry tracks shared agents per room.
+// Registry tracks shared agents per room. All methods are safe for
+// concurrent use: independent room sockets mutate the registry in
+// parallel.
 type Registry struct {
+	mu        sync.Mutex
 	agents    map[string]map[string]*AgentInstance
 	approvals map[string]openApproval
 }
@@ -60,6 +64,8 @@ func NewRegistry() *Registry {
 // owner may share; every share start bumps the lease generation so old
 // commands cannot ride a re-share.
 func (r *Registry) Share(roomID string, p vmprotocol.AgentSharedPayload) (vmprotocol.AgentSharedPayload, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if p.OwnerDeviceID == "" || p.AgentInstanceID == "" {
 		return p, fmt.Errorf("owner_device_id and agent_instance_id required")
 	}
@@ -98,6 +104,8 @@ func (r *Registry) Share(roomID string, p vmprotocol.AgentSharedPayload) (vmprot
 // against the old generation becomes invalid. Returns the broadcast
 // payloads (agent.shared with shared=false plus revocation details).
 func (r *Registry) Revoke(roomID, ownerDeviceID, agentInstanceID string) (vmprotocol.AgentSharedPayload, vmprotocol.BorrowRevokedPayload, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	room := r.agents[roomID]
 	inst := room[agentInstanceID]
 	if inst == nil {
@@ -125,6 +133,8 @@ func (r *Registry) Revoke(roomID, ownerDeviceID, agentInstanceID string) (vmprot
 // stamps the borrower identity. The caller routes the returned payload to
 // the owning device.
 func (r *Registry) Command(roomID string, p vmprotocol.BorrowCommandPayload) (vmprotocol.BorrowCommandPayload, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	room := r.agents[roomID]
 	inst := room[p.AgentInstanceID]
 	if inst == nil {
@@ -149,6 +159,8 @@ func (r *Registry) Command(roomID string, p vmprotocol.BorrowCommandPayload) (vm
 // CurrentOperator returns the current session operator (borrower) of an
 // agent instance; approvals route there.
 func (r *Registry) CurrentOperator(roomID, agentInstanceID string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	room := r.agents[roomID]
 	inst := room[agentInstanceID]
 	if inst == nil {
@@ -164,6 +176,8 @@ func (r *Registry) CurrentOperator(roomID, agentInstanceID string) (string, erro
 // current session operator (the borrower) — the owner never receives it.
 // Returns the operator device id for targeted delivery.
 func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID string) (operator string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	room := r.agents[roomID]
 	inst := room[agentInstanceID]
 	if inst == nil {
@@ -181,6 +195,8 @@ func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID string) (ope
 // ResolveDecision validates that the deciding device is the session
 // operator and returns the owning device for targeted routing.
 func (r *Registry) ResolveDecision(approvalID, deciderDeviceID string) (ownerDeviceID string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	ap, ok := r.approvals[approvalID]
 	if !ok {
 		return "", errors.New("unknown or expired approval")
@@ -194,6 +210,8 @@ func (r *Registry) ResolveDecision(approvalID, deciderDeviceID string) (ownerDev
 
 // Agent returns one instance (status/testing).
 func (r *Registry) Agent(roomID, agentInstanceID string) (*AgentInstance, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	inst := r.agents[roomID][agentInstanceID]
 	return inst, inst != nil
 }
@@ -201,6 +219,8 @@ func (r *Registry) Agent(roomID, agentInstanceID string) (*AgentInstance, bool) 
 // ClearRoom drops all shared agents and pending approvals for a room
 // (dissolution).
 func (r *Registry) ClearRoom(roomID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	delete(r.agents, roomID)
 	for id, ap := range r.approvals {
 		if ap.roomID == roomID {

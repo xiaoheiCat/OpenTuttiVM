@@ -14,12 +14,22 @@ import (
 type fakeSubmitter struct {
 	mu   sync.Mutex
 	envs []vmprotocol.Envelope
+	mgr  *replica.Manager
 }
 
+// Submit records the envelope and simulates the authoritative round trip:
+// the broadcast ack applies the same envelope with the next server
+// sequence, releasing the bridge's waiter.
 func (f *fakeSubmitter) Submit(env vmprotocol.Envelope) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.envs = append(f.envs, env)
+	f.mu.Unlock()
+	if f.mgr != nil {
+		next := env
+		next.ServerSeq = f.mgr.Replica.AppliedSeq + 1
+		_, err := f.mgr.ApplyServerOp(next)
+		return err
+	}
 	return nil
 }
 
@@ -62,7 +72,7 @@ func newBridge(t *testing.T) (*Handler, *fakeSubmitter, *replica.Manager) {
 	if err := mgr.Bootstrap(context.Background(), snap, nil); err != nil {
 		t.Fatal(err)
 	}
-	sub := &fakeSubmitter{}
+	sub := &fakeSubmitter{mgr: mgr}
 	h := New(mgr, sub, &fakeUploader{stored: store}, "dev_a", "sess-x", nil)
 	return h, sub, mgr
 }
@@ -172,6 +182,6 @@ func newBridgeWithInval(t *testing.T, inval func(string)) (*Handler, *fakeSubmit
 	if err := mgr.Bootstrap(context.Background(), snap, nil); err != nil {
 		t.Fatal(err)
 	}
-	sub := &fakeSubmitter{}
+	sub := &fakeSubmitter{mgr: mgr}
 	return New(mgr, sub, nil, "dev_a", "sess-x", inval), sub, mgr
 }

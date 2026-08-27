@@ -1,16 +1,38 @@
 package room
 
 import (
+	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
 )
+
+// DeviceProofDomain prefixes the signed challenge material for device
+// re-enrollment proofs.
+const DeviceProofDomain = "open-tutti-join:"
+
+// VerifyDeviceProof checks an Ed25519 signature over Domain+ticket against
+// a PEM-encoded public key. Device = user: refreshing an enrolled device's
+// token requires proving possession of its private key.
+func VerifyDeviceProof(publicKeyPEM, ticket, proofB64 string) bool {
+	block, _ := pem.Decode([]byte(publicKeyPEM))
+	if block == nil || len(block.Bytes) != ed25519.PublicKeySize {
+		return false
+	}
+	pub := ed25519.PublicKey(block.Bytes)
+	sig, err := base64.StdEncoding.DecodeString(proofB64)
+	if err != nil {
+		return false
+	}
+	return ed25519.Verify(pub, []byte(DeviceProofDomain+ticket), sig)
+}
 
 // argon2Params are the room-password hashing parameters. Only the encoded
 // hash is stored, never the plaintext password.

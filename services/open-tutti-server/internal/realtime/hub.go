@@ -24,6 +24,7 @@ type ClientMessage struct {
 
 	Ports            *vmprotocol.PortsChangedPayload     `json:"ports,omitempty"`
 	Path             string                              `json:"path,omitempty"`
+	AgentSession     string                              `json:"agent_session,omitempty"`
 	AgentShare       *vmprotocol.AgentSharedPayload      `json:"agent_share,omitempty"`
 	BorrowCommand    *vmprotocol.BorrowCommandPayload    `json:"borrow_command,omitempty"`
 	ApprovalRequest  *vmprotocol.ApprovalRequestPayload  `json:"approval_request,omitempty"`
@@ -43,6 +44,9 @@ type Conn struct {
 	DeviceSlug string
 	Ctx        context.Context
 	send       chan ServerMessage
+	// close terminates the socket (kick/membership revocation); assigned
+	// by Handle before Attach.
+	close func()
 }
 
 // NewConn builds a connection handle.
@@ -92,6 +96,18 @@ func (h *Hub) BroadcastRoom(roomID string, ev vmprotocol.Event) {
 	}
 }
 
+// DropDevice force-closes one device's business socket: deleting a
+// membership row only stops future authentication, so kicks must also
+// kill the live connection.
+func (h *Hub) DropDevice(roomID, deviceID string) {
+	h.mu.RLock()
+	c := h.conns[roomID][deviceID]
+	h.mu.RUnlock()
+	if c != nil && c.close != nil {
+		c.close()
+	}
+}
+
 // SendTo delivers to one device in one room.
 func (h *Hub) SendTo(roomID, deviceID string, ev vmprotocol.Event) {
 	msg := ServerMessage{Type: "event", Event: ev}
@@ -138,6 +154,13 @@ func (h *Hub) Detach(c *Conn) {
 
 // Handle pumps one websocket until it closes.
 func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
+	// Force-close path (kick/membership revocation): cancelling the read
+	// context unblocks the pump and runs the normal detach sequence.
+	readCtx, cancelReads := context.WithCancel(c.Ctx)
+	c.Ctx = readCtx
+	c.close = cancelReads
+	defer cancelReads()
+
 	h.Attach(c)
 	defer h.Detach(c)
 	defer ws.Close(websocket.StatusNormalClosure, "")
@@ -199,7 +222,8 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 				Topic: vmprotocol.TopicPortsChanged, RoomID: c.RoomID, Payload: mustJSON(p),
 			})
 		case "conflict_resolved":
-			if err := h.seq.ResolveConflict(c.RoomID, msg.Path); err != nil {
+			// Only the barrier's assigned resolver may lift the fence.
+			if err := h.seq.ResolveConflict(c.RoomID, msg.Path, c.DeviceID, msg.AgentSession); err != nil {
 				h.log.Warn("resolve conflict", "room", c.RoomID, "path", msg.Path, "err", err)
 			}
 		case "agent_share":
