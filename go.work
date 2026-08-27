@@ -1,6 +1,4 @@
-go 1.24.3
-
-toolchain go1.24.5
+go 1.25.0
 
 use ./services/tuttid
 
@@ -45,4 +43,10 @@ use (
 	./packages/agent/store-sqlite
 	./packages/agent/store-sqlite/canonical
 	./packages/appcli/core
+	./packages/workspace/vm-cas
+	./packages/workspace/vm-protocol
+	./packages/workspace/vm-sync
+	./services/open-tutti-fs
+	./services/open-tutti-room-sync
+	./services/open-tutti-server
 )

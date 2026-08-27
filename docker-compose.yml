@@ -1,0 +1,28 @@
+# OpenTuttiVM server deployment: the bare collaboration server only.
+# Agents NEVER run here — every user's agents run in their own Docker
+# Desktop Linux VM; this server is just the meeting room, the source of
+# truth for shared state, and the relay for cross-device traffic.
+services:
+  open-tutti-server:
+    image: ghcr.io/xiaoheicat/open-tutti-server:latest
+    # Build locally instead:
+    # build:
+    #   context: .
+    #   dockerfile: services/open-tutti-server/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - path: ./services/open-tutti-server/.env
+        required: false
+    environment:
+      OPEN_TUTTI_LISTEN_ADDR: :8080
+      OPEN_TUTTI_PUBLIC_URL: ${OPEN_TUTTI_PUBLIC_URL:-http://localhost:8080}
+      OPEN_TUTTI_SECRET: ${OPEN_TUTTI_SECRET:?set OPEN_TUTTI_SECRET (openssl rand -hex 32)}
+      # Uncomment to require an invite code for room creation.
+      # OPEN_TUTTI_SERVER_INVITE_CODE: change-me
+    volumes:
+      - open-tutti-data:/data
+
+volumes:
+  open-tutti-data:
