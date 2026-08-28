@@ -162,10 +162,9 @@ func (n *roomNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 		child := &roomNode{client: n.client, dirMode: dirMode}
 		return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFDIR}), 0
 	}
+	// A zero mode is a REAL synchronized chmod 0000 (the bridge
+	// normalizes unset modes to defaults before they reach us).
 	fileMode := st.Mode & 0o7777
-	if fileMode == 0 {
-		fileMode = 0o644
-	}
 	out.Attr.Mode = fileMode | syscall.S_IFREG
 	out.Attr.Size = uint64(st.Size)
 	child := &fileNode{client: n.client, path: path, srvMode: fileMode, srvSize: st.Size}
@@ -206,8 +205,15 @@ func (n *roomNode) Create(ctx context.Context, name string, flags uint32, mode u
 	if err := n.client.Create(path, mode); err != nil {
 		return nil, nil, 0, syscall.EIO
 	}
-	out.Attr.Mode = 0o644 | syscall.S_IFREG
-	child := &fileNode{client: n.client, path: path, buffer: []byte{}, loaded: true}
+	// Report the REQUESTED permission bits, not a widened 0644: the
+	// authoritative create received them, and local stat/permission
+	// checks must not expose more than the creator asked for.
+	perms := mode & 0o7777
+	if perms == 0 {
+		perms = 0o644
+	}
+	out.Attr.Mode = perms | syscall.S_IFREG
+	child := &fileNode{client: n.client, path: path, buffer: []byte{}, loaded: true, srvMode: perms}
 	return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFREG}), nil, 0, 0
 }
 
@@ -437,6 +443,13 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 	// changes ride the next flush's metadata.
 	if sz, ok := in.GetSize(); ok {
 		f.mu.Lock()
+		if f.loaded && int64(sz) == int64(len(f.buffer)) {
+			// Same-size truncate is a POSIX no-op: dirtying it anyway
+			// makes the whole-file submission hit "no content change"
+			// and fail with EAGAIN where truncate(2) must succeed.
+			f.mu.Unlock()
+			return 0
+		}
 		if !f.loaded {
 			// Standalone truncate(2) on an unopened node: load the
 			// authoritative content first — resizing an empty buffer

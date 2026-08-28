@@ -124,7 +124,9 @@ func (h *Handler) Stat(path string) (*roomfs.Stat, error) {
 			return
 		}
 		mode := info.Mode
-		if mode == 0 {
+		// Only unset modes take a readable default: an explicit chmod
+		// 0000 is real and must round-trip (zero stays zero).
+		if !info.ModeSet {
 			if info.IsDir {
 				mode = 0o755
 			} else {

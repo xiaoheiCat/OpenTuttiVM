@@ -502,7 +502,20 @@ func (s *Server) handleTunnelWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	if err := s.relay.ServeTunnel(r.Context(), ws, roomID, deviceID); err != nil {
+	// Re-run admission inside the relay's registration lock: a kick
+	// between ValidateSessionToken and registration would otherwise
+	// leave a tunnel for a deleted membership streaming indefinitely.
+	admit := func() error {
+		gotRoom, gotDevice, err := s.rooms.ValidateSessionToken(r.Context(), token)
+		if err != nil {
+			return err
+		}
+		if gotRoom != roomID || gotDevice != deviceID {
+			return fmt.Errorf("tunnel identity changed")
+		}
+		return nil
+	}
+	if err := s.relay.ServeTunnel(r.Context(), ws, roomID, deviceID, admit); err != nil {
 		s.log.Warn("tunnel closed", "room", roomID, "device", deviceID, "err", err)
 	}
 }

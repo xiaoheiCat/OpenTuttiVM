@@ -12,11 +12,15 @@
 //	OPEN_TUTTI_TOKEN          room session token (required)
 //	OPEN_TUTTI_DEVICE_ID      this device's id (required)
 //	OPEN_TUTTI_POLICY         replica policy: lazy (default) | full
-//	OPEN_TUTTI_CACHE_DIR      CAS cache dir (default /data/cache)
-//	OPEN_TUTTI_FS_LISTEN      room FS protocol listen address
-//	                         (default unix /run/open-tutti/roomfs.sock)
+//	OPEN_TUTTI_CACHE_DIR      CAS cache dir (default /data/cache on
+//	                         Linux, per-user cache dir on Windows)
+//	OPEN_TUTTI_FS_LISTEN      room FS protocol listen address (default
+//	                         unix /run/open-tutti/roomfs.sock; Windows
+//	                         uses loopback TCP 127.0.0.1:5266)
 //	OPEN_TUTTI_DNS_LISTEN     .tutti DNS responder bind (default :1053)
-//	OPEN_TUTTI_CA_DIR         where the room CA cert is exported for
+//	OPEN_TUTTI_CA_DIR         where the room CA key+cert persist across
+//	                         restarts (default /data/ca on Linux,
+//	                         per-user on Windows); the cert is exported
 //	                         runtime injection (default /data/ca)
 //	OPEN_TUTTI_SESSION_DIAL   room-network address template for session
 //	                         containers (default "agent-%s" + route port)
@@ -36,6 +40,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -76,7 +81,7 @@ func run() error {
 	}
 	cacheDir := os.Getenv("OPEN_TUTTI_CACHE_DIR")
 	if cacheDir == "" {
-		cacheDir = "/data/cache"
+		cacheDir = platformCacheDir()
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -111,7 +116,16 @@ func run() error {
 		return fmt.Errorf("replica bootstrap: %w", err)
 	}
 
-	ca, err := gateway.NewLocalCA()
+	// The room CA persists in device-private storage and reloads across
+	// restarts: a regenerated CA would invalidate every issued .tutti
+	// certificate and break consumers still trusting the old bundle.
+	// The exported cert is injected into the Tutti Browser and session
+	// containers (never the host OS store).
+	caDir := os.Getenv("OPEN_TUTTI_CA_DIR")
+	if caDir == "" {
+		caDir = platformCADir()
+	}
+	ca, err := gateway.LoadOrCreateLocalCA(caDir)
 	if err != nil {
 		return err
 	}
@@ -121,18 +135,6 @@ func run() error {
 	// plain containers or Windows runtimes it is not, and listeners
 	// would fail with EADDRNOTAVAIL — fall back to 127.127/16.
 	vips.Probe()
-
-	// The room CA cert is exported for the runtime to inject into the
-	// Tutti Browser and session containers (never the host OS store).
-	caDir := os.Getenv("OPEN_TUTTI_CA_DIR")
-	if caDir == "" {
-		caDir = "/data/ca"
-	}
-	if err := os.MkdirAll(caDir, 0o700); err == nil {
-		if err := os.WriteFile(filepath.Join(caDir, "room-ca.pem"), ca.CACertPEM(), 0o600); err != nil {
-			fmt.Fprintf(os.Stderr, "room-sync: write ca: %v\n", err)
-		}
-	}
 
 	// .tutti DNS: containers in the room network point their resolver at
 	// this UDP socket and every virtual name resolves onto its VIP.
@@ -162,7 +164,7 @@ func run() error {
 	// Host the Room FS Protocol for agent-session mounts (open-tutti-fs).
 	roomfsAddr := os.Getenv("OPEN_TUTTI_FS_LISTEN")
 	if roomfsAddr == "" {
-		roomfsAddr = "/run/open-tutti/roomfs.sock"
+		roomfsAddr = platformFSListen()
 	}
 	if dir := filepath.Dir(roomfsAddr); !strings.Contains(roomfsAddr, ":") {
 		os.MkdirAll(dir, 0o755)
@@ -632,6 +634,45 @@ func minDuration(a, b time.Duration) time.Duration {
 }
 
 // listenRoomFS binds the unix socket (or TCP) for mounts.
+// platformCacheDir / platformCADir / platformFSListen are the single
+// platform adapter for native defaults: the Linux room container uses
+// POSIX-rooted /data and a unix socket, but the published Windows
+// binary runs as a normal user, where drive-root paths are unwritable
+// and unix sockets do not exist — per-user storage and a loopback TCP
+// listener keep the artifact working without overrides. Explicit env
+// always wins.
+func platformUserBase() string {
+	if dir, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(dir, "open-tutti")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".open-tutti"
+	}
+	return filepath.Join(home, ".open-tutti")
+}
+
+func platformCacheDir() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(platformUserBase(), "cache")
+	}
+	return "/data/cache"
+}
+
+func platformCADir() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(platformUserBase(), "ca")
+	}
+	return "/data/ca"
+}
+
+func platformFSListen() string {
+	if runtime.GOOS == "windows" {
+		return "127.0.0.1:5266"
+	}
+	return "/run/open-tutti/roomfs.sock"
+}
+
 func listenRoomFS(addr string) (net.Listener, error) {
 	if strings.Contains(addr, ":") {
 		return net.Listen("tcp", addr)

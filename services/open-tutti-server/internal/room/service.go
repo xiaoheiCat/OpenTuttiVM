@@ -217,13 +217,31 @@ func (s *Service) RotatePassword(ctx context.Context, roomID, deviceID string) (
 		return "", err
 	}
 	password := sixDigitPassword()
+	// The 64 MiB Argon2id derivation stays inside the process-wide
+	// semaphore: concurrent rotations by one owner would otherwise
+	// multiply memory use beyond the intended ceiling.
+	s.argonSem <- struct{}{}
 	hash, err := HashRoomPassword(password)
+	<-s.argonSem
 	if err != nil {
 		return "", err
 	}
 	// Field-specific update: the Argon2id hash above took a while, and a
 	// full-record write would clobber a transfer/dissolution committed
 	// concurrently (stale owner, resurrected room).
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Reauthorize under the lifecycle lock: ownership may have
+	// transferred while the derivation ran, and the FORMER owner must
+	// not replace the new owner's password after the transfer
+	// committed.
+	current, err := s.repo.GetRoom(ctx, room.ID)
+	if err != nil {
+		return "", err
+	}
+	if current.OwnerDeviceID != deviceID {
+		return "", fmt.Errorf("%w: not the room owner", store.ErrNotFound)
+	}
 	if err := s.repo.UpdateRoomPassword(ctx, room.ID, hash); err != nil {
 		return "", err
 	}
@@ -324,6 +342,15 @@ func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string)
 	// revoked the share or rotated the password meanwhile. Re-read the
 	// room and re-validate before persisting, or an old-password
 	// request receives a redeemable ticket for a revoked share.
+	// Lifecycle-serialized from here on: revocation/rotation can no
+	// longer commit between the revalidation and the ticket insert, so
+	// no ticket outlives the share state it was issued against. The
+	// revalidation derivation also stays INSIDE the process-wide bound:
+	// running it after releasing would let a semaphore-sized batch of
+	// correct-password callers double the intended Argon2 memory
+	// ceiling concurrently.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	current, err := s.repo.GetRoom(ctx, room.ID)
 	if err != nil {
 		return "", time.Time{}, err
@@ -331,10 +358,6 @@ func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string)
 	if current.ShareRevokedAt != nil {
 		return "", time.Time{}, errors.New("share link revoked")
 	}
-	// The revalidation derivation stays INSIDE the process-wide bound:
-	// running it after releasing would let a semaphore-sized batch of
-	// correct-password callers double the intended Argon2 memory
-	// ceiling concurrently.
 	s.argonSem <- struct{}{}
 	revalidated := VerifyRoomPassword(password, current.PasswordHash)
 	<-s.argonSem
@@ -458,14 +481,12 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	if err != nil {
 		return "", "", err
 	}
-	// Every fallible step ran: consume the ticket LAST so a failed
-	// enrollment (bad proof, dissolved room, mint failure) leaves the
-	// one-time ticket usable by the corrected retry instead of forcing
-	// the user back through the password flow. The UPDATE is an atomic
-	// compare-and-set, so a concurrent double redemption still loses.
-	if err := s.repo.MarkTicketRedeemed(ctx, rec.Hash); err != nil {
-		return "", "", err
-	}
+	// Enrollment persistence FIRST, ticket consumption strictly LAST:
+	// an irreversibly-redeemed ticket followed by a failed upsert or
+	// membership write would burn the one-time ticket on a transient
+	// error and force the user back through the password flow. The
+	// UPDATE is an atomic compare-and-set, so a concurrent double
+	// redemption still loses.
 	if err := s.upsertDevice(ctx, device); err != nil {
 		return "", "", err
 	}
@@ -486,6 +507,14 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 			return "", "", err
 		}
 	} else {
+		return "", "", err
+	}
+	// Every fallible step (proof, collisions, mint, device, membership)
+	// committed: consume the ticket NOW. Failing to mark it merely
+	// allows one corrected retry — safe — while marking earlier would
+	// burn it on transient write failures. Atomic compare-and-set, so
+	// concurrent double redemption still loses.
+	if err := s.repo.MarkTicketRedeemed(ctx, rec.Hash); err != nil {
 		return "", "", err
 	}
 	return room.ID, token, nil

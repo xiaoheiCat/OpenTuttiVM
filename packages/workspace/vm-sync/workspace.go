@@ -55,7 +55,10 @@ const (
 type fileState struct {
 	IsDir bool
 	Mode  uint32
-	Kind  fileKind
+	// ModeSet distinguishes "no mode recorded yet" from a genuine
+	// chmod 0000: zero is a valid synchronized permission.
+	ModeSet bool
+	Kind    fileKind
 	// Content is authoritative for text files.
 	Content []byte
 	// Manifest is the current CAS manifest hash for blob files.
@@ -491,7 +494,7 @@ func (w *WorkspaceState) applyCreate(op vmprotocol.FileOperation) error {
 	if op.Mode != nil {
 		mode = op.Mode.Mode
 	}
-	w.files[op.Path] = &fileState{Mode: mode, Kind: kindText, Content: []byte{}}
+	w.files[op.Path] = &fileState{Mode: mode, ModeSet: true, Kind: kindText, Content: []byte{}}
 	w.trackPath(op.Path)
 	return nil
 }
@@ -534,7 +537,7 @@ func (w *WorkspaceState) applyMkdir(op vmprotocol.FileOperation) error {
 	if op.Mode != nil && op.Mode.Mode != 0 {
 		mode = op.Mode.Mode & 0o7777
 	}
-	w.files[op.Path] = &fileState{IsDir: true, Mode: mode}
+	w.files[op.Path] = &fileState{IsDir: true, Mode: mode, ModeSet: true}
 	w.trackPath(op.Path)
 	return nil
 }
@@ -667,6 +670,7 @@ func (w *WorkspaceState) applyMetadata(op vmprotocol.FileOperation) error {
 		return &RejectionError{Reason: RejectInvalid}
 	}
 	f.Mode = op.Mode.Mode
+	f.ModeSet = true
 	return nil
 }
 
@@ -848,16 +852,16 @@ func (w *WorkspaceState) RestoreSnapshot(snap vmprotocol.WorkspaceSnapshot) erro
 		}
 		w.trackPath(e.Path)
 		if e.Kind == vmprotocol.TreeEntryDir {
-			w.files[e.Path] = &fileState{IsDir: true, Mode: e.Mode}
+			w.files[e.Path] = &fileState{IsDir: true, Mode: e.Mode, ModeSet: true}
 			continue
 		}
 		if e.Kind == vmprotocol.TreeEntryText {
 			// Keep OT tracking: later text patches stay applicable after
 			// bootstrap. Content materializes from CAS on demand.
-			w.files[e.Path] = &fileState{Mode: e.Mode, Kind: kindText, Manifest: e.Manifest, Size: e.Size}
+			w.files[e.Path] = &fileState{Mode: e.Mode, ModeSet: true, Kind: kindText, Manifest: e.Manifest, Size: e.Size}
 			continue
 		}
-		w.files[e.Path] = &fileState{Mode: e.Mode, Kind: kindBlob, Manifest: e.Manifest, Size: e.Size}
+		w.files[e.Path] = &fileState{Mode: e.Mode, ModeSet: true, Kind: kindBlob, Manifest: e.Manifest, Size: e.Size}
 	}
 	return nil
 }

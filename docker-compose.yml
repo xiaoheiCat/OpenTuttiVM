@@ -18,7 +18,14 @@ services:
     environment:
       OPEN_TUTTI_LISTEN_ADDR: :8080
       OPEN_TUTTI_PUBLIC_URL: ${OPEN_TUTTI_PUBLIC_URL:-http://localhost:8080}
-      OPEN_TUTTI_SECRET: ${OPEN_TUTTI_SECRET:?set OPEN_TUTTI_SECRET (openssl rand -hex 32)}
+      # Deliberately NOT a required ${VAR:?} interpolation: Compose
+      # expands interpolation from the PROJECT environment (shell or
+      # top-level --env-file) BEFORE env_file applies, so the documented
+      # per-service services/open-tutti-server/.env would never satisfy
+      # it and `docker compose up` aborts even though the secret is
+      # configured. env_file supplies the value; the server itself
+      # fails fast at startup when the secret is missing or weak.
+      OPEN_TUTTI_SECRET: ${OPEN_TUTTI_SECRET:-}
       # Uncomment to require an invite code for room creation.
       # OPEN_TUTTI_SERVER_INVITE_CODE: change-me
     volumes:

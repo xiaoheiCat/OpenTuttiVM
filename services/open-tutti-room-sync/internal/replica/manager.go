@@ -186,9 +186,15 @@ func (m *Manager) PromoteToFull(ctx context.Context) error {
 	m.mu.Lock()
 	m.Policy = Full
 	m.Replica.State.EagerBlobs = true
-	blobs := m.Replica.State.BlobPaths()
+	// EVERY non-directory path, like full bootstrap: lazy participants
+	// can hold snapshot-backed TEXT entries with only a manifest and no
+	// local content; leaving them unmaterialized keeps IsFull() false
+	// and loses the final workspace on server failure.
+	var paths []string
+	paths = append(paths, m.Replica.State.TextPaths()...)
+	paths = append(paths, m.Replica.State.BlobPaths()...)
 	m.mu.Unlock()
-	for _, p := range blobs {
+	for _, p := range paths {
 		m.mu.Lock()
 		err := m.materializeLocked(p)
 		m.mu.Unlock()

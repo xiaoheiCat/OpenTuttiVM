@@ -94,7 +94,11 @@ jobs:
     # :latest to GHCR — it must not land while any release-validation
     # lane (native Windows included) can still fail, or an unqualified
     # partial release goes live with no matching GitHub release.
-    needs: [validate, validate-windows]
+    # Gating on the client jobs keeps GHCR's version tag and mutable
+    # :latest in step with the GitHub release: pushing the image while
+    # desktop/runtime packaging still runs would promote a partial
+    # release that the (possibly failed) release job can no longer match.
+    needs: [validate, validate-windows, client-desktop, client-runtimes]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3

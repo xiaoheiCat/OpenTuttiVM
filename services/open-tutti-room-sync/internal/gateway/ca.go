@@ -8,7 +8,10 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"math/big"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -22,6 +25,60 @@ type LocalCA struct {
 	caCert    *x509.Certificate
 	caKey     *ecdsa.PrivateKey
 	leafCache map[string]tls.Certificate
+}
+
+// LoadOrCreateLocalCA loads the persisted room CA from dir (room-ca.pem
+// + room-ca-key.pem) or generates and persists a fresh one. Persisting
+// matters: a regenerated CA invalidates every previously issued .tutti
+// certificate, so after a room-sync restart all consumers still
+// trusting the old bundle would reject the new certificates until each
+// of them reloads. The key file stays device-private (0600).
+func LoadOrCreateLocalCA(dir string) (*LocalCA, error) {
+	certPEM, certErr := os.ReadFile(filepath.Join(dir, "room-ca.pem"))
+	keyPEM, keyErr := os.ReadFile(filepath.Join(dir, "room-ca-key.pem"))
+	if certErr == nil && keyErr == nil {
+		if ca, err := parseCAPair(certPEM, keyPEM); err == nil {
+			return ca, nil
+		}
+		// Unreadable pair: fall through and regenerate (a broken
+		// bundle cannot issue anything either way).
+	}
+	ca, err := NewLocalCA()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "room-ca.pem"), ca.CACertPEM(), 0o600); err != nil {
+		return nil, err
+	}
+	keyBytes, err := x509.MarshalECPrivateKey(ca.caKey)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "room-ca-key.pem"),
+		pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}), 0o600); err != nil {
+		return nil, err
+	}
+	return ca, nil
+}
+
+func parseCAPair(certPEM, keyPEM []byte) (*LocalCA, error) {
+	certBlock, _ := pem.Decode(certPEM)
+	keyBlock, _ := pem.Decode(keyPEM)
+	if certBlock == nil || keyBlock == nil {
+		return nil, errors.New("room CA pair not PEM-encoded")
+	}
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	key, err := x509.ParseECPrivateKey(keyBlock.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return &LocalCA{caCert: cert, caKey: key, leafCache: map[string]tls.Certificate{}}, nil
 }
 
 // NewLocalCA generates a fresh Ed25519-equivalent (ECDSA P-256) CA. One CA

@@ -42,8 +42,13 @@ func NewRelay(log *slog.Logger, routes RouteAuthorizer) *Relay {
 
 // ServeTunnel upgrades an authenticated device websocket into a yamux
 // server session and pumps streams until close. The caller has already
-// validated the session token into (roomID, deviceID).
-func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, deviceID string) error {
+// validated the session token into (roomID, deviceID); admit re-runs
+// membership admission INSIDE the registration lock, so a kick landing
+// between validation and registration cannot leave a deleted member's
+// tunnel open indefinitely (DropDevice and registration serialize on
+// r.mu: the kick either lands first and admission fails, or DropDevice
+// closes the just-registered session).
+func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, deviceID string, admit func() error) error {
 	netConn := websocket.NetConn(ctx, ws, websocket.MessageBinary)
 	defer netConn.Close()
 
@@ -53,7 +58,9 @@ func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, dev
 	}
 	defer sess.Close()
 
-	r.register(roomID, deviceID, sess)
+	if err := r.register(roomID, deviceID, sess, admit); err != nil {
+		return err
+	}
 	// Unregister ONLY our own registration: a replacement tunnel may
 	// have overwritten the map entry before this handler exits, and an
 	// unconditional delete would evict the live replacement and strand
@@ -69,9 +76,14 @@ func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, dev
 	}
 }
 
-func (r *Relay) register(roomID, deviceID string, sess *yamux.Session) {
+func (r *Relay) register(roomID, deviceID string, sess *yamux.Session, admit func() error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if admit != nil {
+		if err := admit(); err != nil {
+			return err
+		}
+	}
 	if r.sessions[roomID] == nil {
 		r.sessions[roomID] = map[string]*yamux.Session{}
 	}
@@ -81,6 +93,7 @@ func (r *Relay) register(roomID, deviceID string, sess *yamux.Session) {
 		go old.Close()
 	}
 	r.sessions[roomID][deviceID] = sess
+	return nil
 }
 
 func (r *Relay) unregister(roomID, deviceID string) {

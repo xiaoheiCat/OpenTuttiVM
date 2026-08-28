@@ -3,9 +3,12 @@ package vmsync
 // EntryInfo is a read-only view of one path's live state, for replicas and
 // the mirror-apply engine.
 type EntryInfo struct {
-	IsDir  bool
-	Mode   uint32
-	IsText bool
+	IsDir bool
+	Mode  uint32
+	// ModeSet reports whether Mode was explicitly recorded (create or
+	// chmod): a set 0000 must not be rewritten to a readable default.
+	ModeSet bool
+	IsText  bool
 	// Content is set for text files.
 	Content []byte
 	// Manifest is the CAS manifest hash for blobs.
@@ -23,6 +26,7 @@ func (w *WorkspaceState) EntryInfo(path string) (EntryInfo, bool) {
 	return EntryInfo{
 		IsDir:        f.IsDir,
 		Mode:         f.Mode,
+		ModeSet:      f.ModeSet,
 		IsText:       !f.IsDir && f.Kind == kindText,
 		Content:      f.Content,
 		Manifest:     f.Manifest,
