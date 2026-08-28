@@ -40,7 +40,12 @@ type Manager struct {
 }
 
 type engine struct {
-	state        *vmsync.WorkspaceState
+	state *vmsync.WorkspaceState
+	// terminal marks a room whose owner asserted Apply-and-Leave: the
+	// sequence check and this flag share the manager mutex, so NO
+	// Submit can sequence an edit between the check and the dissolve
+	// that destroys the authoritative copy.
+	terminal     bool
 	opsSinceSnap int
 }
 
@@ -71,6 +76,9 @@ func (m *Manager) Submit(env vmprotocol.Envelope) error {
 	eng, err := m.engine(env.RoomID)
 	if err != nil {
 		return err
+	}
+	if eng.terminal {
+		return fmt.Errorf("room %s is finalizing; edits rejected", env.RoomID)
 	}
 	env.TimestampMS = m.clock()
 	// A blob replacement commits a manifest hash into authoritative state:
@@ -218,6 +226,31 @@ func (m *Manager) validateBlobGraph(roomID, manifestHash string) error {
 	return nil
 }
 
+// ClearBarriersOf lifts barriers still assigned to an evicted member
+// (kick/leave): the barrier would otherwise block the path for every
+// remaining participant until room dissolution, with its resolver
+// unable to reconnect. Broadcasts a barrier-cleared event per path.
+func (m *Manager) ClearBarriersOf(roomID, deviceID string) {
+	m.mu.Lock()
+	eng, ok := m.engines[roomID]
+	if !ok {
+		m.mu.Unlock()
+		return
+	}
+	cleared := eng.state.ClearBarriersOf(deviceID)
+	m.mu.Unlock()
+	for _, path := range cleared {
+		m.send.BroadcastRoom(roomID, vmprotocol.Event{
+			Topic:  vmprotocol.TopicConflictResolved,
+			RoomID: roomID,
+			Payload: mustJSON(vmprotocol.ConflictPayload{
+				Path:          path,
+				ResolverAgent: "",
+			}),
+		})
+	}
+}
+
 // ResolveConflict lifts a barrier after the resolver committed the fix and
 // notifies every blocked agent with the resolved revision. The connection
 // identity must match the barrier's assigned resolver: a blocked
@@ -262,16 +295,26 @@ func (m *Manager) Bootstrap(ctx context.Context, roomID string) (vmprotocol.Work
 	return snap, eng.state.OpsSince(snap.ServerSeq), nil
 }
 
-// WorkspaceSeq returns the room's current authoritative sequence (the
-// leave fence compares it against the applying owner's captured base).
-func (m *Manager) WorkspaceSeq(roomID string) uint64 {
+// FreezeAt is the owner Apply-and-Leave fence: it validates the
+// asserted apply sequence and freezes the engine against further
+// submissions ATOMICALLY (under the manager mutex). A plain read-then-
+// compare let a concurrent Submit sequence an edit after the check but
+// before the dissolve destroyed the authoritative copy.
+func (m *Manager) FreezeAt(roomID string, baseSeq uint64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	eng, ok := m.engines[roomID]
 	if !ok {
-		return 0
+		return nil // room already torn down; nothing left to fence
 	}
-	return eng.state.Seq()
+	if eng.terminal {
+		return nil // idempotent re-freeze of the same leave
+	}
+	if eng.state.Seq() != baseSeq {
+		return fmt.Errorf("workspace changed since apply (have seq %d, leave asserted %d)", eng.state.Seq(), baseSeq)
+	}
+	eng.terminal = true
+	return nil
 }
 
 // SnapshotForTransfer checkpoints before an ownership transfer commits so

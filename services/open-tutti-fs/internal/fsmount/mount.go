@@ -272,12 +272,31 @@ func (n *roomNode) Rmdir(ctx context.Context, name string) syscall.Errno {
 }
 
 func (n *roomNode) Rename(ctx context.Context, name string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
+	// renameat2 flags must not degrade into a plain replace: the
+	// authoritative rename replaces an existing destination, so
+	// RENAME_NOREPLACE would silently lose content the caller expected
+	// to protect, and RENAME_EXCHANGE would perform half of a swap.
+	// The RoomFS protocol has no flag representation — reject both
+	// faithfully (EEXIST / EINVAL) until it grows one.
+	const (
+		renameNoreplace = 0x1
+		renameExchange  = 0x2
+		renameWhiteout  = 0x4
+	)
+	if flags&renameExchange != 0 || flags&renameWhiteout != 0 {
+		return syscall.EINVAL
+	}
 	from := n.path(name)
 	np, ok := newParent.(interface{ path(string) string })
 	if !ok {
 		return syscall.EIO
 	}
 	to := np.path(newName)
+	if flags&renameNoreplace != 0 {
+		if st, err := n.client.Stat(to); err == nil && st != nil {
+			return syscall.EEXIST
+		}
+	}
 	if err := n.client.Rename(from, to); err != nil {
 		return syscall.EIO
 	}
@@ -415,6 +434,13 @@ func (f *fileNode) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadR
 }
 
 func (f *fileNode) Write(ctx context.Context, fh fs.FileHandle, data []byte, off int64) (uint32, syscall.Errno) {
+	// Preflight BEFORE any allocation: the roomfs protocol caps a body
+	// at MaxBodyBytes, and growing the buffer past it would OOM the
+	// mount (taking the whole workspace offline) before the write path
+	// could ever return EFBIG.
+	if off < 0 || off+int64(len(data)) > int64(roomfs.MaxBodyBytes) {
+		return 0, syscall.EFBIG
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.dirty = true
@@ -504,6 +530,10 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 			}
 			f.buffer = content
 			f.loaded = true
+		}
+		if sz < 0 || uint64(sz) > roomfs.MaxBodyBytes {
+			f.mu.Unlock()
+			return syscall.EFBIG
 		}
 		f.dirty = true
 		f.writeGen++

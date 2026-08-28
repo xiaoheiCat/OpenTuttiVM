@@ -440,6 +440,14 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			return fmt.Errorf("chmod %s: %w", dst, err)
 		}
 	}
+	// Mirror: remove host files the room no longer has. This runs
+	// BEFORE the deferred directory chmods below: a restrictive 0555
+	// parent would strip the write permission needed to delete its
+	// room-absent children, leaving Apply-to-Workspace permanently
+	// unable to complete (and Apply-and-Leave stuck).
+	if err := pruneRemoved(targetDir, roomPaths); err != nil {
+		return err
+	}
 	// Bottom-up so children never chmod-block their parent's remaining
 	// work — deepest paths first means a restrictive parent runs after
 	// everything beneath it is already in place.
@@ -451,8 +459,7 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			return fmt.Errorf("chmod %s: %w", d.dst, err)
 		}
 	}
-	// Mirror: remove host files the room no longer has.
-	return pruneRemoved(targetDir, roomPaths)
+	return nil
 }
 
 // ensureUnder walks every path component from root to dir and refuses

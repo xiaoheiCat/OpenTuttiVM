@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -57,7 +58,7 @@ func Load(envFile string) (Config, error) {
 	cfg := Config{
 		ListenAddr:       get("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080"),
 		PublicURL:        get("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080"),
-		DataDir:          get("OPEN_TUTTI_DATA_DIR", "/var/lib/open-tutti"),
+		DataDir:          get("OPEN_TUTTI_DATA_DIR", defaultDataDir()),
 		LogLevel:         get("OPEN_TUTTI_LOG_LEVEL", "info"),
 		Secret:           get("OPEN_TUTTI_SECRET", ""),
 		ServerInviteCode: get("OPEN_TUTTI_SERVER_INVITE_CODE", ""),
@@ -135,4 +136,17 @@ func secondsOrDefault(s string, def time.Duration) time.Duration {
 		return def
 	}
 	return time.Duration(v) * time.Second
+}
+
+// defaultDataDir keeps the container/server path on POSIX and derives a
+// per-user location on Windows: a POSIX-rooted default under the current
+// drive root is unwritable for a normal non-elevated Windows user running
+// the server from source.
+func defaultDataDir() string {
+	if runtime.GOOS == "windows" {
+		if base, err := os.UserConfigDir(); err == nil {
+			return filepath.Join(base, "open-tutti")
+		}
+	}
+	return "/var/lib/open-tutti"
 }

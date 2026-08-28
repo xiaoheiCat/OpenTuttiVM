@@ -59,14 +59,15 @@ var (
 
 // Service implements room lifecycle.
 type Service struct {
-	repo     store.Repository
-	cfg      config.Config
-	clock    Clock
-	bcast    Broadcaster
-	cas      CASCollector
-	dropConn func(roomID, deviceID string)
-	seqProbe func(roomID string) uint64
-	tokens   *tokenMinter
+	repo         store.Repository
+	cfg          config.Config
+	clock        Clock
+	bcast        Broadcaster
+	cas          CASCollector
+	dropConn     func(roomID, deviceID string)
+	leaveFence   func(roomID string, baseSeq uint64) error
+	barrierClean func(roomID, deviceID string)
+	tokens       *tokenMinter
 
 	mu sync.Mutex
 	// shareAttempts throttles share-password verification per share id:
@@ -113,12 +114,20 @@ type CASCollector interface {
 // SetCASCollector attaches the post-dissolution object collector.
 func (s *Service) SetCASCollector(c CASCollector) { s.cas = c }
 
-// SetSeqProbe attaches the authoritative-sequence probe used to fence
-// owner Apply-and-Leave: the leave assertion carries the sequence the
-// final mirror was captured at, and a mismatching current sequence
-// means an edit landed after the mirror — asserting it applied would
-// discard that edit's only copy at disband.
-func (s *Service) SetSeqProbe(probe func(roomID string) uint64) { s.seqProbe = probe }
+// SetLeaveFence attaches the atomic Apply-and-Leave fence: the leave
+// assertion carries the sequence the final mirror was captured at, and
+// the fence validates it AND freezes sequencing in one critical
+// section — a mismatching sequence means an edit landed after the
+// mirror, and asserting it applied would discard that edit's only copy
+// at disband.
+func (s *Service) SetLeaveFence(fence func(roomID string, baseSeq uint64) error) {
+	s.leaveFence = fence
+}
+
+// SetBarrierClean attaches the conflict-barrier cleanup for evicted
+// members: a barrier still assigned to a kicked device would block its
+// path for every remaining participant until room dissolution.
+func (s *Service) SetBarrierClean(f func(roomID, deviceID string)) { s.barrierClean = f }
 
 // SetConnectionDropper attaches the transport teardown used when a
 // device's session token is refreshed (rejoin): the OLD token stops
@@ -341,6 +350,13 @@ func (s *Service) KickMember(ctx context.Context, roomID, ownerDeviceID, targetD
 	if err := s.repo.DeleteMembership(ctx, roomID, targetDeviceID); err != nil {
 		return err
 	}
+	// Lift conflict barriers the evicted member still owns (same
+	// serialization as the deletion): its socket teardown prevents
+	// reconnection, so leaving the barrier bound to it would block the
+	// path for every remaining participant until room dissolution.
+	if s.barrierClean != nil {
+		s.barrierClean(roomID, targetDeviceID)
+	}
 	if s.bcast != nil {
 		s.bcast.BroadcastRoom(roomID, vmprotocol.Event{
 			Topic:  vmprotocol.TopicPresence,
@@ -485,6 +501,12 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	if room.DissolvedAt != nil {
 		return "", "", errors.New("room already dissolved")
 	}
+	// A ticket minted before the owner revoked the share does not
+	// outlive the revocation: the documented contract is that revoke
+	// stops ALL new joins for the remainder of outstanding TTLs.
+	if room.ShareRevokedAt != nil {
+		return "", "", errors.New("share revoked; joining is closed")
+	}
 	// Canonical .tutti hosts are "<label>.<slug>.tutti": two members
 	// whose hostnames normalize to the same slug would mint identical
 	// hosts for the same label+port, and the gateway's listener map
@@ -588,11 +610,11 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 		if !in.WorkspaceApplied {
 			return ErrOwnerMustApply
 		}
-		// Apply-and-Leave fence: edits sequenced after the owner's
-		// captured mirror must not be silently discarded by the disband
-		// that follows.
-		if s.seqProbe != nil {
-			if cur := s.seqProbe(in.RoomID); cur != in.WorkspaceBaseSeq {
+		// Apply-and-Leave fence (atomic with sequencing): edits
+		// sequenced after the owner's captured mirror must not be
+		// silently discarded by the disband that follows.
+		if s.leaveFence != nil {
+			if err := s.leaveFence(in.RoomID, in.WorkspaceBaseSeq); err != nil {
 				return ErrWorkspaceStale
 			}
 		}

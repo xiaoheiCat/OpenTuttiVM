@@ -290,7 +290,7 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 	case vmprotocol.OpTextPatch:
 		err = w.applyTextPatch(&next)
 	case vmprotocol.OpBlobReplace:
-		err = w.applyBlobReplace(env.Operation)
+		err = w.applyBlobReplace(&next)
 	default:
 		err = &RejectionError{Reason: RejectInvalid}
 	}
@@ -439,10 +439,20 @@ func (w *WorkspaceState) applyTextPatch(env *vmprotocol.Envelope) error {
 	return nil
 }
 
-func (w *WorkspaceState) applyBlobReplace(op vmprotocol.FileOperation) error {
+func (w *WorkspaceState) applyBlobReplace(env *vmprotocol.Envelope) error {
+	op := env.Operation
 	f := w.files[op.Path]
 	if f == nil || f.IsDir {
 		return &RejectionError{Reason: RejectInvalid}
+	}
+	// Generation fence, same as text patches: a remove+recreate between
+	// the author's preparation and this submission yields a second
+	// generation whose empty-base hash MATCHES the stale one, and a
+	// hash-only check would let the old write clobber the new file.
+	for _, s := range w.structSeqs[op.Path] {
+		if s > env.BaseSeq {
+			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
+		}
 	}
 	if op.Blob.BaseHash != w.currentHash(op.Path) {
 		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
@@ -744,6 +754,22 @@ func (w *WorkspaceState) openBarrier(path string, env *vmprotocol.Envelope, conf
 		ResolverAgent:  resolver,
 		NotifiedAgents: notified,
 	}
+}
+
+// ClearBarriersOf lifts every barrier assigned to a device that just
+// lost membership (kick/leave): leaving it bound to the evicted resolver
+// would block the path for every remaining member until dissolution.
+// Returns the affected paths so callers can notify the room.
+func (w *WorkspaceState) ClearBarriersOf(deviceID string) []string {
+	var cleared []string
+	for path, b := range w.barriers {
+		if b.Locked && b.ResolverDevice == deviceID {
+			b.Locked = false
+			cleared = append(cleared, path)
+		}
+	}
+	sort.Strings(cleared)
+	return cleared
 }
 
 // ResolveBarrier lifts the barrier after the resolver committed a fixed

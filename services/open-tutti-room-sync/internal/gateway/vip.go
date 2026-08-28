@@ -81,8 +81,17 @@ func probeSharedAddr() net.IP {
 			if !ok || ipNet.IP.IsLoopback() || ipNet.IP.To4() == nil || ipNet.IP.IsLinkLocalUnicast() {
 				continue
 			}
-			sharedAddr = ipNet.IP.To4()
-			return
+			// Only a PRIVATE range qualifies as a room bridge: the
+			// first non-loopback address on a native or multi-homed
+			// host is routinely the LAN/Wi-Fi adapter, and binding
+			// room routes there publishes session services to other
+			// machines without room authentication. Anything else
+			// falls back to loopback (in-room proxying still works;
+			// only cross-machine exposure shrinks).
+			if ipNet.IP.IsPrivate() {
+				sharedAddr = ipNet.IP.To4()
+				return
+			}
 		}
 	})
 	return sharedAddr
