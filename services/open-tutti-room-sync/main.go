@@ -317,6 +317,24 @@ func run() error {
 						}
 					}
 				}
+			case vmprotocol.TopicPresence:
+				// Ownership transferred or succession landed on THIS
+				// device: promote to the owner policy (eager blobs, full
+				// materialization) so the final workspace survives a
+				// server failure — a lazily-promoted owner would keep
+				// skipping blob fetches.
+				var pd vmprotocol.PresenceDevice
+				if json.Unmarshal(ev.Payload, &pd) == nil && pd.DeviceID == deviceID && pd.IsOwner {
+					if mgr.Policy != replica.Full {
+						if err := mgr.PromoteToFull(context.Background()); err != nil {
+							fmt.Fprintf(os.Stderr, "room-sync: owner promotion: %v\n", err)
+						} else if sess := sessionRef.get(); sess != nil {
+							if err := sess.ReportPolicy("full"); err != nil {
+								fmt.Fprintf(os.Stderr, "room-sync: report promoted policy: %v\n", err)
+							}
+						}
+					}
+				}
 			case vmprotocol.TopicOperationRejected:
 				var rej vmprotocol.RejectionPayload
 				if json.Unmarshal(ev.Payload, &rej) == nil {
@@ -341,7 +359,12 @@ func run() error {
 				// runtime, never to room-sync itself.
 				var p vmagent.BorrowCommandPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
-					borrowHost.ExecuteCommand(p)
+					if err := borrowHost.ExecuteCommand(p); err != nil {
+						// Visible failure, never a silent fake success:
+						// the borrower learns the owner runtime cannot
+						// execute (no Agent Host adapter wired).
+						fmt.Fprintf(os.Stderr, "room-sync: borrow command %s: %v\n", p.CommandID, err)
+					}
 				}
 			case vmagent.TopicBorrowRevoked:
 				var p vmagent.BorrowRevokedPayload
@@ -534,6 +557,7 @@ type liveSession struct {
 }
 
 func (l *liveSession) set(s *client.Session) { l.mu.Lock(); l.s = s; l.mu.Unlock() }
+func (l *liveSession) get() *client.Session  { l.mu.Lock(); defer l.mu.Unlock(); return l.s }
 func (l *liveSession) clear(s *client.Session) {
 	l.mu.Lock()
 	if l.s == s {

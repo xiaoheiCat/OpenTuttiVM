@@ -890,6 +890,19 @@ func (w *WorkspaceState) TextPaths() []string {
 	return out
 }
 
+// BlobPaths lists every tracked binary file (promotion to full replica
+// materializes these).
+func (w *WorkspaceState) BlobPaths() []string {
+	var out []string
+	for p, f := range w.files {
+		if !f.IsDir && f.Kind == kindBlob {
+			out = append(out, p)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // IsBarriered reports whether a path is currently conflict-locked.
 func (w *WorkspaceState) IsBarriered(path string) bool {
 	b := w.barriers[path]

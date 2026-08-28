@@ -11,6 +11,7 @@
 package borrowhost
 
 import (
+	"errors"
 	"log/slog"
 
 	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
@@ -49,10 +50,17 @@ func (n *Noop) log(what string, v ...any) {
 	}
 }
 
+// ErrHostNotWired is returned by the Noop host for actions a real
+// Agent Host integration must perform: pretending success would make
+// the borrower believe their command executed. Observation-only events
+// (Shared/Revoked) stay success; the wired seam is the repository's
+// ApplicationHost() integration, explicitly out of scope for this PR.
+var ErrHostNotWired = errors.New("borrow execution requires an Agent Host adapter; room-sync runs without one")
+
 // ExecuteCommand implements Host.
 func (n *Noop) ExecuteCommand(p vmagent.BorrowCommandPayload) error {
-	n.log("borrow_command", "agent", p.AgentInstanceID, "command", p.CommandID)
-	return nil
+	n.log("borrow_command_rejected_not_wired", "agent", p.AgentInstanceID, "command", p.CommandID)
+	return ErrHostNotWired
 }
 
 // ApprovalRequest implements Host.

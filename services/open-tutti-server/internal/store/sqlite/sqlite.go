@@ -453,6 +453,32 @@ func (r *Repo) HasCASRef(ctx context.Context, roomID, hash string) (bool, error)
 	return true, nil
 }
 
+// CollectUnreferencedCAS deletes the caller-provided objects whose last
+// reference died, running the refcount check AND the deletion callback
+// inside ONE write transaction: a concurrent AddCASRefs waits on the
+// write lock and only commits afterwards, so it re-validates against
+// the post-collection refs and can never end up referencing a deleted
+// object. A failed deletion callback merely leaks the object (safe).
+func (r *Repo) CollectUnreferencedCAS(ctx context.Context, hashes []string, del func(hash string) error) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, h := range hashes {
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM cas_refs WHERE hash=?`, h).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 && del != nil {
+			// Leak on failure is safe: a present-but-unreferenced object
+			// only costs disk; a deleted-but-referenced one corrupts.
+			_ = del(h)
+		}
+	}
+	return tx.Commit()
+}
+
 // RoomCASRefs lists the object hashes one room references (collection
 // input at dissolution).
 func (r *Repo) RoomCASRefs(ctx context.Context, roomID string) ([]string, error) {

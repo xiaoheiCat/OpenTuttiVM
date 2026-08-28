@@ -319,7 +319,14 @@ func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string)
 	if current.ShareRevokedAt != nil {
 		return "", time.Time{}, errors.New("share link revoked")
 	}
-	if !VerifyRoomPassword(password, current.PasswordHash) {
+	// The revalidation derivation stays INSIDE the process-wide bound:
+	// running it after releasing would let a semaphore-sized batch of
+	// correct-password callers double the intended Argon2 memory
+	// ceiling concurrently.
+	s.argonSem <- struct{}{}
+	revalidated := VerifyRoomPassword(password, current.PasswordHash)
+	<-s.argonSem
+	if !revalidated {
 		return "", time.Time{}, errors.New("wrong room password")
 	}
 	if err := s.repo.CreateJoinTicket(ctx, store.JoinTicket{

@@ -178,6 +178,27 @@ func (m *Manager) materializeLocked(path string) error {
 	return nil
 }
 
+// PromoteToFull upgrades a lazy manager to the owner policy (explicit
+// transfer or succession made this device the owner): eager blob
+// materialization from now on, and every already-known blob fetches so
+// the promised server-failure-survival copy exists immediately.
+func (m *Manager) PromoteToFull(ctx context.Context) error {
+	m.mu.Lock()
+	m.Policy = Full
+	m.Replica.State.EagerBlobs = true
+	blobs := m.Replica.State.BlobPaths()
+	m.mu.Unlock()
+	for _, p := range blobs {
+		m.mu.Lock()
+		err := m.materializeLocked(p)
+		m.mu.Unlock()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Bootstrap loads a snapshot plus its replay window and materializes
 // content per policy.
 func (m *Manager) Bootstrap(ctx context.Context, snap vmprotocol.WorkspaceSnapshot, ops []vmprotocol.Envelope) error {

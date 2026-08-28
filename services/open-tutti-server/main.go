@@ -159,16 +159,18 @@ type casCollector struct {
 }
 
 func (c casCollector) Collect(ctx context.Context, hashes []string) {
-	counts, err := c.repo.ListCASRefCounts(ctx)
-	if err != nil {
-		c.log.Warn("cas collection: refcounts", "err", err)
-		return
-	}
-	for _, h := range hashes {
-		if counts[h] == 0 {
-			if err := c.cas.Delete(h); err != nil {
-				c.log.Warn("cas collection: delete", "hash", h, "err", err)
-			}
+	// The check runs INSIDE the deletion transaction (repo): a room
+	// acquiring a reference to the same hash mid-collection waits on
+	// the write lock and re-validates afterwards, so a surviving room
+	// can never reference a deleted object.
+	err := c.repo.CollectUnreferencedCAS(ctx, hashes, func(hash string) error {
+		delErr := c.cas.Delete(hash)
+		if delErr != nil {
+			c.log.Warn("cas collection: delete", "hash", hash, "err", delErr)
 		}
+		return delErr
+	})
+	if err != nil {
+		c.log.Warn("cas collection", "err", err)
 	}
 }
