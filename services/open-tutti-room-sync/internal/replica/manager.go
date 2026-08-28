@@ -52,11 +52,11 @@ type Manager struct {
 // New wires a replica manager.
 func New(deviceID string, cache vmcas.Store, policy Policy, fetcher ChunkFetcher) *Manager {
 	m := &Manager{
-		Replica:  vmsync.NewReplica(deviceID),
-		Cache:    cache,
-		Policy:   policy,
-		fetcher:  fetcher,
-		waiters:  map[string]chan error{},
+		Replica: vmsync.NewReplica(deviceID),
+		Cache:   cache,
+		Policy:  policy,
+		fetcher: fetcher,
+		waiters: map[string]chan error{},
 	}
 	// Sequenced applies materialize CAS-referenced content through this
 	// hook: restored text before its first patch, and (per Full policy)

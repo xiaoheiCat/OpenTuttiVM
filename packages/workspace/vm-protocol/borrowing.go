@@ -29,7 +29,7 @@ type AgentSharedPayload struct {
 	Capabilities AgentCapabilities `json:"capabilities"`
 	// LeaseGeneration fences borrowing commands.
 	LeaseGeneration uint64 `json:"lease_generation"`
-	Shared          bool  `json:"shared"`
+	Shared          bool   `json:"shared"`
 }
 
 // AgentCapabilities describes the abilities an agent brings into a room.

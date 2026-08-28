@@ -63,16 +63,19 @@ func (s *Server) Serve(ln net.Listener) error {
 		if err != nil {
 			return err
 		}
-		go s.serveConn(conn)
+		// Register synchronously with accept: a client that connected
+		// earlier must be visible to any later broadcast, instead of
+		// racing the serve goroutine's registration.
+		sc := &serverConn{writer: bufio.NewWriter(conn)}
+		s.mu.Lock()
+		s.conns[sc] = struct{}{}
+		s.mu.Unlock()
+		go s.serveConn(conn, sc)
 	}
 }
 
-func (s *Server) serveConn(conn net.Conn) {
+func (s *Server) serveConn(conn net.Conn, sc *serverConn) {
 	defer conn.Close()
-	sc := &serverConn{writer: bufio.NewWriter(conn)}
-	s.mu.Lock()
-	s.conns[sc] = struct{}{}
-	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
 		delete(s.conns, sc)

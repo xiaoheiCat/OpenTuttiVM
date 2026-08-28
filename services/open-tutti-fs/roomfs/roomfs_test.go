@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -150,6 +151,11 @@ func (m *memHandler) Rename(from, to string) error {
 // socket paths at ~104 bytes, so tests avoid the long TMPDIR layout.
 func startServer(t *testing.T, h *memHandler) string {
 	t.Helper()
+	// The Room FS Protocol rides unix sockets inside the Linux room
+	// containers; Windows hosts reach rooms over the network instead.
+	if runtime.GOOS == "windows" {
+		t.Skip("roomfs unix-socket protocol targets Linux containers")
+	}
 	dir, err := os.MkdirTemp("/tmp", "roomfs-")
 	if err != nil {
 		t.Fatal(err)

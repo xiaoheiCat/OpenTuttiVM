@@ -227,7 +227,7 @@ type liveSession struct {
 	s  *client.Session
 }
 
-func (l *liveSession) set(s *client.Session)    { l.mu.Lock(); l.s = s; l.mu.Unlock() }
+func (l *liveSession) set(s *client.Session) { l.mu.Lock(); l.s = s; l.mu.Unlock() }
 func (l *liveSession) clear(s *client.Session) {
 	l.mu.Lock()
 	if l.s == s {

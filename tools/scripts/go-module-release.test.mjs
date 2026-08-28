@@ -47,9 +47,9 @@ test("published activity contract keeps a light canonical-only module graph", as
 
   assert.match(
     released,
-    /github\.com\/tutti-os\/tutti\/packages\/agent\/store-sqlite\/canonical v0\.0\.110/
+    /github\.com\/xiaoheiCat\/OpenTuttiVM\/packages\/agent\/store-sqlite\/canonical v0\.0\.110/
   );
-  assert.doesNotMatch(released, /replace .*github\.com\/tutti-os\/tutti/);
+  assert.doesNotMatch(released, /replace .*github\.com\/xiaoheiCat\/OpenTuttiVM/);
   assert.doesNotMatch(released, /packages\/agent\/daemon|modernc\.org\/sqlite/);
 });
 
@@ -64,11 +64,11 @@ test("published store module resolves every internal dependency at the release v
     assert.match(
       released,
       new RegExp(
-        `github\\.com/tutti-os/tutti/packages/agent/${modulePath.replace("/", "\\/")} v0\\.0\\.110`
+        `github\\.com/xiaoheiCat/OpenTuttiVM/packages/agent/${modulePath.replace("/", "\\/")} v0\\.0\\.110`
       )
     );
   }
-  assert.doesNotMatch(released, /replace .*github\.com\/tutti-os\/tutti/);
+  assert.doesNotMatch(released, /replace .*github\.com\/xiaoheiCat\/OpenTuttiVM/);
   assert.doesNotMatch(released, /packages\/agent\/daemon/);
 });
 
@@ -87,11 +87,11 @@ test("published host contract contains only reusable agent package dependencies"
     assert.match(
       released,
       new RegExp(
-        `github\\.com/tutti-os/tutti/packages/agent/${modulePath.replace("/", "\\/")} v0\\.0\\.110`
+        `github\\.com/xiaoheiCat/OpenTuttiVM/packages/agent/${modulePath.replace("/", "\\/")} v0\\.0\\.110`
       )
     );
   }
-  assert.doesNotMatch(released, /replace .*github\.com\/tutti-os\/tutti/);
+  assert.doesNotMatch(released, /replace .*github\.com\/xiaoheiCat\/OpenTuttiVM/);
   assert.doesNotMatch(
     released,
     /packages\/agent\/daemon|services\/tuttid|sidecar/
