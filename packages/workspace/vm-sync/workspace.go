@@ -566,6 +566,14 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 	if !exists {
 		return &RejectionError{Reason: RejectInvalid}
 	}
+	// Identical paths are a NO-OP BEFORE any mutation: with the
+	// replacement branch below running first, the occupied destination
+	// IS the source entry, and deleting it before the later equality
+	// rejection would silently drop the file from the authoritative
+	// workspace (rejected operations never sequence or broadcast).
+	if r.NewPath == r.OldPath {
+		return nil
+	}
 	// POSIX replacement semantics: an ordinary rename over an existing
 	// FILE target replaces it atomically — editors' atomic-save relies
 	// on exactly that (write temp, rename over destination), and

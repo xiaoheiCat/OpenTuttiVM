@@ -58,8 +58,11 @@ type roomNode struct {
 	// dirMode is the authoritative directory permission set
 	// (server-reported or the creating mkdir): reporting a widened 0755
 	// for a 0700 directory would let local processes rely on
-	// permissions the room never granted.
+	// permissions the room never granted. dirModeSet distinguishes an
+	// explicit 0000 from "not yet known" (zero is valid).
 	dirMode uint32
+	// dirModeSet marks dirMode as authoritative (stat or mkdir).
+	dirModeSet bool
 
 	mu     sync.Mutex
 	server *fuse.Server
@@ -167,17 +170,19 @@ func (n *roomNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		if err := n.client.Chmod(n.path(""), mode); err != nil {
 			return syscall.EIO
 		}
-		n.dirMode = mode
+		n.dirMode = mode & 0o7777
+		n.dirModeSet = true
 		out.Attr.Mode = n.dirPerms() | syscall.S_IFDIR
 		return 0
 	}
 	return n.Getattr(ctx, fh, out)
 }
 
-// dirPerms returns the node's directory permission bits (0755 default).
+// dirPerms returns the node's directory permission bits (0755 default
+// until something authoritative arrives; an EXPLICIT 0000 stays 0000).
 func (n *roomNode) dirPerms() uint32 {
-	if m := n.dirMode & 0o7777; m != 0 {
-		return m
+	if n.dirModeSet {
+		return n.dirMode & 0o7777
 	}
 	return 0o755
 }
@@ -191,12 +196,11 @@ func (n *roomNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 		return nil, syscall.ENOENT
 	}
 	if st.Dir {
+		// A zero Stat mode is a REAL synchronized 0000: the bridge
+		// normalizes unset modes to defaults before they reach us.
 		dirMode := st.Mode & 0o7777
-		if dirMode == 0 {
-			dirMode = 0o755
-		}
 		out.Attr.Mode = dirMode | syscall.S_IFDIR
-		child := &roomNode{client: n.client, dirMode: dirMode}
+		child := &roomNode{client: n.client, dirMode: dirMode, dirModeSet: true}
 		return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFDIR}), 0
 	}
 	// A zero mode is a REAL synchronized chmod 0000 (the bridge
@@ -230,10 +234,10 @@ func (n *roomNode) Mkdir(ctx context.Context, name string, mode uint32, out *fus
 	}
 	perms := mode & 0o7777
 	if perms == 0 {
-		perms = 0o755
+		perms = 0o755 // mkdir(2) semantics: zero means default, not 0000
 	}
 	out.Attr.Mode = perms | syscall.S_IFDIR
-	child := &roomNode{client: n.client, dirMode: perms}
+	child := &roomNode{client: n.client, dirMode: perms, dirModeSet: true}
 	return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFDIR}), 0
 }
 
@@ -329,8 +333,11 @@ type fileNode struct {
 	// would skip submitting them — silent data loss for a concurrent
 	// editor).
 	writeGen uint64
-	// mode carries a setattr mode change into the next flush.
-	mode uint32
+	// mode carries a setattr mode change into the next flush; modeSet
+	// distinguishes an EXPLICIT chmod 0000 from "no local mode yet"
+	// (zero is a valid synchronized permission).
+	mode    uint32
+	modeSet bool
 	// srvMode is the authoritative permission bits from the protocol
 	// metadata (executable scripts stay executable in every mount;
 	// without it Getattr would flatten everything to 0644).
@@ -462,7 +469,7 @@ func (f *fileNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 		out.Attr.Size = uint64(f.srvSize)
 	}
 	switch {
-	case f.mode != 0:
+	case f.modeSet:
 		// f.mode stores permission bits from Setattr: OR the regular
 		// file type back in, or st_mode loses its type after chmod.
 		out.Attr.Mode = (f.mode & 0o7777) | syscall.S_IFREG
@@ -533,6 +540,7 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		perms := mode & 0o7777
 		f.mu.Lock()
 		f.mode = perms
+		f.modeSet = true
 		f.mu.Unlock()
 		// The change must reach the authoritative workspace: a local
 		// assignment alone reverts on the next invalidation and never

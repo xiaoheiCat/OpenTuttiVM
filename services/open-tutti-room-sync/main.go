@@ -779,13 +779,10 @@ func seedWorkspace(ctx context.Context, bridge *roomfsbridge.Handler, root strin
 		if err != nil {
 			return err
 		}
-		if len(content) > vmsync.MaxTextFile {
-			// Oversized for the text lane; leave it out rather than
-			// fail the whole seed — the operator moves it via CAS
-			// tooling.
-			fmt.Fprintf(os.Stderr, "room-sync: seed: skip oversized %s\n", rel)
-			return nil
-		}
+		// bridge.Write itself routes oversized content through the CAS
+		// blob-replacement path: skipping here would leave the created
+		// entry EMPTY, and a later Apply-to-Workspace would mirror that
+		// empty authoritative entry over the owner's real file.
 		return bridge.Write(rel, content)
 	})
 }
