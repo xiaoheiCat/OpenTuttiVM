@@ -83,22 +83,58 @@ func Resolve(lookup RouteLookup, hostport string) (Resolution, error) {
 // verbatim. Room-sync labels carry the mapping when registering ports.
 func sessionIDFromLabel(label string) string { return "sess-" + label }
 
+// selectorCopy is the localized text of the H5 picker; user-visible copy
+// never hardcodes a single language.
+type selectorCopy struct {
+	Lang     string
+	Title    string
+	Heading  string
+	Fallback string
+}
+
+var selectorLocales = map[string]selectorCopy{
+	"en": {Lang: "en", Title: "Choose a session", Heading: "Multiple sessions share this port",
+		Fallback: "Multiple sessions share this port."},
+	"zh": {Lang: "zh", Title: "选择会话", Heading: "多个会话共用此端口",
+		Fallback: "多个会话共用此端口"},
+}
+
+// negotiateSelectorLocale picks the picker locale from an HTTP
+// Accept-Language header value ("" → English).
+func negotiateSelectorLocale(acceptLanguage string) selectorCopy {
+	for _, part := range strings.Split(acceptLanguage, ",") {
+		tag := strings.TrimSpace(strings.SplitN(part, ";", 2)[0])
+		if tag == "" || tag == "*" {
+			continue
+		}
+		lang := strings.ToLower(strings.SplitN(tag, "-", 2)[0])
+		if c, ok := selectorLocales[lang]; ok {
+			return c
+		}
+	}
+	return selectorLocales["en"]
+}
+
 // SessionSelectorPage renders the minimal H5 picker for an ambiguous HTTPS
 // device address. The local CA terminates TLS so the picker can appear
 // before the origin responds. CanonicalHost embeds the participant-controlled
 // session label, so every interpolation goes through html/template escaping
 // — never raw string building.
-func SessionSelectorPage(candidates []vmprotocol.SessionCandidate) string {
-	tpl := template.Must(template.New("selector").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Choose a session</title>
+func SessionSelectorPage(acceptLanguage string, candidates []vmprotocol.SessionCandidate) string {
+	c := negotiateSelectorLocale(acceptLanguage)
+	tpl := template.Must(template.New("selector").Parse(`<!doctype html><html lang="{{.Lang}}"><head><meta charset="utf-8"><title>{{.Title}}</title>
 <style>body{font-family:system-ui,sans-serif;background:#0f1115;color:#e7eaf0;display:flex;justify-content:center;padding-top:10vh}
 .card{background:#171a21;border:1px solid #2a2f3a;border-radius:12px;padding:24px;width:min(420px,90vw)}
 a.btn{display:block;margin:8px 0;padding:12px;border-radius:8px;background:#4c7dff;color:#fff;text-decoration:none;text-align:center}</style></head>
-<body><main class="card"><h1>Multiple sessions share this port</h1>
-{{range .}}<a class="btn" href="http://{{.CanonicalHost}}">{{.CanonicalHost}}</a>{{end}}
+<body><main class="card"><h1>{{.Heading}}</h1>
+{{range .Candidates}}<a class="btn" href="http://{{.CanonicalHost}}">{{.CanonicalHost}}</a>{{end}}
 </main></body></html>`))
 	var b strings.Builder
-	if err := tpl.Execute(&b, candidates); err != nil {
-		return "<!doctype html><html lang=\"en\"><body><p>Multiple sessions share this port.</p></body></html>"
+	if err := tpl.Execute(&b, struct {
+		selectorCopy
+		Candidates []vmprotocol.SessionCandidate
+	}{selectorCopy: c, Candidates: candidates}); err != nil {
+		return "<!doctype html><html lang=\"" + c.Lang + "\"><body><p>" + c.Fallback + "</p></body></html>"
 	}
 	return b.String()
 }

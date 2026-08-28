@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -126,17 +127,21 @@ func TestShareToJoinJourney(t *testing.T) {
 		t.Fatalf("wrong password status %d", res.StatusCode)
 	}
 
-	// Correct password issues a one-time ticket; the deep link carries the
-	// ticket, never the password.
+	// Correct password issues a one-time ticket; the deep link uses the
+	// desktop-registered tutti:// scheme, carries room + ticket (join
+	// redemption needs the room id), and never the password.
 	var ticketRes struct {
 		Ticket   string `json:"ticket"`
+		RoomID   string `json:"room_id"`
 		DeepLink string `json:"deep_link"`
 	}
 	res = stack.post(t, "/api/share/"+created.ShareID+"/join-ticket", map[string]string{"password": created.Password}, &ticketRes)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("ticket status %d", res.StatusCode)
 	}
-	if !strings.Contains(ticketRes.DeepLink, "open-tutti://join?") || !strings.Contains(ticketRes.DeepLink, ticketRes.Ticket) {
+	if !strings.Contains(ticketRes.DeepLink, "tutti://join?") ||
+		!strings.Contains(ticketRes.DeepLink, "room="+url.QueryEscape(ticketRes.RoomID)) ||
+		!strings.Contains(ticketRes.DeepLink, ticketRes.Ticket) {
 		t.Fatalf("deep link %q", ticketRes.DeepLink)
 	}
 	if strings.Contains(ticketRes.DeepLink, created.Password) {

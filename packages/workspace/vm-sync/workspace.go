@@ -105,6 +105,11 @@ type WorkspaceState struct {
 	hashLog  map[string][]seqHash
 	barriers map[string]*barrier
 	ops      []vmprotocol.Envelope
+	// accepted deduplicates (AuthorDeviceID, OperationID): a retry after
+	// a lost broadcast/ack must return the original acknowledgement, not
+	// sequence the same edit twice (a re-applied insert duplicates user
+	// content). Values index into ops.
+	accepted map[string]int
 	// Materializer, when set, fetches CAS-referenced content for a path
 	// into memory (text restore, eager full-replica blob fetch). The
 	// replica owner wires it; the server leaves it nil.
@@ -118,6 +123,7 @@ func NewWorkspaceState() *WorkspaceState {
 		history:  map[string][]appliedPatch{},
 		hashLog:  map[string][]seqHash{},
 		barriers: map[string]*barrier{},
+		accepted: map[string]int{},
 	}
 }
 
@@ -183,6 +189,15 @@ func (w *WorkspaceState) fenced(env *vmprotocol.Envelope) *barrier {
 // to broadcast. On conflict it may open a barrier and returns a
 // *RejectionError.
 func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, error) {
+	// At-least-once retries: the operation identity is
+	// (AuthorDeviceID, OperationID). A duplicate returns the ORIGINAL
+	// acknowledgement — re-sequencing would apply a text insert twice.
+	if env.AuthorDeviceID != "" && env.OperationID != "" {
+		key := env.AuthorDeviceID + "\x00" + env.OperationID
+		if idx, ok := w.accepted[key]; ok && idx < len(w.ops) {
+			return w.ops[idx], nil
+		}
+	}
 	if !vmprotocol.ValidWorkspacePath(env.Operation.Path) {
 		return env, &RejectionError{Reason: RejectInvalid}
 	}
@@ -238,6 +253,7 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 
 	w.seq++
 	next.ServerSeq = w.seq
+	w.accepted[next.AuthorDeviceID+"\x00"+next.OperationID] = len(w.ops)
 	w.record(&next)
 	return next, nil
 }
@@ -400,6 +416,17 @@ func (w *WorkspaceState) applyRemove(op vmprotocol.FileOperation) error {
 	}
 	if f.IsDir != op.IsDir {
 		return &RejectionError{Reason: RejectInvalid}
+	}
+	// Same non-empty rule as rmdir: removing a directory with live
+	// descendants would orphan the children in authoritative state
+	// while reporting success (FUSE expects ENOTEMPTY semantics).
+	if f.IsDir {
+		prefix := op.Path + "/"
+		for p := range w.files {
+			if strings.HasPrefix(p, prefix) {
+				return &RejectionError{Reason: RejectInvalid}
+			}
+		}
 	}
 	delete(w.files, op.Path)
 	return nil

@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/coder/websocket"
@@ -141,10 +142,20 @@ func (s *Server) handleJoinTicket(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, status, err.Error())
 		return
 	}
+	// The join redeem API needs the room id alongside the ticket, and the
+	// deep link uses the scheme the packaged desktop actually registers
+	// ("tutti://") so following the share page can hand off.
+	room, err := s.repo.GetRoomByShareID(r.Context(), r.PathValue("shareID"))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ticket":     ticket,
 		"expires_at": expiresAt,
-		"deep_link":  "open-tutti://join?server=" + s.cfg.PublicURL + "&ticket=" + ticket,
+		"room_id":    room.ID,
+		"deep_link": "tutti://join?server=" + url.QueryEscape(s.cfg.PublicURL) +
+			"&room=" + url.QueryEscape(room.ID) + "&ticket=" + url.QueryEscape(ticket),
 	})
 }
 

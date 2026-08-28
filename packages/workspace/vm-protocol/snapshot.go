@@ -31,18 +31,41 @@ func ValidWorkspacePath(p string) bool {
 	if strings.ContainsAny(p, "\x00\\") {
 		return false
 	}
-	if strings.Contains(p, ":") && strings.HasPrefix(p[1:], ":\\") {
-		return false
-	}
 	start := 0
 	for i := 0; i <= len(p); i++ {
 		if i == len(p) || p[i] == '/' {
 			seg := p[start:i]
-			if seg == "" || seg == "." || seg == ".." {
+			if seg == "" || seg == "." || seg == ".." || !validWindowsSegment(seg) {
 				return false
 			}
 			start = i + 1
 		}
+	}
+	return true
+}
+
+// validWindowsSegment reports whether one path segment can materialize on
+// NTFS: no reserved characters (a colon can appear anywhere in a POSIX
+// name — "dir/a:b.txt" — not just drive prefixes), no trailing dot/space,
+// and no reserved device names (CON, COM1, …) even with an extension.
+// Paths accepted here must stay creatable by every platform's replica;
+// AGENTS.md makes Windows part of the default compatibility contract.
+func validWindowsSegment(seg string) bool {
+	if strings.ContainsAny(seg, "<>:\"|?*") {
+		return false
+	}
+	if seg == "" || seg[len(seg)-1] == '.' || seg[len(seg)-1] == ' ' {
+		return false
+	}
+	base := seg
+	if idx := strings.IndexByte(base, '.'); idx > 0 {
+		base = base[:idx]
+	}
+	switch strings.ToUpper(base) {
+	case "CON", "PRN", "AUX", "NUL",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
+		return false
 	}
 	return true
 }

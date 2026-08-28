@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
@@ -174,7 +175,14 @@ func (h *Hub) Detach(c *Conn) {
 	}
 	h.mu.Unlock()
 
-	if _, err := h.rooms.MarkOffline(c.Ctx, c.RoomID, c.DeviceID); err != nil {
+	// c.Ctx is the cancelled read context on forced closures (queue
+	// overflow, kicks) — an already-cancelled context would fail
+	// MarkOffline and leave the membership stuck online, blocking
+	// grace-period transfer and dissolution forever. Run the disconnect
+	// write on a live context with a bounded timeout.
+	offlineCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Ctx), 5*time.Second)
+	defer cancel()
+	if _, err := h.rooms.MarkOffline(offlineCtx, c.RoomID, c.DeviceID); err != nil {
 		h.log.Warn("mark offline", "room", c.RoomID, "device", c.DeviceID, "err", err)
 	}
 	h.BroadcastRoom(c.RoomID, vmprotocol.Event{

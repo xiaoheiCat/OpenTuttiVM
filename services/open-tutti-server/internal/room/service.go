@@ -487,18 +487,20 @@ func (s *Service) MarkOffline(ctx context.Context, roomID, deviceID string) (own
 // CheckGracePeriods runs the owner-disconnect state machine for one room:
 // after the grace period an absent owner loses the role to the participant
 // with the longest continuous presence; with nobody online the room
-// dissolves immediately. Called by a background ticker and by tests.
-func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) error {
+// dissolves immediately. Called by a background ticker and by tests. The
+// returned dissolved flag tells the caller to run terminal teardown
+// (sockets, tunnels, registries) — the same set the HTTP leave path runs.
+func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolved bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	room, err := s.repo.GetRoom(ctx, roomID)
 	if err != nil || room.DissolvedAt != nil {
-		return err
+		return false, err
 	}
 	members, err := s.repo.ListMemberships(ctx, roomID)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	var ownerOnline bool
@@ -513,7 +515,7 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) error {
 		}
 	}
 	if ownerOnline {
-		return nil
+		return false, nil
 	}
 
 	// Owner gone without a graceful leave: the grace clock starts from the
@@ -525,14 +527,17 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) error {
 		if s.clock.Now().Sub(m.LastSeenAt) < s.cfg.OwnerGracePeriod {
 			// Still inside the grace window: room continues, disband and
 			// transfer stay locked by PrepareTransfer's owner check.
-			return nil
+			return false, nil
 		}
 		break
 	}
 
 	if len(online) == 0 {
 		// Nobody is online: the meeting ends immediately.
-		return s.dissolveLocked(ctx, roomID)
+		if err := s.dissolveLocked(ctx, roomID); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
 	// Longest continuous presence wins: earliest ConnectedAt of the current
 	// presence session, not the earliest join.
@@ -549,13 +554,13 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) error {
 	room.OwnerDeviceID = online[0].DeviceID
 	room.PendingTransferToDevice = ""
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
-		return err
+		return false, err
 	}
 	s.broadcast(roomID, vmprotocol.Event{
 		Topic: vmprotocol.TopicPresence, RoomID: roomID,
 		Payload: mustJSON(vmprotocol.PresenceDevice{DeviceID: online[0].DeviceID, Online: true, IsOwner: true}),
 	})
-	return nil
+	return false, nil
 }
 
 // Dissolve ends the room: share invalid, memberships and tickets deleted,

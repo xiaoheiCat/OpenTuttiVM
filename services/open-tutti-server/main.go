@@ -93,9 +93,25 @@ func run() error {
 				continue
 			}
 			for _, r := range active {
-				if err := rooms.CheckGracePeriods(context.Background(), r.ID); err != nil {
+				dissolved, err := rooms.CheckGracePeriods(context.Background(), r.ID)
+				if err != nil {
 					log.Warn("grace check", "room", r.ID, "err", err)
+					continue
 				}
+				if !dissolved {
+					continue
+				}
+				// Terminal teardown mirrors the HTTP leave path: a
+				// dissolved room must not keep sequencing state, live
+				// sockets, or relay tunnels — tunnel sockets are
+				// independent of business presence and would otherwise
+				// keep relaying to stale advertised routes.
+				seq.CloseRoom(r.ID)
+				previews.ClearRoom(r.ID)
+				borrows.ClearRoom(r.ID)
+				hub.DropRoom(r.ID)
+				relay.DropRoom(r.ID)
+				log.Info("room dissolved by grace period", "room", r.ID)
 			}
 		}
 	}()

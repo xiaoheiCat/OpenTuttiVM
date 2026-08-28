@@ -223,7 +223,7 @@ func TestOwnerGracePeriodAutoTransfer(t *testing.T) {
 	}
 
 	// Inside the grace window the room keeps its owner.
-	if err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
+	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
 		t.Fatal(err)
 	}
 	room, _ := svc.repo.GetRoom(ctx, created.RoomID)
@@ -234,7 +234,7 @@ func TestOwnerGracePeriodAutoTransfer(t *testing.T) {
 	// After the grace period ownership goes to the longest-connected
 	// participant (bob), not the earliest joiner.
 	clock.Advance(6 * time.Minute)
-	if err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
+	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
 		t.Fatal(err)
 	}
 	room, _ = svc.repo.GetRoom(ctx, created.RoomID)
@@ -257,7 +257,7 @@ func TestOwnerGracePeriodNobodyOnlineDissolves(t *testing.T) {
 		t.Fatal(err)
 	}
 	clock.Advance(6 * time.Minute)
-	if err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
+	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
 		t.Fatal(err)
 	}
 	room, _ := svc.repo.GetRoom(ctx, created.RoomID)

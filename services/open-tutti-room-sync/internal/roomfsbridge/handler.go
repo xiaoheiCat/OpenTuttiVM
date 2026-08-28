@@ -23,6 +23,12 @@ type Submitter interface {
 	Submit(env vmprotocol.Envelope) error
 }
 
+// BarrierResolver lifts conflict barriers on the live session once this
+// session's fix committed (the WS "conflict_resolved" message).
+type BarrierResolver interface {
+	ResolveBarrier(path string) error
+}
+
 // ChunkUploader uploads blob chunks before a blob-replace op goes out.
 type ChunkUploader interface {
 	EnsureChunks(ctx context.Context, manifest vmcas.Manifest, chunks [][]byte) error
@@ -33,11 +39,17 @@ type Handler struct {
 	mu        sync.Mutex
 	mgr       *replica.Manager
 	submitter Submitter
+	resolver  BarrierResolver
 	uploader  ChunkUploader
 	deviceID  string
 	sessionID string
 	opCounter int
 	inval     func(path string)
+	// resolverDuty marks paths whose conflict barrier assigned THIS
+	// session to resolve; the next accepted operation on the path lifts
+	// the fence (without an explicit resolve, the first conflict fences
+	// the path for every other participant forever).
+	resolverDuty map[string]bool
 }
 
 // New wires the bridge. inval (optional) is invoked with each changed path
@@ -46,7 +58,26 @@ func New(mgr *replica.Manager, submitter Submitter, uploader ChunkUploader, devi
 	return &Handler{
 		mgr: mgr, submitter: submitter, uploader: uploader,
 		deviceID: deviceID, sessionID: sessionID, inval: inval,
+		resolverDuty: map[string]bool{},
 	}
+}
+
+// SetResolver attaches the barrier lifter (the live WS session).
+func (h *Handler) SetResolver(r BarrierResolver) {
+	h.mu.Lock()
+	h.resolver = r
+	h.mu.Unlock()
+}
+
+// OnConflictDetected records resolver duty when the server's conflict
+// barrier assigned this session to fix the path.
+func (h *Handler) OnConflictDetected(p vmprotocol.ConflictPayload) {
+	if p.ResolverAgent == "" || p.ResolverAgent != h.sessionID {
+		return
+	}
+	h.mu.Lock()
+	h.resolverDuty[p.Path] = true
+	h.mu.Unlock()
 }
 
 // InvalidateRemote drops mount caches for a path changed by another
@@ -227,6 +258,18 @@ func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error
 	}
 	if h.inval != nil {
 		h.inval(op.Path)
+	}
+	// The accepted operation may be this session's conflict fix: lift
+	// the barrier so every other participant can edit the path again.
+	h.mu.Lock()
+	r := h.resolver
+	duty := h.resolverDuty[op.Path]
+	delete(h.resolverDuty, op.Path)
+	h.mu.Unlock()
+	if duty && r != nil {
+		if err := r.ResolveBarrier(op.Path); err != nil {
+			return fmt.Errorf("lift conflict barrier on %s: %w", op.Path, err)
+		}
 	}
 	return nil
 }

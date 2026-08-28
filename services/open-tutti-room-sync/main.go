@@ -20,6 +20,10 @@
 //	                         runtime injection (default /data/ca)
 //	OPEN_TUTTI_SESSION_DIAL   room-network address template for session
 //	                         containers (default "agent-%s" + route port)
+//	OPEN_TUTTI_SESSION_LABEL  this session's registry label
+//	                         (default "main"; id is "sess-"+label)
+//	OPEN_TUTTI_SESSION_PORTS  comma list of session ports to advertise,
+//	                         e.g. "3000:http,5432:tcp" (default none)
 package main
 
 import (
@@ -32,6 +36,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -39,6 +44,7 @@ import (
 
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
+	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
 
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/roomfs"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/internal/client"
@@ -146,7 +152,15 @@ func run() error {
 		os.MkdirAll(dir, 0o755)
 	}
 	roomfsSrv := roomfs.NewServer(nil, slog.New(slog.NewTextHandler(os.Stderr, nil)))
-	bridge := roomfsbridge.New(mgr, sessionRef, c, deviceID, "local", roomfsSrv.BroadcastInvalidate)
+	// The bridge submits under the same session id the port announcements
+	// use ("sess-"+label): barrier resolver assignment compares against
+	// AgentSessionID, and a mismatched id would never lift a fence.
+	sessionLabel := os.Getenv("OPEN_TUTTI_SESSION_LABEL")
+	if sessionLabel == "" {
+		sessionLabel = "main"
+	}
+	bridge := roomfsbridge.New(mgr, sessionRef, c, deviceID, "sess-"+sessionLabel, roomfsSrv.BroadcastInvalidate)
+	bridge.SetResolver(sessionRef)
 	roomfsSrv.SetHandler(bridge)
 	ln, err := listenRoomFS(roomfsAddr)
 	if err != nil {
@@ -213,15 +227,49 @@ func run() error {
 				var env vmprotocol.Envelope
 				if json.Unmarshal(ev.Payload, &env) == nil {
 					bridge.InvalidateRemote(env.Operation.Path)
+					// Renames must drop BOTH sides: the source entry
+					// disappears, the destination appears (a cached
+					// negative lookup there would keep hiding it), and
+					// a moved directory takes its descendants along.
+					if r := env.Operation.Rename; env.Operation.Kind == vmprotocol.OpRename && r != nil {
+						bridge.InvalidateRemote(r.NewPath)
+						var moved []string
+						mgr.WithState(func(state *vmsync.WorkspaceState) {
+							for _, p := range state.Paths() {
+								if strings.HasPrefix(p, r.NewPath+"/") {
+									moved = append(moved, p)
+								}
+							}
+						})
+						for _, p := range moved {
+							bridge.InvalidateRemote(p)
+						}
+					}
 				}
 			case vmprotocol.TopicOperationRejected:
 				var rej vmprotocol.RejectionPayload
 				if json.Unmarshal(ev.Payload, &rej) == nil {
 					mgr.NotifyRejected(rej.OperationID, rej.Reason)
 				}
+			case vmprotocol.TopicConflictDetected:
+				// A semantic conflict fenced a path; when this
+				// session is the assigned resolver, the next
+				// accepted fix on the path lifts the barrier.
+				var cp vmprotocol.ConflictPayload
+				if json.Unmarshal(ev.Payload, &cp) == nil {
+					bridge.OnConflictDetected(cp)
+				}
 			}
 		}
 		sessionRef.set(sess)
+		// Announce this device's session ports so the preview registry
+		// (and through it /routes, the selector, and relay
+		// authorization) knows what the session serves. The room
+		// compose injects the list; without it the virtual network has
+		// nothing to route.
+		if err := announceSessionPorts(sess, deviceID); err != nil {
+			fmt.Fprintf(os.Stderr, "room-sync: announce ports: %v\n", err)
+		}
 		tun, err := tunneldial.Dial(ctx, serverURL, token)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "room-sync: tunnel dial: %v\n", err)
@@ -262,6 +310,41 @@ func run() error {
 		}
 		backoff = time.Second
 	}
+}
+
+// announceSessionPorts publishes OPEN_TUTTI_SESSION_PORTS (e.g.
+// "3000:http,5432:tcp") under the OPEN_TUTTI_SESSION_LABEL (default
+// "main"). The registry id is "sess-"+label — the same convention the
+// gateway and room FS bridge use.
+func announceSessionPorts(sess *client.Session, deviceID string) error {
+	label := os.Getenv("OPEN_TUTTI_SESSION_LABEL")
+	if label == "" {
+		label = "main"
+	}
+	sess.SessionLabel = label
+	spec := os.Getenv("OPEN_TUTTI_SESSION_PORTS")
+	if spec == "" {
+		return nil
+	}
+	for _, entry := range strings.Split(spec, ",") {
+		entry = strings.TrimSpace(entry)
+		portProto := strings.SplitN(entry, ":", 2)
+		port, err := strconv.Atoi(strings.TrimSpace(portProto[0]))
+		if err != nil || port <= 0 || port > 65535 {
+			return fmt.Errorf("invalid session port %q", entry)
+		}
+		proto := "http"
+		if len(portProto) == 2 && strings.TrimSpace(portProto[1]) != "" {
+			proto = strings.ToLower(strings.TrimSpace(portProto[1]))
+		}
+		if err := sess.AnnouncePorts(vmprotocol.PortsChangedPayload{
+			DeviceID: deviceID, SessionID: "sess-" + label, SessionLabel: label,
+			Port: port, Protocol: proto, Listening: true,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // sessionDialTemplate formats the room-network address of a session
@@ -325,6 +408,17 @@ func (l *liveSession) clear(s *client.Session) {
 		l.s = nil
 	}
 	l.mu.Unlock()
+}
+
+// ResolveBarrier lifts a conflict barrier through the live session.
+func (l *liveSession) ResolveBarrier(path string) error {
+	l.mu.Lock()
+	s := l.s
+	l.mu.Unlock()
+	if s == nil {
+		return fmt.Errorf("room socket reconnecting")
+	}
+	return s.ResolveBarrier(path)
 }
 
 func (l *liveSession) Submit(env vmprotocol.Envelope) error {

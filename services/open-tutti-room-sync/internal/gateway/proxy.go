@@ -236,13 +236,35 @@ func (p *Proxy) handle(conn net.Conn, b *routeBinding) {
 	p.pipe(client, route)
 }
 
-// serveSelector renders the H5 picker for an ambiguous device address.
-func (p *Proxy) serveSelector(w net.Conn, candidates []vmprotocol.SessionCandidate) {
-	body := SessionSelectorPage(candidates)
+// serveSelector renders the localized H5 picker for an ambiguous device
+// address; the visitor's language comes from the request headers.
+func (p *Proxy) serveSelector(client *bufferedConn, candidates []vmprotocol.SessionCandidate) {
+	body := SessionSelectorPage(httpAcceptLanguage(client.r), candidates)
 	page := "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n" +
 		fmt.Sprintf("Content-Length: %d\r\nConnection: close\r\n\r\n%s", len(body), body)
-	w.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	io.WriteString(w, page)
+	client.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	io.WriteString(client, page)
+}
+
+// httpAcceptLanguage drains the buffered HTTP request head (the selector
+// answers instead of proxying, so consuming it is safe) and returns the
+// Accept-Language value, if any.
+func httpAcceptLanguage(r *bufio.Reader) string {
+	for i := 0; i < 128; i++ { // bounded: never spin on a hostile head
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return ""
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			return "" // end of headers
+		}
+		name, val, ok := strings.Cut(line, ":")
+		if ok && strings.EqualFold(strings.TrimSpace(name), "Accept-Language") {
+			return strings.TrimSpace(val)
+		}
+	}
+	return ""
 }
 
 func (p *Proxy) pipe(client net.Conn, route vmprotocol.RouteKey) {

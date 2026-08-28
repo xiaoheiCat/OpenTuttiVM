@@ -89,7 +89,11 @@ document.getElementById("f").addEventListener("submit", async (e) => {
     });
     const data = await res.json();
     if (!res.ok) { msg.textContent = data.error || copy.joinError; return; }
-    window.location.href = "open-tutti://join?server=" + encodeURIComponent(server) + "&ticket=" + encodeURIComponent(data.ticket);
+    // The desktop registers the "tutti" scheme; room id rides along
+    // because join redemption requires it.
+    window.location.href = "tutti://join?server=" + encodeURIComponent(server) +
+      "&room=" + encodeURIComponent(data.room_id) +
+      "&ticket=" + encodeURIComponent(data.ticket);
   } catch (err) {
     msg.textContent = copy.networkError;
   }

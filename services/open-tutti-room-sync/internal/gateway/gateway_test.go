@@ -64,9 +64,17 @@ func TestDeviceAddressRules(t *testing.T) {
 	if len(res.Candidates) != 2 {
 		t.Fatalf("candidates %+v", res.Candidates)
 	}
-	page := SessionSelectorPage(res.Candidates)
+	page := SessionSelectorPage("zh-CN,zh;q=0.9,en;q=0.8", res.Candidates)
 	if !strings.Contains(page, "http://a.anna.tutti:3000") || !strings.Contains(page, "http://b.anna.tutti:3000") {
 		t.Fatalf("selector page missing canonical links: %s", page)
+	}
+	// Localized copy negotiated from Accept-Language, and participant-
+	// controlled labels stay escaped.
+	if !strings.Contains(page, "选择会话") || strings.Contains(page, "<script>") {
+		t.Fatalf("selector page localization/escaping: %s", page)
+	}
+	if en := SessionSelectorPage("", res.Candidates); !strings.Contains(en, "Choose a session") {
+		t.Fatalf("english fallback: %s", en)
 	}
 
 	// No listener: unresolved.

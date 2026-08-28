@@ -18,6 +18,7 @@ import (
 	"github.com/coder/websocket"
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
+	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
 )
 
 // Server identifies one self-hosted server.
@@ -129,6 +130,11 @@ type Session struct {
 	conn   *websocket.Conn
 	client *Client
 
+	// SessionLabel is the human-facing label of this device's session
+	// (default "main"); the registry id is "sess-"+label, matching the
+	// gateway convention. Set before announcing ports.
+	SessionLabel string
+
 	// OnEvent receives every server event (operations, presence, conflicts,
 	// ports, room ending).
 	OnEvent func(ev vmprotocol.Event)
@@ -156,6 +162,10 @@ func (c *Client) Dial(ctx context.Context) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Accepted text patches carry up to 8 MiB of inserted text; the
+	// library's 32 KiB default would close the socket on every large
+	// broadcast and force the whole room to resync.
+	conn.SetReadLimit(int64(vmsync.MaxTextFile) + 64<<10)
 	sctx, cancel := context.WithCancel(ctx)
 	return &Session{conn: conn, client: c, ctx: sctx, cancel: cancel}, nil
 }
@@ -229,6 +239,18 @@ func (s *Session) Submit(env vmprotocol.Envelope) error {
 // AnnouncePorts publishes a listening port for a local session.
 func (s *Session) AnnouncePorts(p vmprotocol.PortsChangedPayload) error {
 	msg, err := json.Marshal(map[string]any{"type": "ports", "ports": p})
+	if err != nil {
+		return err
+	}
+	return s.conn.Write(s.ctx, websocket.MessageText, msg)
+}
+
+// ResolveBarrier lifts a conflict barrier this session was assigned to
+// resolve (sent after the resolver's fix committed).
+func (s *Session) ResolveBarrier(path string) error {
+	msg, err := json.Marshal(map[string]any{
+		"type": "conflict_resolved", "path": path, "agent_session": s.SessionLabel,
+	})
 	if err != nil {
 		return err
 	}

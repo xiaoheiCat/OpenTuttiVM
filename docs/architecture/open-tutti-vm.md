@@ -113,7 +113,13 @@ OS store), device-level addresses re-resolve at connect time with the
 selector on ambiguity, and the yamux tunnel serves **both** legs —
 outbound dials for locally originated connections and inbound forwards
 that dial the owning session container on the room network
-(`OPEN_TUTTI_SESSION_DIAL`, default `agent-<session>`).
+(`OPEN_TUTTI_SESSION_DIAL`, default `agent-<session>`). The room compose
+advertises what each session serves through `OPEN_TUTTI_SESSION_PORTS`
+(under `OPEN_TUTTI_SESSION_LABEL`, default `main`): without an
+announcement the preview registry stays empty and the relay refuses every
+target by design. Share pages hand off through the desktop-registered
+`tutti://join` deep link carrying server, room id, and one-time ticket —
+the password never appears in any URL.
 
 ## Agent Borrowing (v1, first-class)
 
