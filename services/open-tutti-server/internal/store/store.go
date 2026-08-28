@@ -87,6 +87,9 @@ type Repository interface {
 	GetRoom(ctx context.Context, id string) (Room, error)
 	GetRoomByShareID(ctx context.Context, shareID string) (Room, error)
 	UpdateRoom(ctx context.Context, room Room) error
+	// UpdateRoomPassword changes only the password hash (rotation races
+	// lifecycle transitions; a full-record update would clobber them).
+	UpdateRoomPassword(ctx context.Context, roomID, passwordHash string) error
 	ListActiveRooms(ctx context.Context) ([]Room, error)
 
 	// Devices

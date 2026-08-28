@@ -201,7 +201,9 @@ jobs:
             gh release upload "$TAG" release-assets/* --clobber
           else
             # --target pins the release to the commit this workflow
-            # validated, even if main advances mid-build.
+            # validated, even if main advances mid-build. Every push to
+            # main promotes this release to GitHub Latest by design
+            # (repository owner's explicit choice).
             gh release create "$TAG" \
               --target "$GITHUB_SHA" \
               --title "OpenTuttiVM $TAG" \

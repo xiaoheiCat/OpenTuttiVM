@@ -98,7 +98,11 @@ func (c *Client) pump() {
 		}
 		if res.Push {
 			if res.Type == "invalidate" && c.OnInvalidate != nil {
-				c.OnInvalidate(res.Path)
+				// Dispatch OFF the pump: the callback takes inode locks,
+				// and a pending read can hold the same lock while it
+				// waits for a response only this loop can deliver — a
+				// synchronous call would deadlock the connection.
+				go c.OnInvalidate(res.Path)
 			}
 			continue
 		}

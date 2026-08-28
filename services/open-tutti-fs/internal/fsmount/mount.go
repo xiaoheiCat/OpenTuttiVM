@@ -151,7 +151,7 @@ func (n *roomNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 	}
 	out.Attr.Mode = fileMode | syscall.S_IFREG
 	out.Attr.Size = uint64(st.Size)
-	child := &fileNode{client: n.client, path: path, srvMode: fileMode}
+	child := &fileNode{client: n.client, path: path, srvMode: fileMode, srvSize: st.Size}
 	return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFREG}), 0
 }
 
@@ -210,10 +210,40 @@ func (n *roomNode) Rename(ctx context.Context, name string, newParent fs.InodeEm
 	if !ok {
 		return syscall.EIO
 	}
-	if err := n.client.Rename(from, np.path(newName)); err != nil {
+	to := np.path(newName)
+	if err := n.client.Rename(from, to); err != nil {
 		return syscall.EIO
 	}
+	// The FUSE inode survives its rename, but fileNode captured its
+	// path at lookup/creation: without a rekey, later reads/flushes/
+	// chmods target the OLD path (or an unrelated replacement there).
+	if child := n.GetChild(name); child != nil {
+		if fn, ok := child.Operations().(*fileNode); ok {
+			fn.mu.Lock()
+			if fn.path == from {
+				fn.path = to
+			}
+			fn.mu.Unlock()
+		} else {
+			rekeyTree(child, from, to)
+		}
+	}
 	return 0
+}
+
+// rekeyTree rewrites every descendant fileNode's stored path after a
+// directory rename (children keyed by name under the moved inode).
+func rekeyTree(ino *fs.Inode, oldPrefix, newPrefix string) {
+	for name, child := range ino.Children() {
+		oldPath := oldPrefix + "/" + name
+		newPath := newPrefix + "/" + name
+		if fn, ok := child.Operations().(*fileNode); ok && fn.path == oldPath {
+			fn.mu.Lock()
+			fn.path = newPath
+			fn.mu.Unlock()
+		}
+		rekeyTree(child, oldPath, newPath)
+	}
 }
 
 // fileNode buffers one open file; flush submits the whole content.
@@ -235,6 +265,10 @@ type fileNode struct {
 	// metadata (executable scripts stay executable in every mount;
 	// without it Getattr would flatten everything to 0644).
 	srvMode uint32
+	// srvSize is the authoritative size from Lookup: a looked-up but
+	// unread file has no buffer, and Getattr must not report an empty
+	// file to tools that only stat it.
+	srvSize int64
 }
 
 // invalidate drops the cached content so the next read reloads the
@@ -333,7 +367,13 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 func (f *fileNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out.Attr.Size = uint64(len(f.buffer))
+	if f.loaded {
+		out.Attr.Size = uint64(len(f.buffer))
+	} else {
+		// Looked up but not read (or invalidated): report the
+		// authoritative size rather than pretending the file is empty.
+		out.Attr.Size = uint64(f.srvSize)
+	}
 	switch {
 	case f.mode != 0:
 		out.Attr.Mode = f.mode
@@ -351,16 +391,41 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 	// changes ride the next flush's metadata.
 	if sz, ok := in.GetSize(); ok {
 		f.mu.Lock()
+		if !f.loaded {
+			// Standalone truncate(2) on an unopened node: load the
+			// authoritative content first — resizing an empty buffer
+			// would fabricate zeros or drop real bytes.
+			content, err := f.client.Read(f.path)
+			if err != nil {
+				f.mu.Unlock()
+				return syscall.EIO
+			}
+			f.buffer = content
+			f.loaded = true
+		}
 		f.dirty = true
 		switch {
-		case int(sz) < len(f.buffer):
+		case int64(sz) < int64(len(f.buffer)):
 			f.buffer = append([]byte(nil), f.buffer[:sz]...)
-		case int(sz) > len(f.buffer):
+		case int64(sz) > int64(len(f.buffer)):
 			grown := make([]byte, sz)
 			copy(grown, f.buffer)
 			f.buffer = grown
 		}
+		f.srvSize = int64(sz)
+		content := append([]byte(nil), f.buffer...)
 		f.mu.Unlock()
+		// Without an open handle there is no guaranteed later flush:
+		// submit the resize now or truncate(2) "succeeds" while the
+		// authoritative content never changes.
+		if fh == nil {
+			if err := f.client.Write(f.path, content); err != nil {
+				return syscall.EAGAIN
+			}
+			f.mu.Lock()
+			f.dirty = false
+			f.mu.Unlock()
+		}
 	}
 	if mode, ok := in.GetMode(); ok {
 		perms := mode & 0o7777

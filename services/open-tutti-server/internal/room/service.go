@@ -203,8 +203,10 @@ func (s *Service) RotatePassword(ctx context.Context, roomID, deviceID string) (
 	if err != nil {
 		return "", err
 	}
-	room.PasswordHash = hash
-	if err := s.repo.UpdateRoom(ctx, room); err != nil {
+	// Field-specific update: the Argon2id hash above took a while, and a
+	// full-record write would clobber a transfer/dissolution committed
+	// concurrently (stale owner, resurrected room).
+	if err := s.repo.UpdateRoomPassword(ctx, room.ID, hash); err != nil {
 		return "", err
 	}
 	return password, nil

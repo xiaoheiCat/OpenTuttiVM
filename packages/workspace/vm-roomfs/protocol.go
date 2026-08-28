@@ -111,6 +111,13 @@ func WriteFrame(w *bufio.Writer, header any, body []byte) error {
 	return err
 }
 
+// MaxBodyBytes bounds one framed body. Write bodies carry whole files
+// before the bridge converts them into 4 MiB CAS chunks — binaries may
+// legitimately exceed the old 64 MiB guard, so the v1 ceiling is
+// 256 MiB (Room FS is a container-internal socket, not an exposed
+// network boundary).
+const MaxBodyBytes = 256 << 20
+
 // ReadFrame reads one framed message into header (pointer) and returns the
 // raw body.
 func ReadFrame(r *bufio.Reader, header any) ([]byte, error) {
@@ -133,7 +140,7 @@ func ReadFrame(r *bufio.Reader, header any) ([]byte, error) {
 		return nil, err
 	}
 	n = binary.BigEndian.Uint32(lenBuf[:])
-	if n > 64<<20 {
+	if uint64(n) > MaxBodyBytes {
 		return nil, fmt.Errorf("frame body too large: %d", n)
 	}
 	body := make([]byte, n)

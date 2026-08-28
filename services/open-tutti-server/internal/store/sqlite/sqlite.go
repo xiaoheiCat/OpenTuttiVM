@@ -147,6 +147,15 @@ func (r *Repo) GetRoomByShareID(ctx context.Context, shareID string) (store.Room
 	return scanRoom(r.db.QueryRowContext(ctx, `SELECT `+roomCols+` FROM rooms WHERE share_id = ? AND dissolved_at IS NULL`, shareID))
 }
 
+// UpdateRoomPassword changes ONLY the password hash: a full-record
+// room update from a rotation racing a transfer/dissolution would write
+// the stale owner and lifecycle fields back over the newer state.
+func (r *Repo) UpdateRoomPassword(ctx context.Context, roomID, passwordHash string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE rooms SET password_hash=? WHERE id=?`, passwordHash, roomID)
+	return err
+}
+
 func (r *Repo) UpdateRoom(ctx context.Context, room store.Room) error {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE rooms SET password_hash=?, owner_device_id=?, dissolved_at=?, pending_transfer_to_device=?, share_revoked_at=? WHERE id=?`,
