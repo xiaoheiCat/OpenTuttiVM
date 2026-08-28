@@ -566,8 +566,24 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 	if !exists {
 		return &RejectionError{Reason: RejectInvalid}
 	}
-	if _, exists := w.files[r.NewPath]; exists {
-		return &RejectionError{Reason: RejectInvalid}
+	// POSIX replacement semantics: an ordinary rename over an existing
+	// FILE target replaces it atomically — editors' atomic-save relies
+	// on exactly that (write temp, rename over destination), and
+	// rejecting it made every save through the mount fail with EIO.
+	// A directory target, or a directory source over a file target,
+	// stays rejected (type conflicts are real).
+	if dst, exists := w.files[r.NewPath]; exists {
+		if dst.IsDir || f.IsDir {
+			return &RejectionError{Reason: RejectInvalid}
+		}
+		// Vacate the replaced entry BEFORE the moves below treat the
+		// destination as free; its OT context dies with it (the
+		// replacing file's history arrives under this rename).
+		w.untrackPath(r.NewPath)
+		delete(w.files, r.NewPath)
+		delete(w.history, r.NewPath)
+		delete(w.hashLog, r.NewPath)
+		delete(w.structSeqs, r.NewPath)
 	}
 	// Renaming a directory into its own subtree ("a" → "a/b") would let
 	// the freshly inserted destination match the source prefix again and

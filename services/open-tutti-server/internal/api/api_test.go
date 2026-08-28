@@ -335,12 +335,16 @@ func TestPreviewRouteResolutionRules(t *testing.T) {
 	var cands []byte
 	for i := 0; i < 50; i++ {
 		amb := routes("?device=dev_anna&port=3000")
-		if amb["resolved"] != false {
-			t.Fatalf("ambiguous device route resolved: %v", amb)
-		}
 		cands, _ = json.Marshal(amb["candidates"])
-		if strings.Contains(string(cands), "claude-a.annas-macbook-pro.tutti:3000") &&
-			strings.Contains(string(cands), "codex-b.annas-macbook-pro.tutti:3000") {
+		both := strings.Contains(string(cands), "claude-a.annas-macbook-pro.tutti:3000") &&
+			strings.Contains(string(cands), "codex-b.annas-macbook-pro.tutti:3000")
+		if both {
+			// Only a COMPLETE candidate set may be asserted ambiguous:
+			// with just the first announcement processed, resolved=true
+			// for the sole candidate is correct behavior, not a bug.
+			if amb["resolved"] != false {
+				t.Fatalf("ambiguous device route resolved: %v", amb)
+			}
 			break
 		}
 		time.Sleep(100 * time.Millisecond)

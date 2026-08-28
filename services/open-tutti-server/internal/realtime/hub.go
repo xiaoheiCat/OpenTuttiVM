@@ -234,6 +234,14 @@ func (h *Hub) Attach(c *Conn, admit func() error) error {
 // when this connection still owns the registration: a replacement that
 // attached first keeps its entry, its broadcasts, and its online state.
 func (h *Hub) Detach(c *Conn) {
+	// Unexpected business-socket loss must withdraw this device's
+	// announced routes immediately (leave and kick already do): stale
+	// /routes entries kept resolving .tutti names to an offline device
+	// until some explicit lifecycle event cleared them. Runs before the
+	// lock: DropDevice takes its own.
+	if h.previews != nil {
+		h.previews.DropDevice(c.RoomID, c.DeviceID)
+	}
 	h.mu.Lock()
 	registered := h.conns[c.RoomID] != nil && h.conns[c.RoomID][c.DeviceID] == c
 	if registered {

@@ -377,6 +377,15 @@ func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, _ 
 	// its ref row, delete the object, and leave this room holding a
 	// durable reference to missing content.
 	if err := s.repo.CASPublication(func() error {
+		// Room liveness recheck INSIDE the fence: an upload that
+		// authenticated before dissolution but reaches reference
+		// insertion afterwards would resurrect a reference for a room
+		// whose refs were already collected — the object then stays
+		// durably uncollectable while the request reports success.
+		if room, err := s.rooms.GetRoom(r.Context(), roomID); err != nil || room.DissolvedAt != nil {
+			writeErr(w, http.StatusConflict, "room already dissolved")
+			return fmt.Errorf("room dissolved during upload")
+		}
 		if err := s.cas.Put(hash, body); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return err

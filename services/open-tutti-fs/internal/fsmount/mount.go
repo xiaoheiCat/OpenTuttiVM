@@ -159,6 +159,21 @@ func (n *roomNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 	return 0
 }
 
+// Setattr forwards directory permission changes: directory modes are
+// carried by the protocol and snapshots, and without this hook a chmod
+// on a directory never reached RoomFS and silently stayed local.
+func (n *roomNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
+	if mode, ok := in.GetMode(); ok {
+		if err := n.client.Chmod(n.path(""), mode); err != nil {
+			return syscall.EIO
+		}
+		n.dirMode = mode
+		out.Attr.Mode = n.dirPerms() | syscall.S_IFDIR
+		return 0
+	}
+	return n.Getattr(ctx, fh, out)
+}
+
 // dirPerms returns the node's directory permission bits (0755 default).
 func (n *roomNode) dirPerms() uint32 {
 	if m := n.dirMode & 0o7777; m != 0 {

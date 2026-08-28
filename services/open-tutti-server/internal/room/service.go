@@ -510,6 +510,9 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 			}
 		}
 	}
+	if err := validateDevice(&device); err != nil {
+		return "", "", err
+	}
 	token, tokenHash, err := s.tokens.mint(room.ID, device.ID)
 	if err != nil {
 		return "", "", err
@@ -935,7 +938,11 @@ func (s *Service) authorizeMember(ctx context.Context, roomID, deviceID string) 
 	return room, m, nil
 }
 
-func (s *Service) upsertDevice(ctx context.Context, in DeviceInput) error {
+// validateDevice applies the required-field, id-format, and hostname
+// normalization rules; join must run them BEFORE minting or consuming a
+// ticket, or a dotted device id burns the one-time ticket on a token
+// the minter itself rejects as malformed.
+func validateDevice(in *DeviceInput) error {
 	if in.ID == "" || in.DisplayName == "" || in.PublicKey == "" {
 		return errors.New("device id, display name, and public key are required")
 	}
@@ -948,6 +955,13 @@ func (s *Service) upsertDevice(ctx context.Context, in DeviceInput) error {
 	}
 	if in.Hostname == "" {
 		in.Hostname = "device"
+	}
+	return nil
+}
+
+func (s *Service) upsertDevice(ctx context.Context, in DeviceInput) error {
+	if err := validateDevice(&in); err != nil {
+		return err
 	}
 	return s.repo.UpsertDevice(ctx, store.Device{
 		ID: in.ID, DisplayName: in.DisplayName, Hostname: in.Hostname,

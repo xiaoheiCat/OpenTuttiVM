@@ -12,6 +12,9 @@
 //	OPEN_TUTTI_TOKEN          room session token (required)
 //	OPEN_TUTTI_DEVICE_ID      this device's id (required)
 //	OPEN_TUTTI_POLICY         replica policy: lazy (default) | full
+//	OPEN_TUTTI_SEED_DIR       owner-only: seed an EMPTY room by
+//	                         submitting this directory tree through the
+//	                         normal OT path at startup (optional)
 //	OPEN_TUTTI_CACHE_DIR      CAS cache dir (default /data/cache on
 //	                         Linux, per-user cache dir on Windows)
 //	OPEN_TUTTI_FS_LISTEN      room FS protocol listen address (default
@@ -35,6 +38,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"os"
@@ -69,6 +73,7 @@ func main() {
 }
 
 func run() error {
+	seedDir := os.Getenv("OPEN_TUTTI_SEED_DIR")
 	serverURL := os.Getenv("OPEN_TUTTI_SERVER")
 	token := os.Getenv("OPEN_TUTTI_TOKEN")
 	deviceID := os.Getenv("OPEN_TUTTI_DEVICE_ID")
@@ -79,6 +84,8 @@ func run() error {
 	if policy != replica.Full {
 		policy = replica.Lazy
 	}
+	seeded := false
+	isOwner := false
 	cacheDir := os.Getenv("OPEN_TUTTI_CACHE_DIR")
 	if cacheDir == "" {
 		cacheDir = platformCacheDir()
@@ -108,7 +115,8 @@ func run() error {
 	// failure the final workspace would be unrecoverable. An explicit
 	// OPEN_TUTTI_POLICY still wins (operators can force lazy owners in
 	// throwaway rooms).
-	if os.Getenv("OPEN_TUTTI_POLICY") == "" && boot.OwnerDeviceID == deviceID {
+	isOwner = boot.OwnerDeviceID == deviceID
+	if os.Getenv("OPEN_TUTTI_POLICY") == "" && isOwner {
 		policy = replica.Full
 	}
 	mgr := replica.New(deviceID, cache, policy, c)
@@ -436,6 +444,17 @@ func run() error {
 			}
 		}
 		sessionRef.set(sess)
+		// Seed an EMPTY room from the owner's workspace directory: the
+		// shared mount must contain the workspace being shared, not
+		// start blank and later prune the owner's original files as
+		// "stale host state" at Apply-to-Workspace. Owner-only, runs
+		// once, only while the authoritative sequence is still zero.
+		if seedDir != "" && !seeded && isOwner && mgr.Replica.AppliedSeq == 0 {
+			if err := seedWorkspace(ctx, bridge, seedDir); err != nil {
+				fmt.Fprintf(os.Stderr, "room-sync: seed: %v\n", err)
+			}
+			seeded = true
+		}
 		// Announce this device's session ports so the preview registry
 		// (and through it /routes, the selector, and relay
 		// authorization) knows what the session serves. The room
@@ -729,4 +748,44 @@ func listenRoomFS(addr string) (net.Listener, error) {
 	}
 	os.Remove(addr)
 	return net.Listen("unix", addr)
+}
+
+// seedWorkspace submits an entire host directory tree into the empty
+// room through the normal OT path (creates, mkdirs, writes) so the
+// shared workspace starts as the owner's real workspace.
+func seedWorkspace(ctx context.Context, bridge *roomfsbridge.Handler, root string) error {
+	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		rel := strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
+		if rel == "" {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return bridge.Mkdir(rel, uint32(info.Mode().Perm()))
+		}
+		if err := bridge.Create(rel, uint32(info.Mode().Perm())); err != nil {
+			return err
+		}
+		content, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		if len(content) > vmsync.MaxTextFile {
+			// Oversized for the text lane; leave it out rather than
+			// fail the whole seed — the operator moves it via CAS
+			// tooling.
+			fmt.Fprintf(os.Stderr, "room-sync: seed: skip oversized %s\n", rel)
+			return nil
+		}
+		return bridge.Write(rel, content)
+	})
 }
