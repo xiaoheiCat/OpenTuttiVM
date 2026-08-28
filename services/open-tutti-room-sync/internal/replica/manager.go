@@ -159,11 +159,14 @@ func (m *Manager) WithState(fn func(state *vmsync.WorkspaceState)) {
 func (m *Manager) materializeLocked(path string) error {
 	if _, err := m.Replica.MaterializePath(path, m.Cache); err == nil {
 		return nil
-	} else if m.fetcher == nil || m.Policy != Full {
+	} else if m.fetcher == nil {
 		return err
 	}
-	// Content referenced but not cached: full replicas fetch through the
-	// server; lazy replicas surface the miss to the read path.
+	// Content referenced but not cached. Lazy policy defers bulk
+	// bootstrap materialization and ordinary reads already fetch on
+	// demand, but an authoritative text patch still needs its exact
+	// base: a lazy replica fetches this ONE file rather than failing
+	// incremental application and forcing a whole-tree bootstrap.
 	if _, err := m.readLocked(context.Background(), path); err != nil {
 		return err
 	}

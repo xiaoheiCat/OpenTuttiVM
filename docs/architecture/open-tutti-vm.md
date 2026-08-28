@@ -106,6 +106,16 @@ raw TCP refuses with guidance instead of random routing. Synthetic IPs
 come from 100.96.0.0/12 and never leave the room network. All cross-device
 traffic flows device → server → device over WebSocket + yamux.
 
+VIP binding is runtime-probed. Inside the room VM image the /12 block is
+configured on an adapter and per-host VIPs bind directly; on Linux
+without configuration the gateway sets `IP_FREEBIND` so the same VIPs
+still bind; on runtimes where neither works (plain containers without
+`NET_ADMIN`, stock macOS/Windows) the allocator falls back to shared
+loopback mode — DNS answers 127.0.0.1 for every `.tutti` host, one
+listener serves each port, and connections demultiplex by TLS SNI or
+the HTTP Host header (raw TCP without either works only on a
+single-host port).
+
 room-sync composes the whole surface in one process: a UDP DNS responder
 answers `*.tutti` with the allocator's VIPs, per-route VIP listeners
 terminate TLS with the room CA (exported under `OPEN_TUTTI_CA_DIR` for

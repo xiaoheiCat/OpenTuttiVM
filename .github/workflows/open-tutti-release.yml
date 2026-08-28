@@ -71,7 +71,17 @@ jobs:
           # Publication must not outrun native-Windows validation: the
           # windows room-sync artifact ships in the release, and the
           # separate push CI workflow cannot block this pipeline.
-          $mods = "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/..."
+          # PowerShell: an ARRAY splats into separate native arguments;
+          # a joined string would arrive as one malformed import path.
+          $mods = @(
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/..."
+          )
           go build $mods
           go vet $mods
           go test $mods

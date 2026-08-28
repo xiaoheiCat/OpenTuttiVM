@@ -514,7 +514,13 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 	if r.NewPath == r.OldPath || strings.HasPrefix(r.NewPath, r.OldPath+"/") {
 		return &RejectionError{Reason: RejectInvalid}
 	}
-	if w.pathTreeConflict(r.NewPath, f.IsDir) || w.ciConflict(r.NewPath) {
+	if w.pathTreeConflict(r.NewPath, f.IsDir) {
+		return &RejectionError{Reason: RejectInvalid}
+	}
+	// Case-insensitive collision, EXCLUDING the source entry itself: a
+	// case-only rename ("README" → "readme") occupies the same folded
+	// identity it already owns and creates no second entry.
+	if existing, ok := w.ciPaths[pathCIKey(r.NewPath)]; ok && existing != r.NewPath && existing != r.OldPath {
 		return &RejectionError{Reason: RejectInvalid}
 	}
 	w.files[r.NewPath] = f
@@ -546,7 +552,9 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 			if _, exists := w.files[moved]; exists {
 				return &RejectionError{Reason: RejectInvalid}
 			}
-			if w.ciConflict(moved) {
+			// Same case-only exclusion as the rename root: the moved
+			// descendant's own folded identity is not a collision.
+			if existing, ok := w.ciPaths[pathCIKey(moved)]; ok && existing != moved && existing != p {
 				return &RejectionError{Reason: RejectInvalid}
 			}
 		}

@@ -389,7 +389,9 @@ func (f *fileNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 	}
 	switch {
 	case f.mode != 0:
-		out.Attr.Mode = f.mode
+		// f.mode stores permission bits from Setattr: OR the regular
+		// file type back in, or st_mode loses its type after chmod.
+		out.Attr.Mode = (f.mode & 0o7777) | syscall.S_IFREG
 	case f.srvMode != 0:
 		out.Attr.Mode = f.srvMode | syscall.S_IFREG
 	default:

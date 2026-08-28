@@ -31,9 +31,8 @@ type RouteSource interface {
 	RoomRoutes(ctx context.Context) ([]vmprotocol.LiveRoute, error)
 }
 
-// routeBinding is one bound virtual address.
-type routeBinding struct {
-	ln net.Listener
+// routeTarget is one route's identity within a binding.
+type routeTarget struct {
 	// route is the session-level target for session bindings, and the
 	// device/port template for device-level bindings.
 	route vmprotocol.RouteKey
@@ -44,6 +43,17 @@ type routeBinding struct {
 	// change while the listener lives.
 	deviceLevel bool
 	deviceSlug  string
+}
+
+// routeBinding is one bound address. VIP mode binds one address per
+// .tutti host and carries a single target. Shared mode (reserved block
+// unavailable: plain containers, stock macOS/Windows) binds 127.0.0.1
+// per PORT and carries every host of that port, demultiplexed by TLS
+// SNI or the HTTP Host header.
+type routeBinding struct {
+	ln     net.Listener
+	target *routeTarget
+	shared map[string]*routeTarget
 }
 
 // Proxy owns the .tutti virtual-network listeners.
@@ -76,29 +86,69 @@ func NewProxy(vips *VIPAllocator, dialer TunneledDialer, routes RouteSource, loo
 		vips: vips, dialer: dialer, routes: routes, lookup: lookup, ca: ca,
 		roomID: roomID, deviceID: deviceID, log: log,
 		listeners: map[string]*routeBinding{},
-		listen:    func(addr string) (net.Listener, error) { return net.Listen("tcp", addr) },
+		listen: func(addr string) (net.Listener, error) {
+			if vips.NeedsFreebind() {
+				// Linux containers: claim the reserved address without
+				// any interface configuration.
+				return freebindListen(addr)
+			}
+			return net.Listen("tcp", addr)
+		},
 	}
 }
 
 // Sync reconciles listeners with the room's live routes: one listener per
 // session address, plus one per distinct device address so short names
-// work. Called on ports_changed events and periodically.
+// work. VIP mode gives every host its own address; shared mode collapses
+// hosts onto 127.0.0.1 per port. Called on ports_changed events and
+// periodically.
 func (p *Proxy) Sync(ctx context.Context) error {
 	live, err := p.routes.RoomRoutes(ctx)
 	if err != nil {
 		return err
 	}
+	sharedMode := p.vips.Shared()
 	want := map[string]*routeBinding{}
+	addWant := func(host string, port int, t *routeTarget) {
+		var addr string
+		if sharedMode {
+			addr = net.JoinHostPort(sharedAddr.String(), fmt.Sprintf("%d", port))
+		} else {
+			h, err := vmprotocol.ParseTuttiHost(host)
+			if err != nil {
+				return // malformed .tutti host cannot own an address
+			}
+			addr = net.JoinHostPort(p.vips.Assign(h).String(), fmt.Sprintf("%d", port))
+		}
+		b, ok := want[addr]
+		if !ok {
+			b = &routeBinding{}
+			if sharedMode {
+				b.shared = map[string]*routeTarget{}
+			}
+			want[addr] = b
+		}
+		if sharedMode {
+			// First session target of the port doubles as the raw-TCP
+			// fallback (no SNI/Host to demultiplex with).
+			if _, exists := b.shared[host]; !exists {
+				b.shared[host] = t
+			}
+			if b.target == nil {
+				b.target = t
+			}
+			return
+		}
+		if b.target == nil {
+			b.target = t
+		}
+	}
 	for _, r := range live {
 		if r.SessionID == "" || r.Port == 0 {
 			continue
 		}
 		sessHost := vmprotocol.TuttiHost{Device: p.slugOf(r), Session: strings.TrimPrefix(r.SessionID, "sess-")}
-		b := &routeBinding{
-			route: r.RouteKey,
-			host:  sessHost.String(),
-		}
-		want[net.JoinHostPort(p.vips.Assign(sessHost).String(), fmt.Sprintf("%d", r.Port))] = b
+		addWant(sessHost.String(), r.Port, &routeTarget{route: r.RouteKey, host: sessHost.String()})
 
 		// Device-level short address (slug.tutti:port): re-resolve per
 		// connection; ambiguity renders the H5 selector over HTTP(S).
@@ -106,12 +156,9 @@ func (p *Proxy) Sync(ctx context.Context) error {
 		// listeners bind.
 		if p.lookup != nil {
 			devHost := vmprotocol.TuttiHost{Device: p.slugOf(r)}
-			addr := net.JoinHostPort(p.vips.Assign(devHost).String(), fmt.Sprintf("%d", r.Port))
-			if _, taken := want[addr]; !taken {
-				want[addr] = &routeBinding{
-					route: r.RouteKey, host: devHost.String(), deviceLevel: true, deviceSlug: p.slugOf(r),
-				}
-			}
+			addWant(devHost.String(), r.Port, &routeTarget{
+				route: r.RouteKey, host: devHost.String(), deviceLevel: true, deviceSlug: p.slugOf(r),
+			})
 		}
 	}
 
@@ -135,7 +182,7 @@ func (p *Proxy) Sync(ctx context.Context) error {
 		b.ln = ln
 		p.listeners[addr] = b
 		go p.accept(b)
-		p.log.Info("tutti route live", "addr", addr, "host", b.host, "session", b.route.SessionID, "port", b.route.Port)
+		p.log.Info("tutti route live", "addr", addr, "host", b.target.host, "session", b.target.route.SessionID, "port", b.target.route.Port)
 	}
 	return nil
 }
@@ -188,11 +235,15 @@ func (p *Proxy) accept(b *routeBinding) {
 
 // handle serves one virtual-address connection: optional TLS termination,
 // connect-time device-address resolution with the H5 selector on
-// ambiguity, then a tunnel pipe to the owning session.
+// ambiguity, then a tunnel pipe to the owning session. Shared-mode
+// listeners demultiplex the port's hosts by TLS SNI, then by the HTTP
+// Host header.
 func (p *Proxy) handle(conn net.Conn, b *routeBinding) {
 	defer conn.Close()
 	client := &bufferedConn{Conn: conn, r: bufio.NewReader(conn)}
 
+	// SNI seen during the handshake selects the shared-mode target.
+	sniHost := ""
 	// TLS ClientHello starts with 0x16; the room CA terminates it so
 	// .tutti names get trusted certificates inside room runtimes.
 	if head, err := client.r.Peek(1); err == nil && head[0] == 0x16 && p.ca != nil {
@@ -201,7 +252,10 @@ func (p *Proxy) handle(conn net.Conn, b *routeBinding) {
 			GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 				host := hello.ServerName
 				if host == "" {
-					host = b.host
+					host = b.target.host
+				}
+				if host != "" {
+					sniHost = strings.ToLower(host)
 				}
 				cert, err := p.ca.LeafFor(strings.ToLower(host))
 				if err != nil {
@@ -225,9 +279,17 @@ func (p *Proxy) handle(conn net.Conn, b *routeBinding) {
 		client = &bufferedConn{Conn: tlsConn, r: bufio.NewReader(tlsConn)}
 	}
 
-	route := b.route
-	if b.deviceLevel {
-		res, err := Resolve(p.lookup, fmt.Sprintf("%s:%d", b.host, b.route.Port))
+	t := b.target
+	if b.shared != nil {
+		t = p.pickShared(client, b, sniHost)
+		if t == nil {
+			return
+		}
+	}
+
+	route := t.route
+	if t.deviceLevel {
+		res, err := Resolve(p.lookup, fmt.Sprintf("%s:%d", t.host, t.route.Port))
 		if err != nil || res.SessionID == "" {
 			// Ambiguous occupancy: HTTP(S) callers get the H5 picker
 			// with the live candidates; raw TCP fails fast.
@@ -235,12 +297,87 @@ func (p *Proxy) handle(conn net.Conn, b *routeBinding) {
 				p.serveSelector(client, res.Candidates)
 				return
 			}
-			p.log.Warn("tutti device address unresolved", "host", b.host, "port", b.route.Port, "err", err)
+			p.log.Warn("tutti device address unresolved", "host", t.host, "port", t.route.Port, "err", err)
 			return
 		}
 		route.SessionID = res.SessionID
 	}
 	p.pipe(client, route)
+}
+
+// pickShared selects the shared-mode target for one connection: SNI when
+// TLS carried it, else the HTTP Host header. Plain-TCP connections with
+// no host identity fall back to the port's sole target, or fail when the
+// port genuinely multiplexes several hosts.
+func (p *Proxy) pickShared(client *bufferedConn, b *routeBinding, sniHost string) *routeTarget {
+	if t, ok := b.shared[sniHost]; ok && sniHost != "" {
+		return t
+	}
+	if host := httpHostHeader(client); host != "" {
+		if t, ok := b.shared[strings.ToLower(host)]; ok {
+			return t
+		}
+		// Port suffix in the Host header ("host:3000") is not part of
+		// the registered key.
+		if bare, _, ok := strings.Cut(host, ":"); ok {
+			if t, found := b.shared[strings.ToLower(bare)]; found {
+				return t
+			}
+		}
+	}
+	if len(b.shared) == 1 {
+		for _, t := range b.shared {
+			return t
+		}
+	}
+	p.log.Warn("tutti shared listener cannot identify host (no SNI/Host header) and port serves multiple hosts")
+	return nil
+}
+
+// httpHostHeader peeks the HTTP request head for the Host header WITHOUT
+// consuming it — the request still proxies downstream after target
+// selection. The head may straddle TCP segments: Peek(n) blocks for the
+// missing bytes, bounded by a read deadline (restored for the pipe).
+func httpHostHeader(c *bufferedConn) string {
+	r := c.r
+	if !isHTTP(r) {
+		return ""
+	}
+	c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	defer c.SetReadDeadline(time.Time{})
+	for i := 0; i < 8192; i++ {
+		buf, err := r.Peek(r.Buffered())
+		if err != nil && r.Buffered() == 0 {
+			return ""
+		}
+		head := string(buf)
+		done := strings.Contains(head, "\r\n\r\n") || strings.Contains(head, "\n\n")
+		if host, ok := hostLine(head); ok {
+			return host
+		}
+		if done {
+			return "" // full head buffered, no Host line
+		}
+		if _, err := r.Peek(r.Buffered() + 1); err != nil {
+			return "" // peer closed / deadline: work with what arrived
+		}
+	}
+	return ""
+}
+
+func hostLine(head string) (string, bool) {
+	for i := 0; i < 128; i++ {
+		line, rest, more := strings.Cut(head, "\n")
+		head = rest
+		name, val, colon := strings.Cut(strings.TrimRight(line, "\r"), ":")
+		if colon && strings.EqualFold(strings.TrimSpace(name), "Host") {
+			return strings.TrimSpace(val), true
+		}
+		if !more {
+			return "", false
+		}
+	}
+	return "", false
 }
 
 // serveSelector renders the localized H5 picker for an ambiguous device

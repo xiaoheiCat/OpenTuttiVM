@@ -106,6 +106,11 @@ func run() error {
 		return err
 	}
 	vips := gateway.NewVIPAllocator()
+	// Decide the addressing mode BEFORE any assignment: inside the room
+	// VM image the 100.96/12 block is configured and real VIPs bind; on
+	// plain containers or Windows runtimes it is not, and listeners
+	// would fail with EADDRNOTAVAIL — fall back to 127.127/16.
+	vips.Probe()
 
 	// The room CA cert is exported for the runtime to inject into the
 	// Tutti Browser and session containers (never the host OS store).

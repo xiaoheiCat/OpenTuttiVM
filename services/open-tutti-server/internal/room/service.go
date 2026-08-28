@@ -354,6 +354,14 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 		// an existing device id.
 		device.PublicKey = existing.PublicKeyPEM
 	}
+	// Serialize with every lifecycle mutation (dissolution and transfer
+	// run under s.mu): a dissolution committing between the ticket
+	// consumption and the membership insert would delete the room's
+	// memberships and let this insert recreate one for a dissolved
+	// room — a token that still authenticates routes/CAS/tunnels after
+	// the room ended.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	room, err := s.repo.GetRoom(ctx, rec.RoomID)
 	if err != nil {
 		return "", "", err

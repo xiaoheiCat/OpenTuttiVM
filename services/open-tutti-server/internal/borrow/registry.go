@@ -8,6 +8,7 @@ package borrow
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
@@ -218,6 +219,13 @@ func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID s
 	if commandID != "" {
 		if borrower, ok := r.commandBorrowers[roomID+"\x00"+agentInstanceID+"\x00"+commandID]; ok {
 			operator = borrower
+		} else {
+			// Unknown NONEMPTY command id fails closed: the mapping may
+			// have aged out of the bounded FIFO while another borrower
+			// took over the agent, and the LastBorrower fallback would
+			// route this prompt (and its decision authority) to the
+			// wrong participant. Only legacy empty ids fall back.
+			return "", errors.New("unknown borrow command for approval routing")
 		}
 	}
 	if operator == "" {
@@ -275,4 +283,42 @@ func (r *Registry) ClearRoom(roomID string) {
 			delete(r.approvals, id)
 		}
 	}
+}
+
+// DropDevice removes every agent a departing device owns — kick or
+// leave — and returns one revocation payload per shared agent so the
+// caller can broadcast them. Without this, remaining members could keep
+// commanding agents whose owner is gone, and ghost approvals/operators
+// would persist until the whole room dissolved.
+func (r *Registry) DropDevice(roomID, ownerDeviceID string) []vmprotocol.BorrowRevokedPayload {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var revoked []vmprotocol.BorrowRevokedPayload
+	for id, inst := range r.agents[roomID] {
+		if inst.OwnerDeviceID != ownerDeviceID {
+			continue
+		}
+		inst.LeaseGeneration++
+		inst.Shared = false
+		inst.LastBorrower = ""
+		revoked = append(revoked, vmprotocol.BorrowRevokedPayload{
+			AgentInstanceID: inst.ID, Reason: "owner_left", FinalGeneration: inst.LeaseGeneration,
+		})
+		delete(r.agents[roomID], id)
+	}
+	for key, ap := range r.approvals {
+		if ap.roomID == roomID && ap.agentOwner == ownerDeviceID {
+			delete(r.approvals, key)
+		}
+	}
+	for key := range r.commandBorrowers {
+		// key = roomID \x00 agentInstanceID \x00 commandID
+		parts := strings.SplitN(key, "\x00", 3)
+		if len(parts) == 3 && parts[0] == roomID {
+			if inst := r.agents[roomID][parts[1]]; inst == nil || inst.OwnerDeviceID == ownerDeviceID {
+				delete(r.commandBorrowers, key)
+			}
+		}
+	}
+	return revoked
 }
