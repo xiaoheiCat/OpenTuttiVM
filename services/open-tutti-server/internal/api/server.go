@@ -395,7 +395,7 @@ func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request, roomID, _ 
 		for _, e := range s.previews.RoomSessions(roomID) {
 			routes = append(routes, map[string]any{
 				"device_id": e.DeviceID, "session_id": e.SessionID, "port": e.Port,
-				"canonical_host": canonicalHost(e),
+				"device_slug": e.DeviceSlug, "canonical_host": canonicalHost(e),
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"routes": routes})

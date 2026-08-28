@@ -6,10 +6,13 @@ package roomfsbridge
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
@@ -44,7 +47,13 @@ type Handler struct {
 	deviceID  string
 	sessionID string
 	opCounter int
-	inval     func(path string)
+	// bootID makes operation ids restart-unique: the server
+	// deduplicates by (AuthorDeviceID, OperationID), so a restarted
+	// room-sync replaying "sess-main-1" could otherwise receive the
+	// pre-restart operation's acknowledgement and report success
+	// without applying the requested mutation.
+	bootID string
+	inval  func(path string)
 	// resolverDuty marks paths whose conflict barrier assigned THIS
 	// session to resolve; the next accepted operation on the path lifts
 	// the fence (without an explicit resolve, the first conflict fences
@@ -52,12 +61,23 @@ type Handler struct {
 	resolverDuty map[string]bool
 }
 
+// randomBootID returns a per-process random suffix for operation ids.
+func randomBootID() string {
+	var b [6]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// Crypto failure degrades to a time-based component: still
+		// unique across restarts in practice.
+		return fmt.Sprintf("t%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b[:])
+}
+
 // New wires the bridge. inval (optional) is invoked with each changed path
 // so the host broadcasts invalidations to connected mounts.
 func New(mgr *replica.Manager, submitter Submitter, uploader ChunkUploader, deviceID, sessionID string, inval func(path string)) *Handler {
 	return &Handler{
 		mgr: mgr, submitter: submitter, uploader: uploader,
-		deviceID: deviceID, sessionID: sessionID, inval: inval,
+		deviceID: deviceID, sessionID: sessionID, bootID: randomBootID(), inval: inval,
 		resolverDuty: map[string]bool{},
 	}
 }
@@ -92,7 +112,7 @@ func (h *Handler) nextOpID() string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.opCounter++
-	return fmt.Sprintf("%s-%d", h.sessionID, h.opCounter)
+	return fmt.Sprintf("%s-%s-%d", h.sessionID, h.bootID, h.opCounter)
 }
 
 // Stat implements roomfs.Handler.
@@ -184,7 +204,7 @@ func (h *Handler) Write(path string, content []byte) error {
 	// locked snapshot: a remote operation landing between separate reads
 	// would splice stale offsets onto a fresh revision's hash and seq.
 	old, base, baseSeq, _ := h.mgr.PrepareWrite(context.Background(), path)
-	op, err := vmsync.ConvertChange(h.nextOpID(), path, base, old, content,
+	op, err := vmsync.ConvertChange(h.nextOpID(), path, base, h.mgr.TrackedAsBlob(path), old, content,
 		func(manifest vmcas.Manifest, chunks [][]byte) error {
 			if h.uploader == nil {
 				return fmt.Errorf("no chunk uploader configured")

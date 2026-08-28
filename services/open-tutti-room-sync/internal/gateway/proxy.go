@@ -28,7 +28,7 @@ type TunneledDialer interface {
 // RouteSource lists every live route in the room so the proxy can bind
 // listeners for the virtual addresses it owns.
 type RouteSource interface {
-	RoomRoutes(ctx context.Context) ([]vmprotocol.RouteKey, error)
+	RoomRoutes(ctx context.Context) ([]vmprotocol.LiveRoute, error)
 }
 
 // routeBinding is one bound virtual address.
@@ -95,7 +95,7 @@ func (p *Proxy) Sync(ctx context.Context) error {
 		}
 		sessHost := vmprotocol.TuttiHost{Device: p.slugOf(r), Session: strings.TrimPrefix(r.SessionID, "sess-")}
 		b := &routeBinding{
-			route: r,
+			route: r.RouteKey,
 			host:  sessHost.String(),
 		}
 		want[net.JoinHostPort(p.vips.Assign(sessHost).String(), fmt.Sprintf("%d", r.Port))] = b
@@ -109,8 +109,7 @@ func (p *Proxy) Sync(ctx context.Context) error {
 			addr := net.JoinHostPort(p.vips.Assign(devHost).String(), fmt.Sprintf("%d", r.Port))
 			if _, taken := want[addr]; !taken {
 				want[addr] = &routeBinding{
-					route: vmprotocol.RouteKey{RoomID: r.RoomID, DeviceID: r.DeviceID, Port: r.Port},
-					host:  devHost.String(), deviceLevel: true, deviceSlug: p.slugOf(r),
+					route: r.RouteKey, host: devHost.String(), deviceLevel: true, deviceSlug: p.slugOf(r),
 				}
 			}
 		}
@@ -162,7 +161,15 @@ func (p *Proxy) LiveAddrs() []string {
 	return out
 }
 
-func (p *Proxy) slugOf(r vmprotocol.RouteKey) string {
+// slugOf returns the .tutti hostname identity for a route: the
+// SERVER-provided slug when the route list carries one (raw device ids
+// can differ from the enrolled-hostname slugs canonical hosts use);
+// otherwise derive locally (tests/dev without the slug field). "self" is
+// the conventional local shortcut for the caller's own device.
+func (p *Proxy) slugOf(r vmprotocol.LiveRoute) string {
+	if r.DeviceSlug != "" {
+		return r.DeviceSlug
+	}
 	if r.DeviceID == p.deviceID {
 		return "self"
 	}

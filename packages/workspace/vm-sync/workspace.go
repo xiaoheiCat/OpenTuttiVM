@@ -158,7 +158,16 @@ func (w *WorkspaceState) Seq() uint64 { return w.seq }
 // base for a whole-file rewrite of path: the manifest hash while the file
 // is blob-tracked, the raw content hash while it is text-tracked.
 func (w *WorkspaceState) CurrentBaseHash(path string) string {
-	if f, ok := w.files[path]; ok && f.Manifest != "" {
+	f, ok := w.files[path]
+	if !ok {
+		return ""
+	}
+	// The base identity depends on the tracked kind: blob replacements
+	// compare against the manifest hash, but the text engine compares
+	// patches against ContentHash(content) — a bootstrapped text entry
+	// retains its snapshot manifest, and returning it here would reject
+	// the first write to every restored text file as base_mismatch.
+	if f.Kind == kindBlob && f.Manifest != "" {
 		return f.Manifest
 	}
 	if c, ok := w.CurrentContent(path); ok {
@@ -520,7 +529,10 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 	if f.IsDir {
 		// A nonempty directory rename moves every descendant with it;
 		// leaving them under the old prefix corrupts snapshots and
-		// Apply-to-Workspace output.
+		// Apply-to-Workspace output. Preflight every moved destination:
+		// an implied "dst/x" colliding with an UNRELATED existing entry
+		// (no explicit "dst" to have rejected it) would otherwise be
+		// silently overwritten, losing valid authoritative content.
 		prefix := r.OldPath + "/"
 		descendants := make([]string, 0, 8)
 		for p := range w.files {
@@ -529,6 +541,15 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 			}
 		}
 		sort.Strings(descendants) // deterministic replay across replicas
+		for _, p := range descendants {
+			moved := r.NewPath + p[len(r.OldPath):]
+			if _, exists := w.files[moved]; exists {
+				return &RejectionError{Reason: RejectInvalid}
+			}
+			if w.ciConflict(moved) {
+				return &RejectionError{Reason: RejectInvalid}
+			}
+		}
 		for _, p := range descendants {
 			moved := r.NewPath + p[len(r.OldPath):]
 			w.files[moved] = w.files[p]

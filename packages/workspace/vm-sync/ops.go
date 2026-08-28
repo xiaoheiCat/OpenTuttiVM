@@ -15,14 +15,17 @@ import (
 // optimistic version check. oldBaseHash is the hash the authoritative
 // state currently expects for the path — the raw content hash while the
 // file is text-tracked, the manifest hash once blob-tracked
-// (WorkspaceState.CurrentBaseHash) — so a text→blob transition keeps the
-// base the server will compare against. ChunkSink uploads blob chunks
+// (WorkspaceState.CurrentBaseHash). trackedAsBlob reports that tracked
+// kind: a blob-tracked entry stays blob-tracked even when its new
+// content is small valid UTF-8, because the authoritative engine rejects
+// text patches against non-text entries (the file would become
+// unwritable through ordinary edits). ChunkSink uploads blob chunks
 // (and the manifest object) before the operation is submitted.
-func ConvertChange(id, path, oldBaseHash string, oldContent, newContent []byte, chunkSink func(manifest vmcas.Manifest, chunks [][]byte) error) (vmprotocol.FileOperation, error) {
+func ConvertChange(id, path, oldBaseHash string, trackedAsBlob bool, oldContent, newContent []byte, chunkSink func(manifest vmcas.Manifest, chunks [][]byte) error) (vmprotocol.FileOperation, error) {
 	if bytes.Equal(oldContent, newContent) {
 		return vmprotocol.FileOperation{}, fmt.Errorf("no content change on %s", path)
 	}
-	if !isTextClass(oldContent, newContent) {
+	if trackedAsBlob || !isTextClass(oldContent, newContent) {
 		return blobReplace(id, path, oldBaseHash, newContent, chunkSink)
 	}
 	base := oldBaseHash

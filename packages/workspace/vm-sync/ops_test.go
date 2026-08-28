@@ -13,7 +13,7 @@ func TestConvertChangeTextBecomesTextPatch(t *testing.T) {
 	old := []byte("func main() {\n\tfmt.Println(\"hello\")\n}\n")
 	next := []byte("func main() {\n\tfmt.Println(\"hello, room\")\n\tfmt.Println(\"bye\")\n}\n")
 
-	op, err := ConvertChange("op-1", "src/main.go", "", old, next, nil)
+	op, err := ConvertChange("op-1", "src/main.go", "", false, old, next, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestConvertChangeBinaryBecomesBlobReplace(t *testing.T) {
 	var uploaded [][]byte
 	var uploadedManifest vmcas.Manifest
 	// A blob-tracked file's base is its current manifest hash.
-	op, err := ConvertChange("op-2", "assets/logo.png", oldManifest.Hash, old, next, func(m vmcas.Manifest, chunks [][]byte) error {
+	op, err := ConvertChange("op-2", "assets/logo.png", oldManifest.Hash, false, old, next, func(m vmcas.Manifest, chunks [][]byte) error {
 		uploadedManifest, uploaded = m, chunks
 		return nil
 	})
@@ -79,7 +79,7 @@ func TestConvertChangeOversizedTextFallsBackToBlob(t *testing.T) {
 	// content hash, so the blob replacement must carry THAT base or the
 	// server rejects the text→blob transition with base_mismatch.
 	base := ContentHash(old)
-	op, err := ConvertChange("op-3", "big.txt", base, old, next, func(m vmcas.Manifest, chunks [][]byte) error {
+	op, err := ConvertChange("op-3", "big.txt", base, false, old, next, func(m vmcas.Manifest, chunks [][]byte) error {
 		return nil
 	})
 	if err != nil {
@@ -95,13 +95,13 @@ func TestConvertChangeOversizedTextFallsBackToBlob(t *testing.T) {
 
 func TestConvertChangeIdenticalWriteRefused(t *testing.T) {
 	same := []byte(strings.Repeat("same\n", 10))
-	if _, err := ConvertChange("op-4", "noop.txt", "", same, same, nil); err == nil {
+	if _, err := ConvertChange("op-4", "noop.txt", "", false, same, same, nil); err == nil {
 		t.Fatal("identical content must not produce an operation")
 	}
 }
 
 func TestConvertChangeBlobWithoutSinkRefused(t *testing.T) {
-	if _, err := ConvertChange("op-5", "img.png", "", nil, []byte{0x00, 0xff}, nil); err == nil {
+	if _, err := ConvertChange("op-5", "img.png", "", false, nil, []byte{0x00, 0xff}, nil); err == nil {
 		t.Fatal("blob conversion without a chunk sink must fail before upload")
 	}
 }

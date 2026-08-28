@@ -489,23 +489,23 @@ func strValue(v any) string {
 }
 
 // RoomRoutes lists every live route in the room (gateway proxy sync).
-func (c *Client) RoomRoutes(ctx context.Context) ([]vmprotocol.RouteKey, error) {
+// The server-computed slug rides along: raw device ids can differ from
+// the enrolled-hostname slugs canonical .tutti hosts use, and gateways
+// must bind hostnames by slug while dialing by raw id.
+func (c *Client) RoomRoutes(ctx context.Context) ([]vmprotocol.LiveRoute, error) {
 	c.mu.Lock()
 	token, roomID := c.token, c.roomID
 	c.mu.Unlock()
 	var res struct {
-		Routes []struct {
-			DeviceID  string `json:"device_id"`
-			SessionID string `json:"session_id"`
-			Port      int    `json:"port"`
-		} `json:"routes"`
+		Routes []vmprotocol.LiveRoute `json:"routes"`
 	}
 	if err := getJSON(ctx, c.http, c.server.BaseURL+"/api/rooms/"+roomID+"/routes?list=1", token, &res); err != nil {
 		return nil, err
 	}
-	out := make([]vmprotocol.RouteKey, 0, len(res.Routes))
+	out := make([]vmprotocol.LiveRoute, 0, len(res.Routes))
 	for _, r := range res.Routes {
-		out = append(out, vmprotocol.RouteKey{RoomID: roomID, DeviceID: r.DeviceID, SessionID: r.SessionID, Port: r.Port})
+		r.RoomID = roomID
+		out = append(out, r)
 	}
 	return out, nil
 }

@@ -60,7 +60,9 @@ func (r *Registry) Remove(key vmprotocol.RouteKey) {
 // DeviceRoutes returns every session occupying (room, device, port),
 // ordered by canonical host — the input to the device-level short-address
 // rules: unique occupancy routes transparently, ambiguous HTTP gets the H5
-// selector, ambiguous raw TCP must use the full session hostname.
+// selector, ambiguous raw TCP must use the full session hostname. The
+// device argument is the raw device id OR its hostname slug: gateways know
+// .tutti hosts by slug while route keys and tunnel targets use raw ids.
 func (r *Registry) DeviceRoutes(roomID, deviceID string, port int) []vmprotocol.SessionCandidate {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -80,6 +82,22 @@ func (r *Registry) DeviceRoutes(roomID, deviceID string, port int) []vmprotocol.
 			CanonicalHost: canonicalHost(e),
 		})
 	}
+	if len(out) == 0 {
+		// Slug form (device-level .tutti hosts carry the enrolled
+		// hostname slug, which can differ from the raw device id).
+		for _, devRoutes := range devs {
+			for key, e := range devRoutes {
+				if e.DeviceSlug == deviceID && key.Port == port {
+					out = append(out, vmprotocol.SessionCandidate{
+						SessionID:     key.SessionID,
+						SessionLabel:  e.SessionLabel,
+						Agent:         e.Agent,
+						CanonicalHost: canonicalHost(e),
+					})
+				}
+			}
+		}
+	}
 	vmprotocol.SortCandidates(out)
 	return out
 }
@@ -89,12 +107,24 @@ func canonicalHost(e Entry) string {
 }
 
 // SessionRoute returns the route key for a full session-level address.
+// The device argument accepts the raw id or its slug (see DeviceRoutes).
 func (r *Registry) SessionRoute(roomID, deviceID, sessionID string, port int) (Entry, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	key := vmprotocol.RouteKey{RoomID: roomID, DeviceID: deviceID, SessionID: sessionID, Port: port}
-	e, ok := r.routes[roomID][deviceID][key]
-	return e, ok
+	if e, ok := r.routes[roomID][deviceID][key]; ok {
+		return e, true
+	}
+	for rawID, devRoutes := range r.routes[roomID] {
+		for k, e := range devRoutes {
+			if e.DeviceSlug == deviceID && k.SessionID == sessionID && k.Port == port {
+				return Entry{RouteKey: vmprotocol.RouteKey{
+					RoomID: roomID, DeviceID: rawID, SessionID: sessionID, Port: port,
+				}, SessionLabel: e.SessionLabel, Agent: e.Agent, Protocol: e.Protocol, DeviceSlug: e.DeviceSlug}, true
+			}
+		}
+	}
+	return Entry{}, false
 }
 
 // RoomSessions lists every registered session of one room (device slug

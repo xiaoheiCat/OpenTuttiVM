@@ -224,6 +224,17 @@ func (m *Manager) materializeMissingLocked(ctx context.Context) error {
 	return nil
 }
 
+// TrackedAsBlob reports whether the path is tracked as a blob entry: a
+// blob-tracked file keeps issuing blob replacements even when its new
+// content is small valid UTF-8 (the authoritative engine rejects text
+// patches against non-text entries).
+func (m *Manager) TrackedAsBlob(path string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	info, ok := m.Replica.State.EntryInfo(path)
+	return ok && !info.IsDir && !info.IsText
+}
+
 // Read returns local content for one path, fetching lazily when needed.
 // Text and blob entries share the path: both restore from snapshots with a
 // manifest reference, so both fetch manifest + chunks from the server CAS

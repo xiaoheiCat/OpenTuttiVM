@@ -329,6 +329,16 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 				continue
 			}
 			p := *msg.ApprovalRequest
+			// Only the agent's OWNER may open an approval: any
+			// participant could otherwise fabricate prompt text and
+			// choices for a shared agent they do not own and have the
+			// borrower's decision routed to the real runtime.
+			agent, _ := h.borrows.Agent(c.RoomID, p.AgentInstanceID)
+			if agent == nil || agent.OwnerDeviceID != c.DeviceID {
+				h.log.Warn("approval open by non-owner",
+					"room", c.RoomID, "agent", p.AgentInstanceID, "sender", c.DeviceID)
+				continue
+			}
 			operator, err := h.borrows.OpenApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID, p.CommandID)
 			if err != nil {
 				h.log.Warn("approval open", "room", c.RoomID, "err", err)

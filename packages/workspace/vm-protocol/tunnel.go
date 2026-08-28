@@ -35,6 +35,17 @@ type RouteKey struct {
 	Port      int    `json:"port"`
 }
 
+// LiveRoute is one advertised route plus the server-computed identity
+// pieces a gateway cannot derive locally: raw device ids may differ from
+// the enrolled-hostname slugs canonical .tutti hosts use, so the gateway
+// binds and dials with BOTH (slug for hostnames, raw id for lookups and
+// tunnel targets).
+type LiveRoute struct {
+	RouteKey
+	DeviceSlug    string `json:"device_slug,omitempty"`
+	CanonicalHost string `json:"canonical_host,omitempty"`
+}
+
 // Encode serializes the header for the first tunnel frame.
 func (h TunnelHeader) Encode() ([]byte, error) { return json.Marshal(h) }
 

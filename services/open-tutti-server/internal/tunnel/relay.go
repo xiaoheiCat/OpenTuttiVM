@@ -54,7 +54,11 @@ func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, dev
 	defer sess.Close()
 
 	r.register(roomID, deviceID, sess)
-	defer r.unregister(roomID, deviceID)
+	// Unregister ONLY our own registration: a replacement tunnel may
+	// have overwritten the map entry before this handler exits, and an
+	// unconditional delete would evict the live replacement and strand
+	// its advertised routes.
+	defer r.unregisterIfCurrent(roomID, deviceID, sess)
 
 	for {
 		stream, err := sess.Accept()
@@ -71,6 +75,11 @@ func (r *Relay) register(roomID, deviceID string, sess *yamux.Session) {
 	if r.sessions[roomID] == nil {
 		r.sessions[roomID] = map[string]*yamux.Session{}
 	}
+	if old := r.sessions[roomID][deviceID]; old != nil && old != sess {
+		// Superseded predecessor: close it so its handler exits and its
+		// conditional unregister cannot touch the replacement.
+		go old.Close()
+	}
 	r.sessions[roomID][deviceID] = sess
 }
 
@@ -78,6 +87,20 @@ func (r *Relay) unregister(roomID, deviceID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.unregisterLocked(roomID, deviceID)
+}
+
+// unregisterIfCurrent drops the registration only when it still points at
+// the exiting session: a replacement registration must survive the
+// predecessor handler's deferred cleanup.
+func (r *Relay) unregisterIfCurrent(roomID, deviceID string, sess *yamux.Session) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if devs := r.sessions[roomID]; devs != nil && devs[deviceID] == sess {
+		delete(devs, deviceID)
+		if len(devs) == 0 {
+			delete(r.sessions, roomID)
+		}
+	}
 }
 
 func (r *Relay) unregisterLocked(roomID, deviceID string) {

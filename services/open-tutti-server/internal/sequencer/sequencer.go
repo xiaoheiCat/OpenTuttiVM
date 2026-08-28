@@ -69,7 +69,7 @@ func (m *Manager) Submit(env vmprotocol.Envelope) error {
 	// exist in CAS, or every replica and the final workspace apply would
 	// fail permanently on the lookup.
 	if env.Operation.Kind == vmprotocol.OpBlobReplace && env.Operation.Blob != nil {
-		if err := m.validateBlobGraph(env.Operation.Blob.Manifest); err != nil {
+		if err := m.validateBlobGraph(env.RoomID, env.Operation.Blob.Manifest); err != nil {
 			m.reject(env, &vmsync.RejectionError{Reason: vmsync.RejectInvalid, CurrentHash: err.Error()})
 			return err
 		}
@@ -147,11 +147,20 @@ func (m *Manager) reject(env vmprotocol.Envelope, err error) {
 
 // validateBlobGraph verifies a replacement manifest decodes, is
 // materializable (declared size matches the chunk bytes; every chunk
-// except the last is exactly ChunkSize), and every referenced chunk
-// exists in the room's CAS before the operation becomes authoritative.
-func (m *Manager) validateBlobGraph(manifestHash string) error {
+// except the last is exactly ChunkSize), and every object in the graph
+// is referenced by the SUBMITTING ROOM before the operation becomes
+// authoritative: the process-global CAS may hold the same hash for
+// another room, and accepting it would grant this room download access
+// through snapshot ref collection, bypassing the per-room authorization
+// the CAS endpoints enforce.
+func (m *Manager) validateBlobGraph(roomID, manifestHash string) error {
 	if manifestHash == "" {
 		return errors.New("blob manifest hash required")
+	}
+	if ok, err := m.repo.HasCASRef(context.Background(), roomID, manifestHash); err != nil {
+		return err
+	} else if !ok {
+		return fmt.Errorf("manifest %s not referenced by this room", manifestHash)
 	}
 	data, err := m.cas.Get(manifestHash)
 	if err != nil {
@@ -172,6 +181,11 @@ func (m *Manager) validateBlobGraph(manifestHash string) error {
 	}
 	var total int64
 	for i, chunk := range manifest.Chunks {
+		if ok, err := m.repo.HasCASRef(context.Background(), roomID, chunk); err != nil {
+			return err
+		} else if !ok {
+			return fmt.Errorf("chunk %s of %s not referenced by this room", chunk, manifestHash)
+		}
 		body, err := m.cas.Get(chunk)
 		if err != nil {
 			return fmt.Errorf("chunk %s of %s not in CAS: %w", chunk, manifestHash, err)

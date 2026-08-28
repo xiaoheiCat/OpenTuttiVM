@@ -48,10 +48,10 @@ func startEcho(t *testing.T) net.Listener {
 }
 
 type staticRoutes struct {
-	routes []vmprotocol.RouteKey
+	routes []vmprotocol.LiveRoute
 }
 
-func (s *staticRoutes) RoomRoutes(ctx context.Context) ([]vmprotocol.RouteKey, error) {
+func (s *staticRoutes) RoomRoutes(ctx context.Context) ([]vmprotocol.LiveRoute, error) {
 	return s.routes, nil
 }
 
@@ -59,8 +59,8 @@ func TestProxyBindsVIPAndRelaysThroughTunnel(t *testing.T) {
 	echo := startEcho(t)
 	dialer := &fakeDialer{echo: echo}
 	vips := NewVIPAllocator()
-	routes := &staticRoutes{routes: []vmprotocol.RouteKey{
-		{DeviceID: "dev_peer", SessionID: "sess-claude-a", Port: 3000},
+	routes := &staticRoutes{routes: []vmprotocol.LiveRoute{
+		{RouteKey: vmprotocol.RouteKey{DeviceID: "dev_peer", SessionID: "sess-claude-a", Port: 3000}},
 	}}
 	p := NewProxy(vips, dialer, routes, nil, nil, "room1", "dev_me", nil)
 	defer p.Close()
