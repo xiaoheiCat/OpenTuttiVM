@@ -68,7 +68,9 @@ func (w *WorkspaceState) ApplySequenced(env vmprotocol.Envelope) error {
 		f.Kind = kindBlob
 		f.Manifest = op.Blob.Manifest
 		f.Content = nil
-		f.Size = 0
+		// The server verified the declaration against the chunk graph;
+		// replicas mirror the authoritative size.
+		f.Size = op.Blob.Size
 		f.Materialized = false
 		// Full-policy owners eagerly fetch accepted replacements so the
 		// promised server-failure-survival copy exists immediately.

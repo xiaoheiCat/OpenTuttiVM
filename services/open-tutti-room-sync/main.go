@@ -46,7 +46,8 @@ import (
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
 
-	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/roomfs"
+	roomfs "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/internal/borrowhost"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/internal/client"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/internal/gateway"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/internal/replica"
@@ -152,6 +153,12 @@ func run() error {
 		os.MkdirAll(dir, 0o755)
 	}
 	roomfsSrv := roomfs.NewServer(nil, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	// Borrowing host: the owning device's execution adapter. Room-sync
+	// never runs agent code; hosts inject a real adapter (Agent Host
+	// delegation) and Noop keeps routed events observable until then.
+	borrowHost := borrowhost.Host(&borrowhost.Noop{
+		Log: slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	})
 	// The bridge submits under the same session id the port announcements
 	// use ("sess-"+label): barrier resolver assignment compares against
 	// AgentSessionID, and a mismatched id would never lift a fence.
@@ -258,6 +265,34 @@ func run() error {
 				var cp vmprotocol.ConflictPayload
 				if json.Unmarshal(ev.Payload, &cp) == nil {
 					bridge.OnConflictDetected(cp)
+				}
+			case vmprotocol.TopicAgentShared:
+				var p vmprotocol.AgentSharedPayload
+				if json.Unmarshal(ev.Payload, &p) == nil {
+					borrowHost.Shared(p)
+				}
+			case vmprotocol.TopicBorrowCommand:
+				// A borrower's instruction routed to this owning
+				// device: execution belongs to the host's agent
+				// runtime, never to room-sync itself.
+				var p vmprotocol.BorrowCommandPayload
+				if json.Unmarshal(ev.Payload, &p) == nil {
+					borrowHost.ExecuteCommand(p)
+				}
+			case vmprotocol.TopicBorrowRevoked:
+				var p vmprotocol.BorrowRevokedPayload
+				if json.Unmarshal(ev.Payload, &p) == nil {
+					borrowHost.Revoked(p)
+				}
+			case vmprotocol.TopicApprovalRequest:
+				var p vmprotocol.ApprovalRequestPayload
+				if json.Unmarshal(ev.Payload, &p) == nil {
+					borrowHost.ApprovalRequest(p)
+				}
+			case vmprotocol.TopicApprovalDecision:
+				var p vmprotocol.ApprovalDecisionPayload
+				if json.Unmarshal(ev.Payload, &p) == nil {
+					borrowHost.ApprovalDecision(p)
 				}
 			}
 		}

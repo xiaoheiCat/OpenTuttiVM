@@ -50,6 +50,7 @@ Two hard rules shape everything:
 | `services/open-tutti-server` | The bare server: room lifecycle, share/ticket auth, HTTP API, WS hub, sequencer, CAS endpoints, yamux relay, agent-borrowing registry (lease fencing + approval routing) |
 | `services/open-tutti-room-sync` | Per-device engine: Full/Lazy replica, WS client with gap-resync, `.tutti` gateway + VIP allocation, local CA, Room FS Protocol host |
 | `services/open-tutti-fs` | FUSE mount (Linux containers) bridging POSIX into the room via the Room FS Protocol |
+| `packages/workspace/vm-roomfs` | The Room FS Protocol itself — a workspace-domain contract both services adapt to, so neither executable owns the seam |
 
 ## Collaboration model
 

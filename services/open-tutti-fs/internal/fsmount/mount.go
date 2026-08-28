@@ -17,7 +17,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/roomfs"
+	roomfs "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs"
 )
 
 // Mount serves the workspace tree at dir until ctx ends.

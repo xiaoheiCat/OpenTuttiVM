@@ -19,6 +19,7 @@ check-workspace:
 	cd packages/workspace/vm-sync && GOMODCACHE=$(GOMODCACHE) GOCACHE=$(GOCACHE) GOPATH=$(GOPATH) go test .
 	cd packages/workspace/vm-protocol && GOMODCACHE=$(GOMODCACHE) GOCACHE=$(GOCACHE) GOPATH=$(GOPATH) go test .
 	cd packages/workspace/vm-cas && GOMODCACHE=$(GOMODCACHE) GOCACHE=$(GOCACHE) GOPATH=$(GOPATH) go test .
+	cd packages/workspace/vm-roomfs && GOMODCACHE=$(GOMODCACHE) GOCACHE=$(GOCACHE) GOPATH=$(GOPATH) GOWORK=off go test .
 	test -z "$$(gofmt -l packages/workspace)"
 
 check-fs:

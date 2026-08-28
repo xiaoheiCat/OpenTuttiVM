@@ -5,8 +5,8 @@ package main
 import (
 	"context"
 
+	roomfs "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/internal/fsmount"
-	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/roomfs"
 )
 
 // mount serves the FUSE tree; only Linux containers can mount /dev/fuse —

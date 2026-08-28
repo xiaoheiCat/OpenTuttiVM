@@ -62,6 +62,10 @@ type TextPatch struct {
 type BlobReplace struct {
 	BaseHash string `json:"base_hash"`
 	Manifest string `json:"manifest"`
+	// Size is the manifest's declared byte size; the server verifies it
+	// against the chunk graph before acceptance so authoritative state
+	// can carry it without re-reading CAS.
+	Size int64 `json:"size,omitempty"`
 }
 
 // Rename moves a file from OldPath to NewPath.

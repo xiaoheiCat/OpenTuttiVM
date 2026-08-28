@@ -18,7 +18,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/roomfs"
+	roomfs "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs"
 )
 
 func main() {

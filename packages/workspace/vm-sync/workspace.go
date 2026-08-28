@@ -363,7 +363,9 @@ func (w *WorkspaceState) applyBlobReplace(op vmprotocol.FileOperation) error {
 	f.Kind = kindBlob
 	f.Manifest = op.Blob.Manifest
 	f.Content = nil
-	f.Size = 0
+	// The sequencer verified the declaration against the chunk graph;
+	// snapshots must serialize the real size, not zero.
+	f.Size = op.Blob.Size
 	f.Materialized = false
 	return nil
 }

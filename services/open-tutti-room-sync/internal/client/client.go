@@ -6,7 +6,11 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -62,6 +66,46 @@ type DeviceInfo struct {
 	DisplayName string `json:"display_name"`
 	Hostname    string `json:"hostname"`
 	PublicKey   string `json:"public_key"`
+	// Proof is the base64 Ed25519 signature over the call's challenge
+	// ("open-tutti-join:"+ticket when joining, CreateRoomProofMessage
+	// when creating under an enrolled id). Required whenever the device
+	// id is already enrolled on the server.
+	Proof string `json:"proof,omitempty"`
+}
+
+// deviceProofDomain mirrors the server's proof domain: signatures cover
+// Domain+challenge.
+const deviceProofDomain = "open-tutti-join:"
+
+// SignDeviceProof signs a server challenge with the device's Ed25519
+// private key (PEM) and returns the base64 proof the server expects
+// (join redemption passes the ticket as the challenge; room creation
+// under an enrolled id passes "room-create:"+deviceID). The PEM block
+// carries the raw seed (32), raw private key (64), or PKCS#8 form.
+func SignDeviceProof(privateKeyPEM, challenge string) (string, error) {
+	block, _ := pem.Decode([]byte(privateKeyPEM))
+	if block == nil {
+		return "", errors.New("malformed device private key")
+	}
+	var key ed25519.PrivateKey
+	switch len(block.Bytes) {
+	case ed25519.SeedSize:
+		key = ed25519.NewKeyFromSeed(block.Bytes)
+	case ed25519.PrivateKeySize:
+		key = ed25519.PrivateKey(append([]byte(nil), block.Bytes...))
+	default:
+		parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return "", err
+		}
+		k, ok := parsed.(ed25519.PrivateKey)
+		if !ok {
+			return "", errors.New("device private key is not Ed25519")
+		}
+		key = k
+	}
+	sig := ed25519.Sign(key, []byte(deviceProofDomain+challenge))
+	return base64.StdEncoding.EncodeToString(sig), nil
 }
 
 // CreateRoom creates a room on the server, submitting the server invite

@@ -52,7 +52,7 @@ func blobReplace(id, path, oldBaseHash string, newContent []byte, chunkSink func
 	}
 	return vmprotocol.FileOperation{
 		ID: id, Path: path, Kind: vmprotocol.OpBlobReplace,
-		Blob: &vmprotocol.BlobReplace{BaseHash: oldBaseHash, Manifest: manifest.Hash},
+		Blob: &vmprotocol.BlobReplace{BaseHash: oldBaseHash, Manifest: manifest.Hash, Size: manifest.Size},
 	}, nil
 }
 

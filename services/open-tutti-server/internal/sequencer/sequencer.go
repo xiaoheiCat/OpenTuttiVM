@@ -73,6 +73,16 @@ func (m *Manager) Submit(env vmprotocol.Envelope) error {
 			m.reject(env, &vmsync.RejectionError{Reason: vmsync.RejectInvalid, CurrentHash: err.Error()})
 			return err
 		}
+		// The declared size must match the verified manifest so state can
+		// carry it without re-reading CAS (a mismatched declaration would
+		// poison snapshots with size: 0 or worse).
+		if data, err := m.cas.Get(env.Operation.Blob.Manifest); err == nil {
+			if manifest, err := vmcas.DecodeManifest(data); err == nil && env.Operation.Blob.Size != manifest.Size {
+				err := fmt.Errorf("blob size %d != manifest %d", env.Operation.Blob.Size, manifest.Size)
+				m.reject(env, &vmsync.RejectionError{Reason: vmsync.RejectInvalid, CurrentHash: err.Error()})
+				return err
+			}
+		}
 	}
 	accepted, err := eng.state.Accept(env)
 	if err != nil {

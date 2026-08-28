@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/roomfs"
+	roomfs "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs"
 )
 
 // mount is Linux-only: the FUSE layer runs inside agent-session containers

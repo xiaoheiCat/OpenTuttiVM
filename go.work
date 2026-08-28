@@ -47,6 +47,7 @@ use (
 	./packages/appcli/core
 	./packages/workspace/vm-cas
 	./packages/workspace/vm-protocol
+	./packages/workspace/vm-roomfs
 	./packages/workspace/vm-sync
 	./services/open-tutti-fs
 	./services/open-tutti-room-sync

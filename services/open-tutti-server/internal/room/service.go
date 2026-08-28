@@ -277,9 +277,6 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	if s.clock.Now().After(rec.ExpiresAt) {
 		return "", "", errors.New("join ticket expired")
 	}
-	if err := s.repo.MarkTicketRedeemed(ctx, rec.Hash); err != nil {
-		return "", "", err
-	}
 	// Existing device ids must prove possession of their enrolled key
 	// before anything refreshes: the one-time ticket is the challenge.
 	if existing, err := s.repo.GetDevice(ctx, device.ID); err == nil {
@@ -293,9 +290,6 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 		// an existing device id.
 		device.PublicKey = existing.PublicKeyPEM
 	}
-	if err := s.upsertDevice(ctx, device); err != nil {
-		return "", "", err
-	}
 	room, err := s.repo.GetRoom(ctx, rec.RoomID)
 	if err != nil {
 		return "", "", err
@@ -303,11 +297,22 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	if room.DissolvedAt != nil {
 		return "", "", errors.New("room already dissolved")
 	}
-	now := s.clock.Now()
 	token, tokenHash, err := s.tokens.mint(room.ID, device.ID)
 	if err != nil {
 		return "", "", err
 	}
+	// Every fallible step ran: consume the ticket LAST so a failed
+	// enrollment (bad proof, dissolved room, mint failure) leaves the
+	// one-time ticket usable by the corrected retry instead of forcing
+	// the user back through the password flow. The UPDATE is an atomic
+	// compare-and-set, so a concurrent double redemption still loses.
+	if err := s.repo.MarkTicketRedeemed(ctx, rec.Hash); err != nil {
+		return "", "", err
+	}
+	if err := s.upsertDevice(ctx, device); err != nil {
+		return "", "", err
+	}
+	now := s.clock.Now()
 	if _, err := s.repo.GetMembership(ctx, room.ID, device.ID); errors.Is(err, store.ErrNotFound) {
 		if err := s.repo.UpsertMembership(ctx, store.Membership{
 			RoomID: room.ID, DeviceID: device.ID, JoinedAt: now, LastSeenAt: now,
