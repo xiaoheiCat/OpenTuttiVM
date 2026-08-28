@@ -17,6 +17,7 @@ func TestEnrollWithTicketRedeemsFreshTicket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer r.Close() // Windows: TempDir cleanup cannot remove an open db
 	ctx := context.Background()
 	exp := time.Now().Add(10 * time.Minute)
 	if err := r.CreateJoinTicket(ctx, store.JoinTicket{Hash: "h1", RoomID: "r1", ShareID: "s1", ExpiresAt: exp}); err != nil {
