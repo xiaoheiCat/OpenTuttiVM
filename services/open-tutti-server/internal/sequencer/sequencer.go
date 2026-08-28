@@ -59,6 +59,15 @@ func (m *Manager) Submit(env vmprotocol.Envelope) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Membership revalidation INSIDE the sequencing fence: cancelling a
+	// kicked device's socket does not abort its in-flight handler, and
+	// the HTTP layer's earlier check races the membership deletion. A
+	// revoked device that already read its op frame must not sequence
+	// an edit after the deletion committed.
+	if _, err := m.repo.GetMembership(context.Background(), env.RoomID, env.AuthorDeviceID); err != nil {
+		return fmt.Errorf("device %s is not a member of room %s", env.AuthorDeviceID, env.RoomID)
+	}
+
 	eng, err := m.engine(env.RoomID)
 	if err != nil {
 		return err

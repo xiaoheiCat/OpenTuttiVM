@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 )
@@ -95,17 +96,52 @@ func probeSharedAddr() net.IP {
 // 127.0.0.1 and the proxy demultiplexes by SNI/Host.
 func (a *VIPAllocator) Probe() {
 	a.probed.Do(func() {
-		if ln, err := net.Listen("tcp", net.JoinHostPort(ipFromOffset(200, 200).String(), "0")); err == nil {
+		vip := ipFromOffset(200, 200).String()
+		if ln, err := net.Listen("tcp", net.JoinHostPort(vip, "0")); err == nil {
 			ln.Close()
 			return // the block is locally configured: real VIPs
 		}
-		if ln, err := freebindListen(net.JoinHostPort(ipFromOffset(200, 200).String(), "0")); err == nil {
-			ln.Close()
-			a.freebindOK = true
-			return // Linux: listeners can FREEBIND reserved addresses
+		ln, err := freebindListen(net.JoinHostPort(vip, "0"))
+		if err != nil {
+			a.mode.Store(int32(modeShared))
+			return
 		}
-		a.mode.Store(int32(modeShared))
+		// FREEBIND only permits the BIND — it neither assigns nor
+		// routes the address. On hosts without a route for
+		// 100.96.0.0/12 the bind above succeeds while nothing can
+		// ever connect, and DNS advertising 100.96.* would blackhole
+		// every client instead of handing out the shared-mode address.
+		// Prove reachability by connecting to the freebound listener
+		// from this namespace before selecting VIP mode.
+		if !dialable(ln) {
+			ln.Close()
+			a.mode.Store(int32(modeShared))
+			return
+		}
+		ln.Close()
+		a.freebindOK = true
 	})
+}
+
+// dialable reports whether the listener's freebound address actually
+// routes: a successful dial through the host routing table is the only
+// evidence a client could ever reach it.
+func dialable(ln net.Listener) bool {
+	addr := ln.Addr().String()
+	done := make(chan error, 1)
+	go func() {
+		c, err := ln.Accept()
+		if err == nil {
+			c.Close()
+		}
+		done <- err
+	}()
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return <-done == nil
 }
 
 // Shared reports whether the room network runs on the shared loopback

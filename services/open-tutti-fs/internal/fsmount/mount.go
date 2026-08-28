@@ -233,9 +233,11 @@ func (n *roomNode) Mkdir(ctx context.Context, name string, mode uint32, out *fus
 		return nil, syscall.EIO
 	}
 	perms := mode & 0o7777
-	if perms == 0 {
-		perms = 0o755 // mkdir(2) semantics: zero means default, not 0000
-	}
+	// An explicit mkdir(..., 0000) is a VALID POSIX permission: by the
+	// time the FUSE layer sees the mode, the kernel has applied umask
+	// — zero here means the caller really asked for 0000, not
+	// "default". The authoritative request already carries 0000; the
+	// cached inode must not widen it to 0755.
 	out.Attr.Mode = perms | syscall.S_IFDIR
 	child := &roomNode{client: n.client, dirMode: perms, dirModeSet: true}
 	return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFDIR}), 0
@@ -249,10 +251,7 @@ func (n *roomNode) Create(ctx context.Context, name string, flags uint32, mode u
 	// Report the REQUESTED permission bits, not a widened 0644: the
 	// authoritative create received them, and local stat/permission
 	// checks must not expose more than the creator asked for.
-	perms := mode & 0o7777
-	if perms == 0 {
-		perms = 0o644
-	}
+	perms := mode & 0o7777 // zero is a valid explicit 0000 (see Mkdir)
 	out.Attr.Mode = perms | syscall.S_IFREG
 	child := &fileNode{client: n.client, path: path, buffer: []byte{}, loaded: true, srvMode: perms}
 	return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFREG}), nil, 0, 0
