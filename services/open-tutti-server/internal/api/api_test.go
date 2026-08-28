@@ -328,12 +328,22 @@ func TestPreviewRouteResolutionRules(t *testing.T) {
 	}
 
 	// Device-level ambiguous port returns both candidates ordered by
-	// canonical host.
-	amb := routes("?device=dev_anna&port=3000")
-	if amb["resolved"] != false {
-		t.Fatalf("ambiguous device route resolved: %v", amb)
+	// canonical host. The WS announce is asynchronous: poll until the
+	// registry reflects both listeners (a fixed sleep flaked on
+	// slower CI runners).
+	var cands []byte
+	for i := 0; i < 50; i++ {
+		amb := routes("?device=dev_anna&port=3000")
+		if amb["resolved"] != false {
+			t.Fatalf("ambiguous device route resolved: %v", amb)
+		}
+		cands, _ = json.Marshal(amb["candidates"])
+		if strings.Contains(string(cands), "claude-a.annas-macbook-pro.tutti:3000") &&
+			strings.Contains(string(cands), "codex-b.annas-macbook-pro.tutti:3000") {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	cands, _ := json.Marshal(amb["candidates"])
 	if !strings.Contains(string(cands), "claude-a.annas-macbook-pro.tutti:3000") ||
 		!strings.Contains(string(cands), "codex-b.annas-macbook-pro.tutti:3000") {
 		t.Fatalf("candidates %s", cands)
@@ -345,14 +355,21 @@ func TestPreviewRouteResolutionRules(t *testing.T) {
 		t.Fatalf("session route not resolved: %v", sess)
 	}
 
-	// Unique device port routes transparently: stop one listener.
+	// Unique device port routes transparently: stop one listener. Poll
+	// for the de-registration (asynchronous, see above).
 	msg, _ := json.Marshal(realtime.ClientMessage{
 		Type:  "ports",
 		Ports: &vmprotocol.PortsChangedPayload{SessionID: "sess-codex-b", SessionLabel: "codex-b", Port: 3000, Listening: false},
 	})
 	ws.Write(ctx, websocket.MessageText, msg)
-	time.Sleep(200 * time.Millisecond)
-	uniq := routes("?device=dev_anna&port=3000")
+	var uniq map[string]any
+	for i := 0; i < 50; i++ {
+		uniq = routes("?device=dev_anna&port=3000")
+		if uniq["resolved"] == true && uniq["session_id"] == "sess-claude-a" {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	if uniq["resolved"] != true || uniq["session_id"] != "sess-claude-a" {
 		t.Fatalf("unique device route: %v", uniq)
 	}
