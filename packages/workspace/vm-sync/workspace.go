@@ -395,6 +395,12 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 	if _, exists := w.files[r.NewPath]; exists {
 		return &RejectionError{Reason: RejectInvalid}
 	}
+	// Renaming a directory into its own subtree ("a" → "a/b") would let
+	// the freshly inserted destination match the source prefix again and
+	// double-move every entry; reject before any mutation.
+	if r.NewPath == r.OldPath || strings.HasPrefix(r.NewPath, r.OldPath+"/") {
+		return &RejectionError{Reason: RejectInvalid}
+	}
 	w.files[r.NewPath] = f
 	delete(w.files, r.OldPath)
 	if f.IsDir {

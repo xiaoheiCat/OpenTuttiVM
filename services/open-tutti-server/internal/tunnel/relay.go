@@ -93,6 +93,19 @@ func (r *Relay) DropDevice(roomID, deviceID string) {
 	r.unregisterLocked(roomID, deviceID)
 }
 
+// DropRoom closes every tunnel session in one room (dissolution).
+func (r *Relay) DropRoom(roomID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for deviceID, sess := range r.sessions[roomID] {
+		if sess != nil {
+			sess.Close()
+		}
+		delete(r.sessions[roomID], deviceID)
+	}
+	delete(r.sessions, roomID)
+}
+
 func (r *Relay) handleStream(stream net.Conn, authenticatedRoom string) {
 	header, err := readHeader(stream)
 	if err != nil {

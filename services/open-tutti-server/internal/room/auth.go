@@ -15,13 +15,22 @@ import (
 )
 
 // DeviceProofDomain prefixes the signed challenge material for device
-// re-enrollment proofs.
+// identity proofs (join redemption and room creation).
 const DeviceProofDomain = "open-tutti-join:"
 
-// VerifyDeviceProof checks an Ed25519 signature over Domain+ticket against
-// a PEM-encoded public key. Device = user: refreshing an enrolled device's
-// token requires proving possession of its private key.
-func VerifyDeviceProof(publicKeyPEM, ticket, proofB64 string) bool {
+// CreateRoomProofMessage is the challenge message for reusing an
+// enrolled device id on room creation. It is deterministic — a replay
+// only lets the key holder do what they could do anyway — because the
+// danger being prevented is key substitution, not repetition.
+func CreateRoomProofMessage(deviceID string) string {
+	return "room-create:" + deviceID
+}
+
+// VerifyDeviceProof checks an Ed25519 signature over Domain+message
+// against a PEM-encoded public key. Device = user: refreshing an
+// enrolled device's token requires proving possession of its private
+// key.
+func VerifyDeviceProof(publicKeyPEM, message, proofB64 string) bool {
 	block, _ := pem.Decode([]byte(publicKeyPEM))
 	if block == nil || len(block.Bytes) != ed25519.PublicKeySize {
 		return false
@@ -31,7 +40,7 @@ func VerifyDeviceProof(publicKeyPEM, ticket, proofB64 string) bool {
 	if err != nil {
 		return false
 	}
-	return ed25519.Verify(pub, []byte(DeviceProofDomain+ticket), sig)
+	return ed25519.Verify(pub, []byte(DeviceProofDomain+message), sig)
 }
 
 // argon2Params are the room-password hashing parameters. Only the encoded

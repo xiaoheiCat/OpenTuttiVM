@@ -2,23 +2,31 @@
 // room-sync container of an open-tutti-vm-<roomId> Docker project: it keeps
 // the workspace replica in the open-tutti-vm-<roomId>-workspace volume,
 // bridges agent-session FUSE mounts onto the same logical workspace, and
-// terminates the .tutti virtual network for this device.
+// terminates the .tutti virtual network for this device — DNS answers,
+// VIP listeners, room-CA TLS, the H5 session selector, and both tunnel
+// legs (outbound dials and inbound session forwards).
 //
 // Environment:
 //
-//	OPEN_TUTTI_SERVER        server base URL (required)
-//	OPEN_TUTTI_TOKEN         room session token (required)
-//	OPEN_TUTTI_DEVICE_ID     this device's id (required)
-//	OPEN_TUTTI_POLICY        replica policy: lazy (default) | full
-//	OPEN_TUTTI_CACHE_DIR     CAS cache dir (default /data/cache)
-//	OPEN_TUTTI_FS_LISTEN     room FS protocol listen address
-//	                        (default unix /run/open-tutti/roomfs.sock)
+//	OPEN_TUTTI_SERVER         server base URL (required)
+//	OPEN_TUTTI_TOKEN          room session token (required)
+//	OPEN_TUTTI_DEVICE_ID      this device's id (required)
+//	OPEN_TUTTI_POLICY         replica policy: lazy (default) | full
+//	OPEN_TUTTI_CACHE_DIR      CAS cache dir (default /data/cache)
+//	OPEN_TUTTI_FS_LISTEN      room FS protocol listen address
+//	                         (default unix /run/open-tutti/roomfs.sock)
+//	OPEN_TUTTI_DNS_LISTEN     .tutti DNS responder bind (default :1053)
+//	OPEN_TUTTI_CA_DIR         where the room CA cert is exported for
+//	                         runtime injection (default /data/ca)
+//	OPEN_TUTTI_SESSION_DIAL   room-network address template for session
+//	                         containers (default "agent-%s" + route port)
 package main
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -91,7 +99,31 @@ func run() error {
 		return err
 	}
 	vips := gateway.NewVIPAllocator()
-	_ = ca // injected into Tutti Browser and session containers by the runtime
+
+	// The room CA cert is exported for the runtime to inject into the
+	// Tutti Browser and session containers (never the host OS store).
+	caDir := os.Getenv("OPEN_TUTTI_CA_DIR")
+	if caDir == "" {
+		caDir = "/data/ca"
+	}
+	if err := os.MkdirAll(caDir, 0o700); err == nil {
+		if err := os.WriteFile(filepath.Join(caDir, "room-ca.pem"), ca.CACertPEM(), 0o600); err != nil {
+			fmt.Fprintf(os.Stderr, "room-sync: write ca: %v\n", err)
+		}
+	}
+
+	// .tutti DNS: containers in the room network point their resolver at
+	// this UDP socket and every virtual name resolves onto its VIP.
+	dnsAddr := os.Getenv("OPEN_TUTTI_DNS_LISTEN")
+	if dnsAddr == "" {
+		dnsAddr = ":1053"
+	}
+	dns := gateway.NewDNSServer(vips)
+	go func() {
+		if err := dns.ListenAndServe(dnsAddr); err != nil {
+			fmt.Fprintf(os.Stderr, "room-sync: dns %s: %v\n", dnsAddr, err)
+		}
+	}()
 
 	// The session and tunnel are hot-swapped across reconnects; the bridge
 	// and proxy hold these stable references.
@@ -99,8 +131,9 @@ func run() error {
 	tunnelRef := &liveTunnel{}
 
 	// Cross-device streams ride the yamux tunnel; the .tutti proxy binds a
-	// synthetic-VIP listener per live room route and pipes through it.
-	proxy := gateway.NewProxy(vips, tunnelRef, c, c.RoomID(), deviceID,
+	// synthetic-VIP listener per live room route, TLS-terminates with the
+	// room CA, and pipes through the relay.
+	proxy := gateway.NewProxy(vips, tunnelRef, c, c, ca, c.RoomID(), deviceID,
 		slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	defer proxy.Close()
 
@@ -195,6 +228,10 @@ func run() error {
 		} else {
 			tunnelRef.set(tun)
 			defer tun.Close()
+			// Inbound leg: another device connected to one of this
+			// device's advertised routes; forward each relayed stream
+			// to the owning session container on the room network.
+			go serveTunnel(ctx, tun, c.RoomID(), deviceID)
 		}
 		runErr := sess.Run(mgr)
 		sess.Close()
@@ -217,6 +254,53 @@ func run() error {
 			backoff = minDuration(backoff*2, 30*time.Second)
 		}
 		backoff = time.Second
+	}
+}
+
+// sessionDialTemplate formats the room-network address of a session
+// container from its session id; the room compose names agent services
+// agent-<session>.
+var sessionDialTemplate = func() string {
+	if t := os.Getenv("OPEN_TUTTI_SESSION_DIAL"); t != "" {
+		return t
+	}
+	return "agent-%s"
+}()
+
+// serveTunnel consumes inbound relayed streams for this device and
+// forwards each to the requested local session port.
+func serveTunnel(ctx context.Context, tun *tunneldial.Tunnel, roomID, deviceID string) {
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	for {
+		stream, header, err := tun.Accept()
+		if err != nil {
+			return
+		}
+		go func(stream net.Conn, header *vmprotocol.TunnelHeader) {
+			defer stream.Close()
+			if header == nil || header.Action != vmprotocol.TunnelConnect {
+				return
+			}
+			// Routes are room-scoped by the relay; a stray cross-room
+			// header is dropped here regardless.
+			if header.Route.RoomID != "" && header.Route.RoomID != roomID {
+				log.Warn("tutti inbound stream for foreign room", "room", header.Route.RoomID)
+				return
+			}
+			if header.Route.SessionID == "" || header.Route.Port == 0 {
+				return
+			}
+			addr := fmt.Sprintf(sessionDialTemplate+":"+fmt.Sprint(header.Route.Port), header.Route.SessionID)
+			d := net.Dialer{Timeout: 5 * time.Second}
+			local, err := d.DialContext(ctx, "tcp", addr)
+			if err != nil {
+				log.Warn("tutti inbound dial failed", "addr", addr, "err", err)
+				return
+			}
+			defer local.Close()
+			go io.Copy(local, stream)
+			io.Copy(stream, local)
+		}(stream, header)
 	}
 }
 

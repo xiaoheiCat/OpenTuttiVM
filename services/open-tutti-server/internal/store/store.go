@@ -113,6 +113,9 @@ type Repository interface {
 	AddCASRefs(ctx context.Context, roomID string, hashes []string) error
 	ListCASRefCounts(ctx context.Context) (map[string]int, error)
 	DeleteRoomCASRefs(ctx context.Context, roomID string) error
+	// HasCASRef reports whether the room references the object hash;
+	// CAS reads are authorized per room, not by global object existence.
+	HasCASRef(ctx context.Context, roomID, hash string) (bool, error)
 
 	// Dissolution cleanup
 	DissolveRoom(ctx context.Context, roomID string, at time.Time) error

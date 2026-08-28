@@ -92,8 +92,11 @@ func alignRuneBackward(old []byte, delEnd int, next []byte, insEnd int) (int, in
 	return delEnd, insEnd
 }
 
+// alignRuneForward pushes start offsets back onto rune boundaries in both
+// documents. insStart may already sit at len(next) (pure deletion at the
+// end), so the guard must check both bounds before indexing.
 func alignRuneForward(old []byte, delStart int, next []byte, insStart int) (int, int) {
-	for delStart > 0 && insStart > 0 && delStart < len(old) &&
+	for delStart > 0 && insStart > 0 && delStart < len(old) && insStart < len(next) &&
 		(!utf8.RuneStart(old[delStart]) || !utf8.RuneStart(next[insStart])) {
 		delStart--
 		insStart--

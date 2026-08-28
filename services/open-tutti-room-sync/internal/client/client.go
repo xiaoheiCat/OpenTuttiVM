@@ -11,13 +11,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
 	"github.com/coder/websocket"
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
-	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
 )
 
 // Server identifies one self-hosted server.
@@ -192,7 +192,12 @@ func (s *Session) Run(replica OpApplier) error {
 			if err := json.Unmarshal(msg.Event.Payload, &env); err != nil {
 				continue
 			}
-			if _, err := replica.ApplyServerOp(env); err == vmsync.ErrSeqGap {
+			if _, err := replica.ApplyServerOp(env); err != nil {
+				// Sequence gaps AND local apply failures (transient
+				// CAS fetch, materialization errors) both leave the
+				// replica behind the authoritative stream; resync in
+				// either case or the mount stays stale if no later
+				// operation arrives.
 				if s.OnGap != nil {
 					if err := s.OnGap(); err != nil {
 						return err
@@ -362,6 +367,53 @@ func (c *Client) RoomID() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.roomID
+}
+
+// LookupDevice implements gateway.RouteLookup: every session occupying
+// (device slug, port) right now.
+func (c *Client) LookupDevice(deviceSlug string, port int) ([]vmprotocol.SessionCandidate, error) {
+	out, err := c.ResolveRoutes(context.Background(),
+		fmt.Sprintf("?device=%s&port=%d", url.QueryEscape(deviceSlug), port))
+	if err != nil {
+		return nil, err
+	}
+	raw, _ := out["candidates"].([]any)
+	cands := make([]vmprotocol.SessionCandidate, 0, len(raw))
+	for _, item := range raw {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		cand := vmprotocol.SessionCandidate{
+			SessionID:     strValue(m["session_id"]),
+			SessionLabel:  strValue(m["session_label"]),
+			Agent:         strValue(m["agent"]),
+			CanonicalHost: strValue(m["canonical_host"]),
+		}
+		if cand.SessionID != "" {
+			cands = append(cands, cand)
+		}
+	}
+	return cands, nil
+}
+
+// LookupSession implements gateway.RouteLookup: the unique session route
+// for a full session address.
+func (c *Client) LookupSession(deviceSlug, sessionID string, port int) (vmprotocol.SessionCandidate, error) {
+	out, err := c.ResolveRoutes(context.Background(),
+		fmt.Sprintf("?device=%s&port=%d&session=%s", url.QueryEscape(deviceSlug), port, url.QueryEscape(sessionID)))
+	if err != nil {
+		return vmprotocol.SessionCandidate{}, err
+	}
+	return vmprotocol.SessionCandidate{
+		SessionID:     strValue(out["session_id"]),
+		CanonicalHost: strValue(out["canonical_host"]),
+	}, nil
+}
+
+func strValue(v any) string {
+	s, _ := v.(string)
+	return s
 }
 
 // RoomRoutes lists every live route in the room (gateway proxy sync).

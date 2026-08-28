@@ -135,9 +135,10 @@ func (m *Manager) reject(env vmprotocol.Envelope, err error) {
 	})
 }
 
-// validateBlobGraph verifies a replacement manifest decodes and every
-// referenced chunk exists in the room's CAS before the operation becomes
-// authoritative.
+// validateBlobGraph verifies a replacement manifest decodes, is
+// materializable (declared size matches the chunk bytes; every chunk
+// except the last is exactly ChunkSize), and every referenced chunk
+// exists in the room's CAS before the operation becomes authoritative.
 func (m *Manager) validateBlobGraph(manifestHash string) error {
 	if manifestHash == "" {
 		return errors.New("blob manifest hash required")
@@ -153,10 +154,30 @@ func (m *Manager) validateBlobGraph(manifestHash string) error {
 	if manifest.Hash != manifestHash {
 		return fmt.Errorf("manifest %s self-hash mismatch", manifestHash)
 	}
-	for _, chunk := range manifest.Chunks {
-		if _, err := m.cas.Get(chunk); err != nil {
+	if len(manifest.Chunks) == 0 {
+		return fmt.Errorf("manifest %s has no chunks", manifestHash)
+	}
+	var total int64
+	for i, chunk := range manifest.Chunks {
+		body, err := m.cas.Get(chunk)
+		if err != nil {
 			return fmt.Errorf("chunk %s of %s not in CAS: %w", chunk, manifestHash, err)
 		}
+		// Fixed-chunk invariant: every chunk but the last is exactly
+		// ChunkSize; a shorter interior chunk means Materialize would
+		// yield bytes that never match the declared size.
+		if i < len(manifest.Chunks)-1 && len(body) != vmcas.ChunkSize {
+			return fmt.Errorf("interior chunk %d of %s is %d bytes, want %d",
+				i, manifestHash, len(body), vmcas.ChunkSize)
+		}
+		if len(body) > vmcas.ChunkSize {
+			return fmt.Errorf("chunk %d of %s exceeds %d bytes", i, manifestHash, vmcas.ChunkSize)
+		}
+		total += int64(len(body))
+	}
+	if total != manifest.Size {
+		return fmt.Errorf("manifest %s declares %d bytes but chunks total %d",
+			manifestHash, manifest.Size, total)
 	}
 	return nil
 }
@@ -257,8 +278,14 @@ func snapshotHashes(snap vmprotocol.WorkspaceSnapshot) []string {
 func (m *Manager) engine(roomID string) (*engine, error) {
 	eng, ok := m.engines[roomID]
 	if !ok {
-		if _, err := m.repo.GetRoom(context.Background(), roomID); err != nil {
+		room, err := m.repo.GetRoom(context.Background(), roomID)
+		if err != nil {
 			return nil, fmt.Errorf("room %s: %w", roomID, err)
+		}
+		// A dissolved room is terminal: a stale socket must not
+		// recreate an empty engine and sequence post-ending operations.
+		if room.DissolvedAt != nil {
+			return nil, fmt.Errorf("room %s is dissolved", roomID)
 		}
 		eng = &engine{state: vmsync.NewWorkspaceState()}
 		m.engines[roomID] = eng

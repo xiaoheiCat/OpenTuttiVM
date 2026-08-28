@@ -108,6 +108,22 @@ func (h *Hub) DropDevice(roomID, deviceID string) {
 	}
 }
 
+// DropRoom force-closes every live socket in one room (dissolution): a
+// stale socket must not keep sequencing after the room ends.
+func (h *Hub) DropRoom(roomID string) {
+	h.mu.RLock()
+	conns := make([]*Conn, 0, len(h.conns[roomID]))
+	for _, c := range h.conns[roomID] {
+		conns = append(conns, c)
+	}
+	h.mu.RUnlock()
+	for _, c := range conns {
+		if c.close != nil {
+			c.close()
+		}
+	}
+}
+
 // SendTo delivers to one device in one room.
 func (h *Hub) SendTo(roomID, deviceID string, ev vmprotocol.Event) {
 	msg := ServerMessage{Type: "event", Event: ev}

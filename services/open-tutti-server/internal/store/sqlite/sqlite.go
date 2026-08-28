@@ -372,6 +372,20 @@ func (r *Repo) AddCASRefs(ctx context.Context, roomID string, hashes []string) e
 	return tx.Commit()
 }
 
+// HasCASRef reports whether the room references the object hash.
+func (r *Repo) HasCASRef(ctx context.Context, roomID, hash string) (bool, error) {
+	var one int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT 1 FROM cas_refs WHERE room_id=? AND hash=? LIMIT 1`, roomID, hash).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *Repo) ListCASRefCounts(ctx context.Context) (map[string]int, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT hash, COUNT(*) FROM cas_refs GROUP BY hash`)
 	if err != nil {

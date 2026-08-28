@@ -105,6 +105,16 @@ raw TCP refuses with guidance instead of random routing. Synthetic IPs
 come from 100.96.0.0/12 and never leave the room network. All cross-device
 traffic flows device → server → device over WebSocket + yamux.
 
+room-sync composes the whole surface in one process: a UDP DNS responder
+answers `*.tutti` with the allocator's VIPs, per-route VIP listeners
+terminate TLS with the room CA (exported under `OPEN_TUTTI_CA_DIR` for
+injection into the Tutti Browser and session containers — never the host
+OS store), device-level addresses re-resolve at connect time with the
+selector on ambiguity, and the yamux tunnel serves **both** legs —
+outbound dials for locally originated connections and inbound forwards
+that dial the owning session container on the room network
+(`OPEN_TUTTI_SESSION_DIAL`, default `agent-<session>`).
+
 ## Agent Borrowing (v1, first-class)
 
 Borrowing is a room capability, locked in the design record as a v1

@@ -119,10 +119,24 @@ func (s *Service) CreateRoom(ctx context.Context, in CreateRoomInput) (CreatedRo
 		}
 		return CreatedRoom{}, ErrInviteWrong
 	}
+	// Room creation must not become a key-rewrite oracle: an attacker
+	// holding a valid join ticket could otherwise create a throwaway room
+	// under the victim's device id with their own key, silently replacing
+	// the enrolled key and then passing join proofs. Enrolled keys are
+	// immutable, and reusing an existing device id anywhere requires
+	// proving possession of that enrolled key.
+	if existing, err := s.repo.GetDevice(ctx, in.Device.ID); err == nil {
+		if in.Device.Proof == "" || existing.PublicKeyPEM == "" {
+			return CreatedRoom{}, errors.New("device identity proof required")
+		}
+		if !VerifyDeviceProof(existing.PublicKeyPEM, CreateRoomProofMessage(in.Device.ID), in.Device.Proof) {
+			return CreatedRoom{}, errors.New("device identity proof failed")
+		}
+		in.Device.PublicKey = existing.PublicKeyPEM
+	}
 	if err := s.upsertDevice(ctx, in.Device); err != nil {
 		return CreatedRoom{}, err
 	}
-
 	roomID := "room_" + randomToken(16)
 	shareID := "r_" + randomToken(24)
 	password := sixDigitPassword()

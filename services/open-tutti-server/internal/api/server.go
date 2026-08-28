@@ -199,6 +199,10 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 		s.seq.CloseRoom(roomID)
 		s.previews.ClearRoom(roomID)
 		s.borrows.ClearRoom(roomID)
+		// Dissolution is terminal: drop every remaining live socket and
+		// tunnel so nothing sequences past the room's end.
+		s.hub.DropRoom(roomID)
+		s.relay.DropRoom(roomID)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "left"})
 }
@@ -322,6 +326,18 @@ func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, _ 
 
 func (s *Server) handleCASGet(w http.ResponseWriter, r *http.Request, roomID, _ string) {
 	hash := r.PathValue("hash")
+	// CAS is process-global; authorize the read against the room's own
+	// object references so one room's member cannot pull another room's
+	// bytes by predicting a hash.
+	refOK, err := s.repo.HasCASRef(r.Context(), roomID, hash)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !refOK {
+		writeErr(w, http.StatusNotFound, "object not referenced by this room")
+		return
+	}
 	data, err := s.cas.Get(hash)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err.Error())
@@ -333,6 +349,11 @@ func (s *Server) handleCASGet(w http.ResponseWriter, r *http.Request, roomID, _ 
 
 func (s *Server) handleCASHead(w http.ResponseWriter, r *http.Request, roomID, _ string) {
 	hash := r.PathValue("hash")
+	refOK, err := s.repo.HasCASRef(r.Context(), roomID, hash)
+	if err != nil || !refOK {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 	ok, err := s.cas.Has(hash)
 	if err != nil || !ok {
 		w.WriteHeader(http.StatusNotFound)

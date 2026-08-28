@@ -62,7 +62,7 @@ func TestProxyBindsVIPAndRelaysThroughTunnel(t *testing.T) {
 	routes := &staticRoutes{routes: []vmprotocol.RouteKey{
 		{DeviceID: "dev_peer", SessionID: "sess-claude-a", Port: 3000},
 	}}
-	p := NewProxy(vips, dialer, routes, "room1", "dev_me", nil)
+	p := NewProxy(vips, dialer, routes, nil, nil, "room1", "dev_me", nil)
 	defer p.Close()
 	// Dev machines cannot bind the synthetic block; the mapping (route →
 	// stable VIP address) stays under test by binding loopback instead.
@@ -79,17 +79,11 @@ func TestProxyBindsVIPAndRelaysThroughTunnel(t *testing.T) {
 		t.Fatalf("live addrs %+v", addrs)
 	}
 	// The route's hostname holds a synthetic VIP in the reserved block.
-	host, _, err := net.SplitHostPort(addrs[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = host
 	vipHost := vmprotocol.TuttiHost{Device: vmprotocol.SlugifyHostname("dev_peer"), Session: "claude-a"}
 	ip, ok := vips.Lookup(vipHost)
 	if !ok || ip[0] != 100 || ip[1] != 96 {
 		t.Fatalf("vip mapping missing or outside reserved block: %v ok=%v", ip, ok)
 	}
-
 	// Bytes through the VIP listener arrive via the tunnel and echo back.
 	conn, err := net.DialTimeout("tcp", addrs[0], 2*time.Second)
 	if err != nil {

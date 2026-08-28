@@ -5,11 +5,13 @@ package replica
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -260,6 +262,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		}
 		dst := filepath.Join(targetDir, filepath.FromSlash(path))
 		if info.IsDir {
+			if err := ensureUnder(targetDir, dst); err != nil {
+				return err
+			}
 			if err := os.MkdirAll(dst, 0o755); err != nil {
 				return err
 			}
@@ -269,6 +274,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		content, err := m.readLocked(ctx, path)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
+		}
+		if err := ensureUnder(targetDir, filepath.Dir(dst)); err != nil {
+			return err
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return err
@@ -282,6 +290,43 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 	}
 	// Mirror: remove host files the room no longer has.
 	return pruneRemoved(targetDir, roomPaths)
+}
+
+// ensureUnder walks every path component from root to dir and refuses
+// when one is a symlink or non-directory: participant-controlled room
+// paths must never follow a pre-existing host link out of the selected
+// workspace during Apply-to-Workspace.
+func ensureUnder(root, dir string) error {
+	rel, err := filepath.Rel(root, dir)
+	if err != nil {
+		return err
+	}
+	if rel == "." {
+		return nil
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path %s escapes workspace root", dir)
+	}
+	cur := root
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		cur = filepath.Join(cur, part)
+		fi, err := os.Lstat(cur)
+		if errors.Is(err, fs.ErrNotExist) {
+			// Nothing exists below the first missing component, so
+			// creating the chain cannot traverse a link.
+			return os.MkdirAll(cur, 0o755)
+		}
+		if err != nil {
+			return err
+		}
+		if fi.Mode()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("symlink ancestor %s would escape the workspace", cur)
+		}
+		if !fi.IsDir() {
+			return fmt.Errorf("ancestor %s of the workspace path is not a directory", cur)
+		}
+	}
+	return nil
 }
 
 // applyMode chmods a mirrored path when the room recorded a mode.
