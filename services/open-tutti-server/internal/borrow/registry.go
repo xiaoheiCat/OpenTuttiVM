@@ -164,18 +164,22 @@ func (r *Registry) Command(roomID string, p vmprotocol.BorrowCommandPayload) (vm
 	// connection before this call; recording it makes this device the
 	// session operator for subsequent approvals.
 	inst.LastBorrower = p.BorrowerDeviceID
-	// Track the originating borrower per command id: prompts arriving
-	// mid-execution route to THIS borrower, not to whoever commanded
-	// most recently.
+	// Track the originating borrower per command, keyed by
+	// room+agent+command: provider-local command ids collide across
+	// agents and rooms, and a global key would let one command's entry
+	// overwrite another's borrower. Prompts arriving mid-execution route
+	// to THIS borrower, not to whoever commanded most recently. Bounded
+	// FIFO: only recent commands can still be executing.
 	if p.CommandID != "" {
-		if _, exists := r.commandBorrowers[p.CommandID]; !exists {
-			r.commandBorrowerOrd = append(r.commandBorrowerOrd, p.CommandID)
+		key := roomID + "\x00" + p.AgentInstanceID + "\x00" + p.CommandID
+		if _, exists := r.commandBorrowers[key]; !exists {
+			r.commandBorrowerOrd = append(r.commandBorrowerOrd, key)
 			if len(r.commandBorrowerOrd) > maxTrackedCommands {
 				delete(r.commandBorrowers, r.commandBorrowerOrd[0])
 				r.commandBorrowerOrd = r.commandBorrowerOrd[1:]
 			}
 		}
-		r.commandBorrowers[p.CommandID] = p.BorrowerDeviceID
+		r.commandBorrowers[key] = p.BorrowerDeviceID
 	}
 	return p, nil
 }
@@ -212,7 +216,7 @@ func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID s
 	}
 	operator = inst.LastBorrower
 	if commandID != "" {
-		if borrower, ok := r.commandBorrowers[commandID]; ok {
+		if borrower, ok := r.commandBorrowers[roomID+"\x00"+agentInstanceID+"\x00"+commandID]; ok {
 			operator = borrower
 		}
 	}

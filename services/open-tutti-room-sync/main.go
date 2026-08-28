@@ -198,6 +198,46 @@ func run() error {
 	fmt.Fprintf(os.Stderr, "room-sync ready: device=%s policy=%s paths=%d vip-block=%s\n",
 		deviceID, policy, len(mgr.Replica.State.Paths()), gateway.ReservedBlock)
 
+	// resyncFromServer bootstraps the replica from a fresh checkpoint and
+	// drops every cached mount entry: operations absorbed through
+	// reconnect or sequence-gap resync never crossed the live event path,
+	// so connected Room FS mounts would keep serving pre-disconnect
+	// buffers indefinitely (and a later flush could overwrite the freshly
+	// bootstrapped authoritative content). A conservative whole-tree
+	// invalidation is the only correct granularity — the bootstrap may
+	// have moved anything.
+	resyncFromServer := func(ctx context.Context) error {
+		snap, ops, err := c.Bootstrap(ctx)
+		if err != nil {
+			return err
+		}
+		if err := mgr.Bootstrap(ctx, snap, ops); err != nil {
+			return err
+		}
+		bridge.InvalidateRemote("")
+		return nil
+	}
+	// resubmitPending re-sends operations still awaiting acknowledgement.
+	// Same operation id means the server's at-least-once dedup returns the
+	// ORIGINAL acknowledgement (whose sequence is at-or-below the restored
+	// state): the replica recognizes it and clears the pending entry. When
+	// the operation never reached the server, this delivers it for real.
+	resubmitPending := func(sess *client.Session) {
+		for _, env := range mgr.PendingEnvelopes() {
+			if err := sess.Submit(env); err != nil {
+				fmt.Fprintf(os.Stderr, "room-sync: pending resubmit %s: %v\n", env.OperationID, err)
+				return // socket is dying; the next session retries
+			}
+		}
+	}
+
+	// Tunnel loop: the relay tunnel has its OWN lifecycle. A transient
+	// tunnel handshake failure while the business WebSocket stays healthy
+	// must not strand every .tutti proxy connection and advertised route
+	// until an unrelated socket drop — so it retries independently of
+	// the session loop, with backoff, until ctx ends.
+	go tunnelLoop(ctx, serverURL, token, tunnelRef, c.RoomID(), deviceID)
+
 	// Session loop: transient socket failures reconnect with backoff and
 	// re-bootstrap the replica instead of taking the mount offline.
 	backoff := time.Second
@@ -216,11 +256,11 @@ func run() error {
 		}
 		backoff = time.Second
 		sess.OnGap = func() error {
-			snap, ops, err := c.Bootstrap(ctx)
-			if err != nil {
+			if err := resyncFromServer(ctx); err != nil {
 				return err
 			}
-			return mgr.Bootstrap(ctx, snap, ops)
+			resubmitPending(sess)
+			return nil
 		}
 		sess.OnEvent = func(ev vmprotocol.Event) {
 			switch ev.Topic {
@@ -305,38 +345,21 @@ func run() error {
 		if err := announceSessionPorts(sess, deviceID); err != nil {
 			fmt.Fprintf(os.Stderr, "room-sync: announce ports: %v\n", err)
 		}
-		tun, err := tunneldial.Dial(ctx, serverURL, token)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "room-sync: tunnel dial: %v\n", err)
-		} else {
-			tunnelRef.set(tun)
-			// Inbound leg: another device connected to one of this
-			// device's advertised routes; forward each relayed stream
-			// to the owning session container on the room network.
-			go serveTunnel(ctx, tun, c.RoomID(), deviceID)
-		}
+		// Deliver operations whose acknowledgement was lost with the
+		// previous socket (deduplicated server-side when they actually
+		// committed before the disconnect).
+		resubmitPending(sess)
 		runErr := sess.Run(mgr)
 		sess.Close()
 		sessionRef.clear(sess)
-		// Tear this iteration's tunnel down before reconnecting: a
-		// leaked tunnel keeps a yamux session alive, and its
-		// server-side unregister would later delete the replacement
-		// tunnel's relay entry, stranding advertised routes.
-		if tun != nil {
-			tunnelRef.clearLocked(tun)
-			tun.Close()
-		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		fmt.Fprintf(os.Stderr, "room-sync: session lost (%v); reconnecting\n", runErr)
 		// Reconnect path: resync the replica from a fresh bootstrap.
 		for {
-			snap, ops, err := c.Bootstrap(ctx)
-			if err == nil {
-				if err := mgr.Bootstrap(ctx, snap, ops); err == nil {
-					break
-				}
+			if err := resyncFromServer(ctx); err == nil {
+				break
 			}
 			if !sleepCtx(ctx, backoff) {
 				return ctx.Err()
@@ -394,6 +417,47 @@ var sessionDialTemplate = func() string {
 
 // serveTunnel consumes inbound relayed streams for this device and
 // forwards each to the requested local session port.
+// tunnelLoop keeps a relay tunnel alive independently of the business
+// WebSocket: dial, publish through tunnelRef, serve the inbound leg
+// until the tunnel dies, then redial with backoff. Replacing the
+// reference BEFORE closing the old tunnel is what keeps the
+// server-side relay entry correct (a leaked unregister would delete
+// the replacement's entry and strand advertised routes).
+func tunnelLoop(ctx context.Context, serverURL, token string, tunnelRef *liveTunnel, roomID, deviceID string) {
+	backoff := time.Second
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		tun, err := tunneldial.Dial(ctx, serverURL, token)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "room-sync: tunnel dial: %v\n", err)
+			if !sleepCtx(ctx, backoff) {
+				return
+			}
+			backoff = minDuration(backoff*2, 30*time.Second)
+			continue
+		}
+		backoff = time.Second
+		tunnelRef.set(tun)
+		// Inbound leg: another device connected to one of this device's
+		// advertised routes; forward each relayed stream to the owning
+		// session container on the room network. Returns when the
+		// tunnel closes.
+		serveTunnel(ctx, tun, roomID, deviceID)
+		tunnelRef.clearLocked(tun)
+		tun.Close()
+		if ctx.Err() != nil {
+			return
+		}
+		// The tunnel dropped (relay restart, network blip): redial after
+		// a short pause; the business socket is unaffected.
+		if !sleepCtx(ctx, backoff) {
+			return
+		}
+	}
+}
+
 func serveTunnel(ctx context.Context, tun *tunneldial.Tunnel, roomID, deviceID string) {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	for {

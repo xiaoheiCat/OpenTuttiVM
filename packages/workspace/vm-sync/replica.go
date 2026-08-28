@@ -117,6 +117,12 @@ func (r *Replica) Bootstrap(snap vmprotocol.WorkspaceSnapshot, ops []vmprotocol.
 		return err
 	}
 	r.AppliedSeq = snap.ServerSeq
+	// Pending ids stay pending across the bootstrap: an operation the
+	// server committed before the disconnect is folded into the snapshot
+	// itself (no envelope in the replay window), and clearing it here
+	// would strand the writer. The reconciliation happens when the
+	// deduplicated retry gets the original envelope back: ApplyServerOp
+	// below acknowledges pending operations even at-or-below AppliedSeq.
 	for _, env := range ops {
 		if _, err := r.ApplyServerOp(env); err != nil {
 			return err
@@ -151,6 +157,17 @@ func (errSeqGap) Error() string { return "replica sequence gap: resync required"
 // are skipped idempotently; gaps reject with ErrSeqGap so the caller resyncs.
 func (r *Replica) ApplyServerOp(env vmprotocol.Envelope) (acked bool, err error) {
 	if env.ServerSeq == 0 || env.ServerSeq <= r.AppliedSeq {
+		// A deduplicated retry gets the ORIGINAL accepted envelope back
+		// from the server, whose sequence is at-or-below what a
+		// post-disconnect bootstrap already restored (the operation was
+		// folded into the snapshot). The state need not reapply, but the
+		// writer is still blocked on this acknowledgement: recognize it
+		// instead of silently discarding, which would strand the waiter
+		// until timeout over a write that actually succeeded.
+		if env.AuthorDeviceID == r.DeviceID && r.pending[env.OperationID] {
+			delete(r.pending, env.OperationID)
+			return true, nil
+		}
 		return false, nil
 	}
 	if env.ServerSeq != r.AppliedSeq+1 {

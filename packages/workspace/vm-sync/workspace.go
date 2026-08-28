@@ -110,6 +110,10 @@ type WorkspaceState struct {
 	// sequence the same edit twice (a re-applied insert duplicates user
 	// content). Values index into ops.
 	accepted map[string]int
+	// ciPaths indexes lowercased paths: default case-insensitive Windows
+	// workspaces cannot materialize "README" and "readme" as distinct
+	// entries, so creates/mkdirs/renames are refused on collision.
+	ciPaths map[string]string
 	// Materializer, when set, fetches CAS-referenced content for a path
 	// into memory (text restore, eager full-replica blob fetch). The
 	// replica owner wires it; the server leaves it nil.
@@ -124,6 +128,26 @@ func NewWorkspaceState() *WorkspaceState {
 		hashLog:  map[string][]seqHash{},
 		barriers: map[string]*barrier{},
 		accepted: map[string]int{},
+		ciPaths:  map[string]string{},
+	}
+}
+
+// pathCIKey is the case-insensitive identity of a path (Windows
+// workspaces compare names case-insensitively by default).
+func pathCIKey(p string) string { return strings.ToLower(p) }
+
+// ciConflict reports whether another entry already occupies the path's
+// case-insensitive identity.
+func (w *WorkspaceState) ciConflict(path string) bool {
+	existing, ok := w.ciPaths[pathCIKey(path)]
+	return ok && existing != path
+}
+
+func (w *WorkspaceState) trackPath(path string) { w.ciPaths[pathCIKey(path)] = path }
+
+func (w *WorkspaceState) untrackPath(path string) {
+	if w.ciPaths[pathCIKey(path)] == path {
+		delete(w.ciPaths, pathCIKey(path))
 	}
 }
 
@@ -400,7 +424,7 @@ func (w *WorkspaceState) applyCreate(op vmprotocol.FileOperation) error {
 	if _, exists := w.files[op.Path]; exists {
 		return &RejectionError{Reason: RejectInvalid}
 	}
-	if w.pathTreeConflict(op.Path, false) {
+	if w.pathTreeConflict(op.Path, false) || w.ciConflict(op.Path) {
 		return &RejectionError{Reason: RejectInvalid}
 	}
 	var mode uint32 = 0o644
@@ -408,6 +432,7 @@ func (w *WorkspaceState) applyCreate(op vmprotocol.FileOperation) error {
 		mode = op.Mode.Mode
 	}
 	w.files[op.Path] = &fileState{Mode: mode, Kind: kindText, Content: []byte{}}
+	w.trackPath(op.Path)
 	return nil
 }
 
@@ -431,6 +456,7 @@ func (w *WorkspaceState) applyRemove(op vmprotocol.FileOperation) error {
 		}
 	}
 	delete(w.files, op.Path)
+	w.untrackPath(op.Path)
 	return nil
 }
 
@@ -438,10 +464,11 @@ func (w *WorkspaceState) applyMkdir(op vmprotocol.FileOperation) error {
 	if _, exists := w.files[op.Path]; exists {
 		return &RejectionError{Reason: RejectInvalid}
 	}
-	if w.pathTreeConflict(op.Path, true) {
+	if w.pathTreeConflict(op.Path, true) || w.ciConflict(op.Path) {
 		return &RejectionError{Reason: RejectInvalid}
 	}
 	w.files[op.Path] = &fileState{IsDir: true, Mode: 0o755}
+	w.trackPath(op.Path)
 	return nil
 }
 
@@ -456,6 +483,7 @@ func (w *WorkspaceState) applyRmdir(op vmprotocol.FileOperation) error {
 		}
 	}
 	delete(w.files, op.Path)
+	w.untrackPath(op.Path)
 	return nil
 }
 
@@ -477,11 +505,18 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 	if r.NewPath == r.OldPath || strings.HasPrefix(r.NewPath, r.OldPath+"/") {
 		return &RejectionError{Reason: RejectInvalid}
 	}
-	if w.pathTreeConflict(r.NewPath, f.IsDir) {
+	if w.pathTreeConflict(r.NewPath, f.IsDir) || w.ciConflict(r.NewPath) {
 		return &RejectionError{Reason: RejectInvalid}
 	}
 	w.files[r.NewPath] = f
 	delete(w.files, r.OldPath)
+	w.untrackPath(r.OldPath)
+	w.trackPath(r.NewPath)
+	// OT context must follow the entry for files too: a stale patch
+	// submitted against the new path would otherwise skip the base-hash
+	// check (no history under the new key) and apply without
+	// transformation over intervening edits.
+	w.rekeyHistory(r.OldPath, r.NewPath)
 	if f.IsDir {
 		// A nonempty directory rename moves every descendant with it;
 		// leaving them under the old prefix corrupts snapshots and
@@ -498,10 +533,9 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 			moved := r.NewPath + p[len(r.OldPath):]
 			w.files[moved] = w.files[p]
 			delete(w.files, p)
+			w.untrackPath(p)
+			w.trackPath(moved)
 			w.rekeyHistory(p, moved)
-		}
-		if len(descendants) > 0 {
-			w.rekeyHistory(r.OldPath, r.NewPath)
 		}
 	}
 	return nil
@@ -696,10 +730,16 @@ func (w *WorkspaceState) Snapshot(roomID string, reason vmprotocol.SnapshotReaso
 func (w *WorkspaceState) RestoreSnapshot(snap vmprotocol.WorkspaceSnapshot) error {
 	w.seq = snap.ServerSeq
 	w.files = map[string]*fileState{}
+	// Rebuild the case-insensitive identity index alongside the entries
+	// (snapshots taken before the collision rule keep working; the
+	// first entry wins and later case-variant entries overwrite it in
+	// files but cannot fork the identity).
+	w.ciPaths = map[string]string{}
 	for _, e := range snap.Entries {
 		if !vmprotocol.ValidWorkspacePath(e.Path) {
 			return fmt.Errorf("snapshot entry %q: invalid workspace path", e.Path)
 		}
+		w.trackPath(e.Path)
 		if e.Kind == vmprotocol.TreeEntryDir {
 			w.files[e.Path] = &fileState{IsDir: true, Mode: e.Mode}
 			continue

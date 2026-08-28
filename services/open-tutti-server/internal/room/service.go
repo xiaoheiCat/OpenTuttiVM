@@ -63,12 +63,34 @@ type Service struct {
 	tokens *tokenMinter
 
 	mu sync.Mutex
+	// shareAttempts throttles share-password verification per share id:
+	// Argon2id over a six-digit space must not be brute-forceable (or
+	// usable as a memory-exhaustion vector) through the public share
+	// endpoint. A one-minute sliding window; keyed by share id because
+	// that is the resource being guessed.
+	shareAttempts map[string][]time.Time
+	// argonSem bounds concurrent Argon2id derivations process-wide
+	// (each costs ~64 MiB): unbounded parallel verification of wrong
+	// passwords is a denial-of-service amplifier on a directly exposed
+	// server, independent of the per-share window.
+	argonSem chan struct{}
 }
+
+// Password attempt policy for the public share endpoint.
+const (
+	shareAttemptWindow  = time.Minute
+	shareAttemptMax     = 10
+	argonConcurrencyMax = 4
+)
 
 // NewService wires the lifecycle service. The broadcaster can be attached
 // later to break the hub/sequencer construction cycle.
 func NewService(repo store.Repository, cfg config.Config, clock Clock, bcast Broadcaster) *Service {
-	return &Service{repo: repo, cfg: cfg, clock: clock, bcast: bcast, tokens: newTokenMinter(cfg.Secret)}
+	return &Service{
+		repo: repo, cfg: cfg, clock: clock, bcast: bcast, tokens: newTokenMinter(cfg.Secret),
+		shareAttempts: map[string][]time.Time{},
+		argonSem:      make(chan struct{}, argonConcurrencyMax),
+	}
 }
 
 // SetBroadcaster attaches or replaces the event fanout.
@@ -242,7 +264,7 @@ func (s *Service) KickMember(ctx context.Context, roomID, ownerDeviceID, targetD
 
 // IssueJoinTicket verifies the room password from the share page and issues
 // a one-time, short-lived ticket. The password itself never enters the deep
-// link.
+// link. Verification is throttled per share and bounded process-wide.
 func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string) (ticket string, expiresAt time.Time, err error) {
 	room, err := s.repo.GetRoomByShareID(ctx, shareID)
 	if err != nil {
@@ -251,9 +273,17 @@ func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string)
 	if room.ShareRevokedAt != nil {
 		return "", time.Time{}, errors.New("share link revoked")
 	}
-	if !VerifyRoomPassword(password, room.PasswordHash) {
+	if !s.allowShareAttempt(shareID) {
+		return "", time.Time{}, errors.New("too many attempts: wait a minute")
+	}
+	// Bound concurrent Argon2 work before deriving.
+	s.argonSem <- struct{}{}
+	ok := VerifyRoomPassword(password, room.PasswordHash)
+	<-s.argonSem
+	if !ok {
 		return "", time.Time{}, errors.New("wrong room password")
 	}
+	s.clearShareAttempts(shareID)
 	ticket = "jt_" + randomToken(32)
 	expiresAt = s.clock.Now().Add(s.cfg.JoinTicketTTL)
 	if err := s.repo.CreateJoinTicket(ctx, store.JoinTicket{
@@ -262,6 +292,36 @@ func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string)
 		return "", time.Time{}, err
 	}
 	return ticket, expiresAt, nil
+}
+
+// allowShareAttempt records one password attempt against the share's
+// sliding window and reports whether it may proceed.
+func (s *Service) allowShareAttempt(shareID string) bool {
+	now := s.clock.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	attempts := s.shareAttempts[shareID]
+	kept := attempts[:0]
+	for _, t := range attempts {
+		if now.Sub(t) < shareAttemptWindow {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) >= shareAttemptMax {
+		s.shareAttempts[shareID] = kept
+		return false
+	}
+	s.shareAttempts[shareID] = append(kept, now)
+	return true
+}
+
+// clearShareAttempts resets a share's window after a successful
+// verification (the correct password holder must not inherit the
+// attacker's lockout).
+func (s *Service) clearShareAttempts(shareID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.shareAttempts, shareID)
 }
 
 // JoinRedeem redeems a one-time ticket, enrolls the device, and returns a

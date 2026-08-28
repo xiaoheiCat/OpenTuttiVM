@@ -145,9 +145,13 @@ func (n *roomNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 		child := &roomNode{client: n.client}
 		return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFDIR}), 0
 	}
-	out.Attr.Mode = 0o644 | syscall.S_IFREG
+	fileMode := st.Mode & 0o7777
+	if fileMode == 0 {
+		fileMode = 0o644
+	}
+	out.Attr.Mode = fileMode | syscall.S_IFREG
 	out.Attr.Size = uint64(st.Size)
-	child := &fileNode{client: n.client, path: path}
+	child := &fileNode{client: n.client, path: path, srvMode: fileMode}
 	return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFREG}), 0
 }
 
@@ -223,6 +227,10 @@ type fileNode struct {
 	loaded bool
 	// mode carries a setattr mode change into the next flush.
 	mode uint32
+	// srvMode is the authoritative permission bits from the protocol
+	// metadata (executable scripts stay executable in every mount;
+	// without it Getattr would flatten everything to 0644).
+	srvMode uint32
 }
 
 // invalidate drops the cached content so the next read reloads the
@@ -298,9 +306,12 @@ func (f *fileNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out.Attr.Size = uint64(len(f.buffer))
-	if f.mode != 0 {
+	switch {
+	case f.mode != 0:
 		out.Attr.Mode = f.mode
-	} else {
+	case f.srvMode != 0:
+		out.Attr.Mode = f.srvMode | syscall.S_IFREG
+	default:
 		out.Attr.Mode = 0o644 | syscall.S_IFREG
 	}
 	return 0

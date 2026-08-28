@@ -49,16 +49,25 @@ type Manager struct {
 	// waiters correlates submitted operation ids with writers blocked on
 	// the authoritative acknowledgement.
 	waiters map[string]chan error
+	// pendingEnvs keeps the envelopes of operations awaiting
+	// acknowledgement so a reconnect can re-submit them: an operation
+	// committed just before a disconnect is folded into the bootstrap
+	// snapshot (no envelope in the replay window) and only a
+	// deduplicated re-submit — same operation id — gets the original
+	// acknowledgement broadcast back, unblocking the replica's pending
+	// set (and delivering the op when it never reached the server).
+	pendingEnvs map[string]vmprotocol.Envelope
 }
 
 // New wires a replica manager.
 func New(deviceID string, cache vmcas.Store, policy Policy, fetcher ChunkFetcher) *Manager {
 	m := &Manager{
-		Replica: vmsync.NewReplica(deviceID),
-		Cache:   cache,
-		Policy:  policy,
-		fetcher: fetcher,
-		waiters: map[string]chan error{},
+		Replica:     vmsync.NewReplica(deviceID),
+		Cache:       cache,
+		Policy:      policy,
+		fetcher:     fetcher,
+		waiters:     map[string]chan error{},
+		pendingEnvs: map[string]vmprotocol.Envelope{},
 	}
 	// Sequenced applies materialize CAS-referenced content through this
 	// hook: restored text before its first patch, and (per Full policy)
@@ -80,10 +89,13 @@ func (m *Manager) SubmitAndWait(ctx context.Context, env vmprotocol.Envelope, su
 	ch := make(chan error, 1)
 	m.waiters[env.OperationID] = ch
 	m.Replica.Submit(env.OperationID)
+	m.pendingEnvs[env.OperationID] = env
 	m.mu.Unlock()
 	drop := func() {
 		m.mu.Lock()
 		delete(m.waiters, env.OperationID)
+		// Keep pendingEnvs: a timeout means unknown fate, not rejection
+		// — the reconnect path may still reconcile it.
 		m.mu.Unlock()
 	}
 	if err := submit(); err != nil {
@@ -112,6 +124,28 @@ func (m *Manager) NotifyRejected(operationID, reason string) {
 		ch <- fmt.Errorf("operation %s rejected: %s", operationID, reason)
 		delete(m.waiters, operationID)
 	}
+	delete(m.pendingEnvs, operationID)
+}
+
+// PendingEnvelopes snapshots the operations still awaiting acknowledgement
+// (for post-reconnect re-submission) and clears their pending entries so
+// each is tracked freshly by the next SubmitAndWait/ack cycle.
+func (m *Manager) PendingEnvelopes() []vmprotocol.Envelope {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]vmprotocol.Envelope, 0, len(m.pendingEnvs))
+	for _, env := range m.pendingEnvs {
+		out = append(out, env)
+	}
+	return out
+}
+
+// ForgetPending drops one operation's pending bookkeeping after its
+// re-submission was acknowledged or rejected.
+func (m *Manager) ForgetPending(operationID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.pendingEnvs, operationID)
 }
 
 // WithState runs fn against the replica state under the manager lock —
@@ -161,6 +195,7 @@ func (m *Manager) ApplyServerOp(env vmprotocol.Envelope) (bool, error) {
 			ch <- nil
 			delete(m.waiters, env.OperationID)
 		}
+		delete(m.pendingEnvs, env.OperationID)
 	}
 	m.mu.Unlock()
 	return acked, err
@@ -279,6 +314,28 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			continue
 		}
 		dst := filepath.Join(targetDir, filepath.FromSlash(path))
+		// Room history can flip a path's type (file→dir or dir→file).
+		// The host still holds the old type, and MkdirAll fails on an
+		// existing file while a rename cannot land on a directory —
+		// clear only the conflicting entry (RemoveAll for a superseded
+		// subtree) before creating the authoritative one.
+		if fi, err := os.Lstat(dst); err == nil {
+			if info.IsDir && !fi.IsDir() {
+				if err := os.Remove(dst); err != nil {
+					return fmt.Errorf("clear file replaced by dir %s: %w", dst, err)
+				}
+			} else if !info.IsDir && fi.IsDir() {
+				if err := os.RemoveAll(dst); err != nil {
+					return fmt.Errorf("clear dir replaced by file %s: %w", dst, err)
+				}
+			} else if !info.IsDir && !fi.IsDir() && fi.Mode()&fs.ModeSymlink != 0 {
+				// A host symlink at a room-file path is a conflicting
+				// entry too: the mirror must not write through it.
+				if err := os.Remove(dst); err != nil {
+					return fmt.Errorf("clear symlink replaced by file %s: %w", dst, err)
+				}
+			}
+		}
 		if info.IsDir {
 			if err := ensureUnder(targetDir, dst); err != nil {
 				return err

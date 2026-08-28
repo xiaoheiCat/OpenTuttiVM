@@ -136,6 +136,8 @@ func (s *Server) handleJoinTicket(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusNotFound
 		} else if strings.Contains(err.Error(), "revoked") {
 			status = http.StatusGone
+		} else if strings.Contains(err.Error(), "too many attempts") {
+			status = http.StatusTooManyRequests
 		} else if strings.Contains(err.Error(), "password") {
 			status = http.StatusUnauthorized
 		}

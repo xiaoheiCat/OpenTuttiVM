@@ -290,10 +290,16 @@ func (s *Session) AnnouncePorts(p vmprotocol.PortsChangedPayload) error {
 }
 
 // ResolveBarrier lifts a conflict barrier this session was assigned to
-// resolve (sent after the resolver's fix committed).
+// resolve (sent after the resolver's fix committed). The identity must
+// be the registry id the bridge submits under ("sess-"+label) — the
+// server's resolver match is exact.
 func (s *Session) ResolveBarrier(path string) error {
+	id := "sess-main"
+	if s.SessionLabel != "" {
+		id = "sess-" + s.SessionLabel
+	}
 	msg, err := json.Marshal(map[string]any{
-		"type": "conflict_resolved", "path": path, "agent_session": s.SessionLabel,
+		"type": "conflict_resolved", "path": path, "agent_session": id,
 	})
 	if err != nil {
 		return err
