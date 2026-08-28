@@ -20,7 +20,7 @@ test("desktop stable release alias body points at the concrete stable release", 
   assert.match(body, /## Stable Desktop Release/);
   assert.match(
     body,
-    /Current stable release: \[v0\.1\.16\]\(https:\/\/github\.com\/tutti-os\/tutti\/releases\/tag\/v0\.1\.16\)/
+    /Current stable release: \[v0\.1\.16\]\(https:\/\/github\.com\/xiaoheiCat\/OpenTuttiVM\/releases\/tag\/v0\.1\.16\)/
   );
   assert.match(
     body,
