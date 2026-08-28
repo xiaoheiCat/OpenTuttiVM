@@ -14,12 +14,32 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
 	roomfs "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs"
 )
+
+// dialRoomFS is this host's transport policy (the shared protocol package
+// stays transport-neutral): a bare path means the room-sync unix socket;
+// anything with a port falls back to TCP.
+func dialRoomFS(addr string) (*roomfs.Client, error) {
+	var (
+		conn net.Conn
+		err  error
+	)
+	if _, _, perr := net.SplitHostPort(addr); perr != nil {
+		conn, err = net.Dial("unix", addr)
+	} else {
+		conn, err = net.Dial("tcp", addr)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("roomfs dial %s: %w", addr, err)
+	}
+	return roomfs.NewClient(conn), nil
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -45,7 +65,7 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	client, err := roomfs.Dial(addr)
+	client, err := dialRoomFS(addr)
 	if err != nil {
 		return fmt.Errorf("connect room-sync at %s: %w", addr, err)
 	}

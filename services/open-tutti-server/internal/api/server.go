@@ -259,9 +259,13 @@ func (s *Server) handleKickMember(w http.ResponseWriter, r *http.Request, roomID
 		return
 	}
 	// Deleting the membership stops future authentication; live sockets
-	// and tunnels must die too, or the kicked device keeps operating.
+	// and tunnels must die too, or the kicked device keeps operating —
+	// and its advertised routes must leave the preview registry, or
+	// every gateway keeps binding ghost VIP hosts and the relay keeps
+	// authorizing them until the room dissolves.
 	s.hub.DropDevice(roomID, target)
 	s.relay.DropDevice(roomID, target)
+	s.previews.DropDevice(roomID, target)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "kicked", "device_id": target})
 }
 

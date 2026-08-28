@@ -161,19 +161,35 @@ func (h *Hub) Attach(c *Conn) {
 	if h.conns[c.RoomID] == nil {
 		h.conns[c.RoomID] = map[string]*Conn{}
 	}
+	if old := h.conns[c.RoomID][c.DeviceID]; old != nil && old != c {
+		// Superseded predecessor (reconnect raced the old socket's
+		// exit): force its pump to return so its DETACH cannot evict
+		// this replacement — an unconditional delete there would mute
+		// the live socket (no broadcasts, no targeted messages) while
+		// grace handling treats the device as gone.
+		if old.close != nil {
+			old.close()
+		}
+	}
 	h.conns[c.RoomID][c.DeviceID] = c
 }
 
-// Detach removes a connection and runs the disconnect path.
+// Detach removes a connection and runs the disconnect path — but only
+// when this connection still owns the registration: a replacement that
+// attached first keeps its entry, its broadcasts, and its online state.
 func (h *Hub) Detach(c *Conn) {
 	h.mu.Lock()
-	if devs := h.conns[c.RoomID]; devs != nil {
-		delete(devs, c.DeviceID)
-		if len(devs) == 0 {
+	registered := h.conns[c.RoomID] != nil && h.conns[c.RoomID][c.DeviceID] == c
+	if registered {
+		delete(h.conns[c.RoomID], c.DeviceID)
+		if len(h.conns[c.RoomID]) == 0 {
 			delete(h.conns, c.RoomID)
 		}
 	}
 	h.mu.Unlock()
+	if !registered {
+		return
+	}
 
 	// c.Ctx is the cancelled read context on forced closures (queue
 	// overflow, kicks) — an already-cancelled context would fail
@@ -210,13 +226,25 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 	writeCtx, cancelWrites := context.WithCancel(c.Ctx)
 	defer cancelWrites()
 	go func() {
-		for msg := range c.send {
-			data, err := json.Marshal(msg)
-			if err != nil {
-				continue
-			}
-			if err := ws.Write(writeCtx, websocket.MessageText, data); err != nil {
-				cancelWrites()
+		// The write context cancels when the pump returns (or the write
+		// fails): without the Done select this goroutine would block on
+		// the never-closed channel forever, leaking one goroutine +
+		// channel + connection per disconnect.
+		for {
+			select {
+			case msg, ok := <-c.send:
+				if !ok {
+					return
+				}
+				data, err := json.Marshal(msg)
+				if err != nil {
+					continue
+				}
+				if err := ws.Write(writeCtx, websocket.MessageText, data); err != nil {
+					cancelWrites()
+					return
+				}
+			case <-writeCtx.Done():
 				return
 			}
 		}
@@ -354,7 +382,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 			}
 			p := *msg.ApprovalDecision
 			p.DeciderDeviceID = c.DeviceID
-			owner, err := h.borrows.ResolveDecision(p.ApprovalID, c.DeviceID)
+			owner, err := h.borrows.ResolveDecision(c.RoomID, p.AgentInstanceID, p.ApprovalID, c.DeviceID)
 			if err != nil {
 				h.log.Warn("approval decision", "room", c.RoomID, "err", err)
 				continue

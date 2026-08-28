@@ -154,8 +154,12 @@ func run() error {
 	}
 	roomfsSrv := roomfs.NewServer(nil, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	// Borrowing host: the owning device's execution adapter. Room-sync
-	// never runs agent code; hosts inject a real adapter (Agent Host
-	// delegation) and Noop keeps routed events observable until then.
+	// never runs agent code; the host application (Agent Host
+	// integration) injects a real adapter. Until one exists this build
+	// OBSERVES routed events without executing them, and sharing stays
+	// disabled by default — room-sync itself never sends agent_share,
+	// so nothing advertises an agent as borrowable that cannot execute.
+	fmt.Fprintln(os.Stderr, "room-sync: borrowing execution DISABLED (no host adapter); routed borrow events are observed and logged only")
 	borrowHost := borrowhost.Host(&borrowhost.Noop{
 		Log: slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})

@@ -92,6 +92,10 @@ type ApprovalRequestPayload struct {
 // timeout/dismissed.
 type ApprovalDecisionPayload struct {
 	ApprovalID string `json:"approval_id"`
+	// AgentInstanceID scopes the decision: provider-local approval ids
+	// collide across rooms and agents, and the server keys pending
+	// approvals by room+agent+id.
+	AgentInstanceID string `json:"agent_instance_id,omitempty"`
 	// DeciderDeviceID is stamped by the server from the authenticated
 	// connection and must equal the request's session operator.
 	DeciderDeviceID string `json:"decider_device_id"`

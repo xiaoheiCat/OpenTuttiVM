@@ -255,6 +255,16 @@ func (h *Handler) Rename(from, to string) error {
 	})
 }
 
+// Chmod submits a permission-bit change to the authoritative workspace:
+// a local-only assignment would revert on the next invalidation and
+// never reach other participants.
+func (h *Handler) Chmod(path string, mode uint32) error {
+	return h.submit(vmprotocol.FileOperation{
+		ID: h.nextOpID(), Path: path, Kind: vmprotocol.OpMetadataChange,
+		Mode: &vmprotocol.MetadataChange{Mode: mode & 0o7777},
+	})
+}
+
 // submit sends one operation and reports success only after the server
 // accepted it (broadcast acknowledgement); rejections surface as errors.
 func (h *Handler) submit(op vmprotocol.FileOperation) error {

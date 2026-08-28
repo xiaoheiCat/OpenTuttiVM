@@ -159,6 +159,20 @@ func (r *Registry) ClearRoom(roomID string) {
 	delete(r.routes, roomID)
 }
 
+// DropDevice clears one device's advertised routes (kick/leave): the
+// gateway's route list must stop offering canonical hosts nothing can
+// reach anymore, and the relay must stop authorizing them.
+func (r *Registry) DropDevice(roomID, deviceID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if devs := r.routes[roomID]; devs != nil {
+		delete(devs, deviceID)
+		if len(devs) == 0 {
+			delete(r.routes, roomID)
+		}
+	}
+}
+
 func itoa(v int) string {
 	if v == 0 {
 		return "0"

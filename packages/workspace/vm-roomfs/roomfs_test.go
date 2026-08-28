@@ -29,6 +29,15 @@ func newMemHandler() *memHandler {
 	return &memHandler{files: map[string][]byte{}, dirs: map[string]bool{}}
 }
 
+func (m *memHandler) Chmod(path string, mode uint32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.files[path]; !ok && !m.dirs[path] {
+		return fmt.Errorf("no such path %s", path)
+	}
+	return nil
+}
+
 func (m *memHandler) Stat(path string) (*Stat, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -180,7 +189,7 @@ func TestProtocolRoundTrip(t *testing.T) {
 	h.dirs["src"] = true
 	sock := startServer(t, h)
 
-	c, err := Dial(sock)
+	c, err := dialTest(sock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +245,7 @@ func TestProtocolRoundTrip(t *testing.T) {
 func TestBinaryBodiesSurviveFraming(t *testing.T) {
 	h := newMemHandler()
 	sock := startServer(t, h)
-	c, err := Dial(sock)
+	c, err := dialTest(sock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +271,7 @@ func TestRejectionSurfacesAsErrRejected(t *testing.T) {
 	h := newMemHandler()
 	h.rejectOn = "guarded.txt"
 	sock := startServer(t, h)
-	c, err := Dial(sock)
+	c, err := dialTest(sock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +286,7 @@ func TestInvalidationPush(t *testing.T) {
 	h := newMemHandler()
 	sock := startServer(t, h)
 
-	watcher, err := Dial(sock)
+	watcher, err := dialTest(sock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +296,7 @@ func TestInvalidationPush(t *testing.T) {
 	watcher.OnInvalidate = func(path string) { got <- path }
 
 	// A second connection writes; the watcher gets pushed.
-	writer, err := Dial(sock)
+	writer, err := dialTest(sock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,4 +312,14 @@ func TestInvalidationPush(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("invalidation push never arrived")
 	}
+}
+
+// dialTest connects over the unix socket the tests serve; transport
+// selection lives with consumers now.
+func dialTest(addr string) (*Client, error) {
+	conn, err := net.Dial("unix", addr)
+	if err != nil {
+		return nil, err
+	}
+	return NewClient(conn), nil
 }

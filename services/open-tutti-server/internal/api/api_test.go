@@ -611,7 +611,7 @@ func TestAgentBorrowingFlow(t *testing.T) {
 	}
 
 	// Bob decides; the decision routes back to Alice with Bob as decider.
-	decision := vmprotocol.ApprovalDecisionPayload{ApprovalID: "ap1", Choice: 0}
+	decision := vmprotocol.ApprovalDecisionPayload{ApprovalID: "ap1", AgentInstanceID: "agent-claude-1", Choice: 0}
 	wsWrite(t, ctx, bobWS, realtime.ClientMessage{Type: "approval_decision", ApprovalDecision: &decision})
 	var decided vmprotocol.ApprovalDecisionPayload
 	wsReadUntil(t, ctx, aliceWS, vmprotocol.TopicApprovalDecision, &decided)

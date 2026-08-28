@@ -109,16 +109,16 @@ func TestApprovalsRouteToBorrowerNotOwner(t *testing.T) {
 	}
 
 	// The owner must NOT be able to decide.
-	if _, err := r.ResolveDecision("ap1", "dev_alice"); !errors.Is(err, ErrNotOperator) {
+	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_alice"); !errors.Is(err, ErrNotOperator) {
 		t.Fatalf("owner decision err = %v", err)
 	}
 	// The borrower decides; routing returns the owning device.
-	owner, err := r.ResolveDecision("ap1", "dev_bob")
+	owner, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_bob")
 	if err != nil || owner != "dev_alice" {
 		t.Fatalf("borrower decision owner = %q err = %v", owner, err)
 	}
 	// Decisions are single-use.
-	if _, err := r.ResolveDecision("ap1", "dev_bob"); err == nil {
+	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_bob"); err == nil {
 		t.Fatal("expected approval to be consumed")
 	}
 }
@@ -146,7 +146,7 @@ func TestApprovalRoutesToOriginatingCommandBorrower(t *testing.T) {
 	if err != nil || operator != "dev_bob" {
 		t.Fatalf("prompt routed to %q err = %v (want dev_bob)", operator, err)
 	}
-	if _, err := r.ResolveDecision("ap-bob", "dev_carol"); !errors.Is(err, ErrNotOperator) {
+	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap-bob", "dev_carol"); !errors.Is(err, ErrNotOperator) {
 		t.Fatalf("carol deciding bob's prompt err = %v", err)
 	}
 	// Without a command id the current operator (carol) receives it.
@@ -196,7 +196,7 @@ func TestClearRoomDropsAgentsAndApprovals(t *testing.T) {
 	if _, ok := r.Agent("room1", "agent-claude-1"); ok {
 		t.Fatal("agent survived ClearRoom")
 	}
-	if _, err := r.ResolveDecision("ap1", "dev_bob"); err == nil {
+	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_bob"); err == nil {
 		t.Fatal("approval survived ClearRoom")
 	}
 }

@@ -334,9 +334,16 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		f.mu.Unlock()
 	}
 	if mode, ok := in.GetMode(); ok {
+		perms := mode & 0o7777
 		f.mu.Lock()
-		f.mode = mode
+		f.mode = perms
 		f.mu.Unlock()
+		// The change must reach the authoritative workspace: a local
+		// assignment alone reverts on the next invalidation and never
+		// reaches other participants.
+		if err := f.client.Chmod(f.path, perms); err != nil {
+			return syscall.EIO
+		}
 	}
 	return f.Getattr(ctx, fh, out)
 }

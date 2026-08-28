@@ -73,6 +73,7 @@ const (
 	TypeMkdir  = "mkdir"
 	TypeRemove = "remove"
 	TypeRename = "rename"
+	TypeChmod  = "chmod" // permission-bit change; replica submits a metadata op
 )
 
 // Frame wire format: 4-byte big-endian header length, JSON header, then a

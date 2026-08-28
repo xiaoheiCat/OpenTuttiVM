@@ -223,25 +223,36 @@ func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID s
 	if operator == "" {
 		return "", errors.New("no active borrowing session")
 	}
-	r.approvals[approvalID] = openApproval{
+	// Scoped key: provider-local approval ids collide across rooms and
+	// agent runtimes, and a process-global key would let one room's
+	// prompt overwrite another's (decisions then rejected, or worse,
+	// consumed by the wrong room's approval).
+	r.approvals[approvalScope(roomID, agentInstanceID, approvalID)] = openApproval{
 		roomID: roomID, agentOwner: inst.OwnerDeviceID, operator: operator,
 	}
 	return operator, nil
 }
 
+// approvalScope keys pending approvals by room, agent instance, and the
+// provider-local approval id.
+func approvalScope(roomID, agentInstanceID, approvalID string) string {
+	return roomID + "\x00" + agentInstanceID + "\x00" + approvalID
+}
+
 // ResolveDecision validates that the deciding device is the session
-// operator and returns the owning device for targeted routing.
-func (r *Registry) ResolveDecision(approvalID, deciderDeviceID string) (ownerDeviceID string, err error) {
+// operator and returns the owning device for targeted routing. The scope
+// (room, agent instance) disambiguates provider-local approval ids.
+func (r *Registry) ResolveDecision(roomID, agentInstanceID, approvalID, deciderDeviceID string) (ownerDeviceID string, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	ap, ok := r.approvals[approvalID]
+	ap, ok := r.approvals[approvalScope(roomID, agentInstanceID, approvalID)]
 	if !ok {
 		return "", errors.New("unknown or expired approval")
 	}
 	if ap.operator != deciderDeviceID {
 		return "", ErrNotOperator
 	}
-	delete(r.approvals, approvalID)
+	delete(r.approvals, approvalScope(roomID, agentInstanceID, approvalID))
 	return ap.agentOwner, nil
 }
 

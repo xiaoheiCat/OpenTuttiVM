@@ -26,22 +26,18 @@ type Client struct {
 	OnInvalidate func(path string)
 }
 
-// Dial connects to the room-sync unix socket (falls back to TCP).
-func Dial(addr string) (*Client, error) {
-	conn, err := net.Dial("unix", addr)
-	if err != nil {
-		conn, err = net.Dial("tcp", addr)
-		if err != nil {
-			return nil, fmt.Errorf("roomfs dial %s: %w", addr, err)
-		}
-	}
+// NewClient builds the protocol client over an established connection:
+// transport selection (unix socket vs TCP, and the host-specific address
+// forms) is the consuming service's adapter concern, not this shared
+// workspace package's policy.
+func NewClient(conn net.Conn) *Client {
 	c := &Client{
 		conn:    conn,
 		rw:      bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)),
 		pending: map[uint64]chan Response{},
 	}
 	go c.pump()
-	return c, nil
+	return c
 }
 
 // call issues one request and awaits its response.
@@ -188,6 +184,12 @@ func (c *Client) Remove(path string) error {
 // Rename moves a path within the workspace.
 func (c *Client) Rename(from, to string) error {
 	_, err := c.call(Request{Type: TypeRename, Path: from, To: to}, nil)
+	return err
+}
+
+// Chmod submits a permission-bit change.
+func (c *Client) Chmod(path string, mode uint32) error {
+	_, err := c.call(Request{Type: TypeChmod, Path: path, Mode: mode}, nil)
 	return err
 }
 
