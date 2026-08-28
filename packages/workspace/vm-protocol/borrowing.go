@@ -70,6 +70,11 @@ type BorrowRevokedPayload struct {
 type ApprovalRequestPayload struct {
 	ApprovalID      string `json:"approval_id"`
 	AgentInstanceID string `json:"agent_instance_id"`
+	// CommandID identifies the borrow command whose execution raised
+	// this prompt: approvals route to THAT command's borrower, so a
+	// second borrower's command can never steal the first one's prompt.
+	// The owner-side runtime echoes it from the executing command.
+	CommandID string `json:"command_id,omitempty"`
 	// SessionOperatorDeviceID is the borrower who decides.
 	SessionOperatorDeviceID string `json:"session_operator_device_id"`
 	Provider                string `json:"provider"`

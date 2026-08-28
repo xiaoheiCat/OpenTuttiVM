@@ -103,7 +103,7 @@ func TestApprovalsRouteToBorrowerNotOwner(t *testing.T) {
 
 	// The executing agent on dev_alice raises a permission prompt; the
 	// current borrower (dev_bob) is the operator.
-	operator, err := r.OpenApproval("room1", "agent-claude-1", "ap1")
+	operator, err := r.OpenApproval("room1", "agent-claude-1", "ap1", "c1")
 	if err != nil || operator != "dev_bob" {
 		t.Fatalf("operator = %q err = %v", operator, err)
 	}
@@ -120,6 +120,39 @@ func TestApprovalsRouteToBorrowerNotOwner(t *testing.T) {
 	// Decisions are single-use.
 	if _, err := r.ResolveDecision("ap1", "dev_bob"); err == nil {
 		t.Fatal("expected approval to be consumed")
+	}
+}
+
+func TestApprovalRoutesToOriginatingCommandBorrower(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	bob := vmprotocol.BorrowCommandPayload{
+		CommandID: "cmd-bob", AgentInstanceID: "agent-claude-1",
+		BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration,
+	}
+	if _, err := r.Command("room1", bob); err != nil {
+		t.Fatal(err)
+	}
+	// Carol commands while Bob's execution is still running — she must
+	// not become the operator of Bob's pending prompt.
+	carol := vmprotocol.BorrowCommandPayload{
+		CommandID: "cmd-carol", AgentInstanceID: "agent-claude-1",
+		BorrowerDeviceID: "dev_carol", LeaseGeneration: shared.LeaseGeneration,
+	}
+	if _, err := r.Command("room1", carol); err != nil {
+		t.Fatal(err)
+	}
+	operator, err := r.OpenApproval("room1", "agent-claude-1", "ap-bob", "cmd-bob")
+	if err != nil || operator != "dev_bob" {
+		t.Fatalf("prompt routed to %q err = %v (want dev_bob)", operator, err)
+	}
+	if _, err := r.ResolveDecision("ap-bob", "dev_carol"); !errors.Is(err, ErrNotOperator) {
+		t.Fatalf("carol deciding bob's prompt err = %v", err)
+	}
+	// Without a command id the current operator (carol) receives it.
+	operator, err = r.OpenApproval("room1", "agent-claude-1", "ap-carol", "")
+	if err != nil || operator != "dev_carol" {
+		t.Fatalf("legacy routing operator = %q err = %v", operator, err)
 	}
 }
 
@@ -141,7 +174,7 @@ func TestReShareStartsNewGenerationAndClearsOperator(t *testing.T) {
 		t.Fatalf("re-share generation = %d", second.LeaseGeneration)
 	}
 	// No operator until a new command arrives.
-	if _, err := r.OpenApproval("room1", "agent-claude-1", "ap2"); err == nil {
+	if _, err := r.OpenApproval("room1", "agent-claude-1", "ap2", ""); err == nil {
 		t.Fatal("expected no active borrowing session after re-share")
 	}
 }
@@ -156,7 +189,7 @@ func TestClearRoomDropsAgentsAndApprovals(t *testing.T) {
 	if _, err := r.Command("room1", cmd); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.OpenApproval("room1", "agent-claude-1", "ap1"); err != nil {
+	if _, err := r.OpenApproval("room1", "agent-claude-1", "ap1", "c1"); err != nil {
 		t.Fatal(err)
 	}
 	r.ClearRoom("room1")

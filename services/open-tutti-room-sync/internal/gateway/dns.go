@@ -85,8 +85,11 @@ func buildHeader(msg []byte, answers int) []byte {
 	copy(out, msg[:12])
 	out[2] = 0x81 // response, recursion not desired
 	out[3] = 0x80 // no error
+	// ANCOUNT/NSCOUNT/ARCOUNT live at 6-7/8-9/10-11; write each pair at
+	// its own offset so nothing overlaps the answer count.
 	binary.BigEndian.PutUint16(out[6:], uint16(answers))
-	binary.BigEndian.PutUint16(out[7:], 0)
+	binary.BigEndian.PutUint16(out[8:], 0)
+	binary.BigEndian.PutUint16(out[10:], 0)
 	return append(out, msg[12:]...)
 }
 

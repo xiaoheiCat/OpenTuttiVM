@@ -112,7 +112,9 @@ func ValidateSplices(splices []vmprotocol.Splice, baseLen int) error {
 		if s.Offset < 0 || s.DeleteLen < 0 {
 			return fmt.Errorf("splice %d: negative offset or length", i)
 		}
-		if s.Offset+s.DeleteLen > baseLen {
+		// Subtraction form: Offset+DeleteLen can overflow int and wrap
+		// below baseLen, which would let ApplyPatch slice out of range.
+		if s.Offset > baseLen || s.DeleteLen > baseLen-s.Offset {
 			return fmt.Errorf("splice %d: range [%d,%d) exceeds base length %d", i, s.Offset, s.Offset+s.DeleteLen, baseLen)
 		}
 		if i > 0 && s.Offset < prevEnd {

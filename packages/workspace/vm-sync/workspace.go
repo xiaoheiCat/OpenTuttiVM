@@ -124,6 +124,19 @@ func NewWorkspaceState() *WorkspaceState {
 // Seq returns the current server sequence.
 func (w *WorkspaceState) Seq() uint64 { return w.seq }
 
+// CurrentBaseHash returns the hash the authoritative state expects as the
+// base for a whole-file rewrite of path: the manifest hash while the file
+// is blob-tracked, the raw content hash while it is text-tracked.
+func (w *WorkspaceState) CurrentBaseHash(path string) string {
+	if f, ok := w.files[path]; ok && f.Manifest != "" {
+		return f.Manifest
+	}
+	if c, ok := w.CurrentContent(path); ok {
+		return ContentHash(c)
+	}
+	return ""
+}
+
 // BarrierResolverMatches reports whether the connection identity is the
 // assigned resolver for an open barrier. Used to authorize explicit
 // conflict_resolved submissions.
@@ -136,9 +149,12 @@ func (w *WorkspaceState) BarrierResolverMatches(path, deviceID, agentSessionID s
 		(b.ResolverDevice == "" || deviceID == b.ResolverDevice)
 }
 
-// fenced reports whether the operation is blocked by an open barrier on any
-// path it touches. The assigned resolver passes.
-func (w *WorkspaceState) fenced(env *vmprotocol.Envelope) bool {
+// fenced returns the open barrier blocking the operation on any path it
+// touches (nil when unfenced). The assigned resolver passes. The matched
+// barrier is returned so rejection metadata comes from the fence that
+// actually blocked — for renames that can be the destination's barrier
+// while the source has none.
+func (w *WorkspaceState) fenced(env *vmprotocol.Envelope) *barrier {
 	op := env.Operation
 	paths := []string{op.Path}
 	if op.Kind == vmprotocol.OpRename && op.Rename != nil {
@@ -156,10 +172,10 @@ func (w *WorkspaceState) fenced(env *vmprotocol.Envelope) bool {
 		// device: session ids are client-claimed, device identity is
 		// stamped server-side, so only the real resolver device passes.
 		if env.AgentSessionID != b.ResolverAgent || (b.ResolverDevice != "" && env.AuthorDeviceID != b.ResolverDevice) {
-			return true
+			return b
 		}
 	}
-	return false
+	return nil
 }
 
 // Accept validates, transforms, and applies one submitted operation,
@@ -186,8 +202,7 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 	case env.Operation.Kind == vmprotocol.OpRename && env.Operation.Rename == nil:
 		return env, &RejectionError{Reason: RejectInvalid}
 	}
-	if w.fenced(&env) {
-		b := w.barriers[env.Operation.Path]
+	if b := w.fenced(&env); b != nil {
 		return env, &RejectionError{
 			Reason:         RejectConflictBarrier,
 			ResolverAgent:  b.ResolverAgent,
@@ -337,8 +352,37 @@ func (w *WorkspaceState) applyBlobReplace(op vmprotocol.FileOperation) error {
 	return nil
 }
 
+// pathTreeConflict rejects destinations that cannot exist on a real
+// filesystem: a file ancestor (creating "a/b" while "a" is a file) or a
+// file with existing descendants (creating file "a" while "a/b" exists).
+func (w *WorkspaceState) pathTreeConflict(path string, isDir bool) bool {
+	// An existing ancestor entry that is a file makes children impossible.
+	for i := 0; i < len(path); i++ {
+		if path[i] != '/' {
+			continue
+		}
+		if anc, ok := w.files[path[:i]]; ok && !anc.IsDir {
+			return true
+		}
+	}
+	if isDir {
+		return false
+	}
+	// A file cannot coexist with its own descendants.
+	prefix := path + "/"
+	for p := range w.files {
+		if strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func (w *WorkspaceState) applyCreate(op vmprotocol.FileOperation) error {
 	if _, exists := w.files[op.Path]; exists {
+		return &RejectionError{Reason: RejectInvalid}
+	}
+	if w.pathTreeConflict(op.Path, false) {
 		return &RejectionError{Reason: RejectInvalid}
 	}
 	var mode uint32 = 0o644
@@ -363,6 +407,9 @@ func (w *WorkspaceState) applyRemove(op vmprotocol.FileOperation) error {
 
 func (w *WorkspaceState) applyMkdir(op vmprotocol.FileOperation) error {
 	if _, exists := w.files[op.Path]; exists {
+		return &RejectionError{Reason: RejectInvalid}
+	}
+	if w.pathTreeConflict(op.Path, true) {
 		return &RejectionError{Reason: RejectInvalid}
 	}
 	w.files[op.Path] = &fileState{IsDir: true, Mode: 0o755}
@@ -399,6 +446,9 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 	// the freshly inserted destination match the source prefix again and
 	// double-move every entry; reject before any mutation.
 	if r.NewPath == r.OldPath || strings.HasPrefix(r.NewPath, r.OldPath+"/") {
+		return &RejectionError{Reason: RejectInvalid}
+	}
+	if w.pathTreeConflict(r.NewPath, f.IsDir) {
 		return &RejectionError{Reason: RejectInvalid}
 	}
 	w.files[r.NewPath] = f

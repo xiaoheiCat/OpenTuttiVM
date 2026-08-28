@@ -112,6 +112,16 @@ func (r *Registry) RoomSessions(roomID string) []Entry {
 	return out
 }
 
+// HasRoute reports whether (device, session, port) is currently
+// advertised in the room — the relay's dial authorization.
+func (r *Registry) HasRoute(roomID, deviceID, sessionID string, port int) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	key := vmprotocol.RouteKey{RoomID: roomID, DeviceID: deviceID, SessionID: sessionID, Port: port}
+	_, ok := r.routes[roomID][deviceID][key]
+	return ok
+}
+
 // ClearRoom drops a dissolved room's registry.
 func (r *Registry) ClearRoom(roomID string) {
 	r.mu.Lock()

@@ -49,7 +49,7 @@ func newTestStack(t *testing.T) *testStack {
 	hub := realtime.NewHub(nil, rooms, previews, borrow.NewRegistry(), log)
 	seq := sequencer.NewManager(repo, cfg, cas, hub, log)
 	hub.SetSequencer(seq)
-	relay := tunnel.NewRelay(log)
+	relay := tunnel.NewRelay(log, previews)
 	api := New(cfg, rooms, seq, hub, previews, borrow.NewRegistry(), relay, cas, repo, log)
 	rooms.SetBroadcaster(hub)
 	ts := httptest.NewServer(api.Handler())

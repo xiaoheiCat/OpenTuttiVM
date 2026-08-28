@@ -12,14 +12,22 @@ import (
 // ConvertChange turns one whole-file write into a Room File Operation:
 // UTF-8 text edits become server-authoritative text patches (byte-range
 // OT); binaries and oversized files become CAS blob replaces guarded by an
-// optimistic version check. ChunkSink uploads blob chunks (and the
-// manifest object) before the operation is submitted.
-func ConvertChange(id, path string, oldContent, newContent []byte, chunkSink func(manifest vmcas.Manifest, chunks [][]byte) error) (vmprotocol.FileOperation, error) {
+// optimistic version check. oldBaseHash is the hash the authoritative
+// state currently expects for the path — the raw content hash while the
+// file is text-tracked, the manifest hash once blob-tracked
+// (WorkspaceState.CurrentBaseHash) — so a text→blob transition keeps the
+// base the server will compare against. ChunkSink uploads blob chunks
+// (and the manifest object) before the operation is submitted.
+func ConvertChange(id, path, oldBaseHash string, oldContent, newContent []byte, chunkSink func(manifest vmcas.Manifest, chunks [][]byte) error) (vmprotocol.FileOperation, error) {
 	if bytes.Equal(oldContent, newContent) {
 		return vmprotocol.FileOperation{}, fmt.Errorf("no content change on %s", path)
 	}
 	if !isTextClass(oldContent, newContent) {
-		return blobReplace(id, path, oldContent, newContent, chunkSink)
+		return blobReplace(id, path, oldBaseHash, newContent, chunkSink)
+	}
+	base := oldBaseHash
+	if base == "" {
+		base = ContentHash(oldContent)
 	}
 	patch, changed := DiffText(oldContent, newContent)
 	if !changed {
@@ -27,11 +35,11 @@ func ConvertChange(id, path string, oldContent, newContent []byte, chunkSink fun
 	}
 	return vmprotocol.FileOperation{
 		ID: id, Path: path, Kind: vmprotocol.OpTextPatch,
-		Patch: &vmprotocol.TextPatch{BaseHash: ContentHash(oldContent), Splices: patch.Splices},
+		Patch: &vmprotocol.TextPatch{BaseHash: base, Splices: patch.Splices},
 	}, nil
 }
 
-func blobReplace(id, path string, oldContent, newContent []byte, chunkSink func(manifest vmcas.Manifest, chunks [][]byte) error) (vmprotocol.FileOperation, error) {
+func blobReplace(id, path, oldBaseHash string, newContent []byte, chunkSink func(manifest vmcas.Manifest, chunks [][]byte) error) (vmprotocol.FileOperation, error) {
 	manifest, chunks, err := vmcas.BuildManifest(bytes.NewReader(newContent))
 	if err != nil {
 		return vmprotocol.FileOperation{}, err
@@ -42,17 +50,9 @@ func blobReplace(id, path string, oldContent, newContent []byte, chunkSink func(
 	if err := chunkSink(manifest, chunks); err != nil {
 		return vmprotocol.FileOperation{}, fmt.Errorf("upload chunks for %s: %w", path, err)
 	}
-	var baseHash string
-	if len(oldContent) > 0 {
-		oldManifest, _, err := vmcas.BuildManifest(bytes.NewReader(oldContent))
-		if err != nil {
-			return vmprotocol.FileOperation{}, err
-		}
-		baseHash = oldManifest.Hash
-	}
 	return vmprotocol.FileOperation{
 		ID: id, Path: path, Kind: vmprotocol.OpBlobReplace,
-		Blob: &vmprotocol.BlobReplace{BaseHash: baseHash, Manifest: manifest.Hash},
+		Blob: &vmprotocol.BlobReplace{BaseHash: oldBaseHash, Manifest: manifest.Hash},
 	}, nil
 }
 

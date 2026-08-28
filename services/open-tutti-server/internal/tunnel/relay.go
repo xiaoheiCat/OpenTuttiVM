@@ -18,18 +18,26 @@ import (
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 )
 
+// RouteAuthorizer validates that a requested route is actually
+// advertised by the target device: relay targets must be announced
+// ports, not a member's private TCP scanner.
+type RouteAuthorizer interface {
+	HasRoute(roomID, deviceID, sessionID string, port int) bool
+}
+
 // Relay tracks one yamux session per online device per room and stitches
 // connect streams between them.
 type Relay struct {
-	log *slog.Logger
+	log    *slog.Logger
+	routes RouteAuthorizer
 
 	mu       sync.Mutex
 	sessions map[string]map[string]*yamux.Session // roomID → deviceID → session
 }
 
-// NewRelay wires the relay.
-func NewRelay(log *slog.Logger) *Relay {
-	return &Relay{log: log, sessions: map[string]map[string]*yamux.Session{}}
+// NewRelay wires the relay. routes may be nil (no authorization; tests).
+func NewRelay(log *slog.Logger, routes RouteAuthorizer) *Relay {
+	return &Relay{log: log, routes: routes, sessions: map[string]map[string]*yamux.Session{}}
 }
 
 // ServeTunnel upgrades an authenticated device websocket into a yamux
@@ -119,6 +127,14 @@ func (r *Relay) handleStream(stream net.Conn, authenticatedRoom string) {
 	// The route is bound to the authenticated room: a client-supplied
 	// cross-room RoomID never reaches the dial.
 	header.Route.RoomID = authenticatedRoom
+	// The target must be an advertised route: relaying arbitrary
+	// (device, session, port) triples would turn the tunnel into a
+	// member-driven port scanner over other devices' session networks.
+	if r.routes != nil && !r.routes.HasRoute(authenticatedRoom, header.Route.DeviceID, header.Route.SessionID, header.Route.Port) {
+		writeHeaderError(stream, fmt.Sprintf("route %s/%s:%d not advertised", header.Route.DeviceID, header.Route.SessionID, header.Route.Port))
+		stream.Close()
+		return
+	}
 	target := r.dial(header.Route)
 	if target == nil {
 		writeHeaderError(stream, fmt.Sprintf("route %s:%d unreachable", header.Route.DeviceID, header.Route.Port))

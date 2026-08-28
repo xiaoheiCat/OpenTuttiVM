@@ -87,11 +87,21 @@ func (h *Hub) BroadcastRoom(roomID string, ev vmprotocol.Event) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for _, c := range h.conns[roomID] {
-		select {
-		case c.send <- msg:
-		default:
-			// Slow consumer: drop rather than block the fanout; the client
-			// resyncs from snapshots on reconnect.
+		h.deliver(c, msg)
+	}
+}
+
+// deliver enqueues one message. A full queue means authoritative events
+// were already dropped: silently skipping would leave the replica stale
+// with no later signal, so the socket is force-closed and the client
+// resynchronizes via reconnect + bootstrap.
+func (h *Hub) deliver(c *Conn, msg ServerMessage) {
+	select {
+	case c.send <- msg:
+	default:
+		h.log.Warn("room ws send queue full; forcing resync", "room", c.RoomID, "device", c.DeviceID)
+		if c.close != nil {
+			go c.close()
 		}
 	}
 }
@@ -130,10 +140,7 @@ func (h *Hub) SendTo(roomID, deviceID string, ev vmprotocol.Event) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if c := h.conns[roomID][deviceID]; c != nil {
-		select {
-		case c.send <- msg:
-		default:
-		}
+		h.deliver(c, msg)
 	}
 }
 
@@ -303,7 +310,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 				continue
 			}
 			p := *msg.ApprovalRequest
-			operator, err := h.borrows.OpenApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID)
+			operator, err := h.borrows.OpenApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID, p.CommandID)
 			if err != nil {
 				h.log.Warn("approval open", "room", c.RoomID, "err", err)
 				continue

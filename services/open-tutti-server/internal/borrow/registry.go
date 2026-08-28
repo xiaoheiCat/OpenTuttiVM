@@ -44,6 +44,12 @@ type Registry struct {
 	mu        sync.Mutex
 	agents    map[string]map[string]*AgentInstance
 	approvals map[string]openApproval
+	// commandBorrowers remembers which borrower issued a command id, so
+	// approval prompts route to the borrower that originated the
+	// execution even after other borrowers send their own commands.
+	// Bounded FIFO: only recent commands can still be executing.
+	commandBorrowers   map[string]string
+	commandBorrowerOrd []string
 }
 
 type openApproval struct {
@@ -52,11 +58,16 @@ type openApproval struct {
 	operator   string
 }
 
+// maxTrackedCommands bounds commandBorrowers: prompts only arrive for
+// commands still executing, so a short recent window suffices.
+const maxTrackedCommands = 64
+
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		agents:    map[string]map[string]*AgentInstance{},
-		approvals: map[string]openApproval{},
+		agents:           map[string]map[string]*AgentInstance{},
+		approvals:        map[string]openApproval{},
+		commandBorrowers: map[string]string{},
 	}
 }
 
@@ -153,6 +164,19 @@ func (r *Registry) Command(roomID string, p vmprotocol.BorrowCommandPayload) (vm
 	// connection before this call; recording it makes this device the
 	// session operator for subsequent approvals.
 	inst.LastBorrower = p.BorrowerDeviceID
+	// Track the originating borrower per command id: prompts arriving
+	// mid-execution route to THIS borrower, not to whoever commanded
+	// most recently.
+	if p.CommandID != "" {
+		if _, exists := r.commandBorrowers[p.CommandID]; !exists {
+			r.commandBorrowerOrd = append(r.commandBorrowerOrd, p.CommandID)
+			if len(r.commandBorrowerOrd) > maxTrackedCommands {
+				delete(r.commandBorrowers, r.commandBorrowerOrd[0])
+				r.commandBorrowerOrd = r.commandBorrowerOrd[1:]
+			}
+		}
+		r.commandBorrowers[p.CommandID] = p.BorrowerDeviceID
+	}
 	return p, nil
 }
 
@@ -173,9 +197,12 @@ func (r *Registry) CurrentOperator(roomID, agentInstanceID string) (string, erro
 }
 
 // OpenApproval records a pending approval prompt and routes it to the
-// current session operator (the borrower) — the owner never receives it.
+// borrower that originated the referenced command — the owner never
+// receives it. A known commandID wins over LastBorrower so a second
+// borrower's fresh command cannot steal the first execution's prompt; a
+// legacy empty commandID falls back to the current session operator.
 // Returns the operator device id for targeted delivery.
-func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID string) (operator string, err error) {
+func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID string) (operator string, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	room := r.agents[roomID]
@@ -183,13 +210,19 @@ func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID string) (ope
 	if inst == nil {
 		return "", ErrUnknownAgent
 	}
-	if inst.LastBorrower == "" {
+	operator = inst.LastBorrower
+	if commandID != "" {
+		if borrower, ok := r.commandBorrowers[commandID]; ok {
+			operator = borrower
+		}
+	}
+	if operator == "" {
 		return "", errors.New("no active borrowing session")
 	}
 	r.approvals[approvalID] = openApproval{
-		roomID: roomID, agentOwner: inst.OwnerDeviceID, operator: inst.LastBorrower,
+		roomID: roomID, agentOwner: inst.OwnerDeviceID, operator: operator,
 	}
-	return inst.LastBorrower, nil
+	return operator, nil
 }
 
 // ResolveDecision validates that the deciding device is the session

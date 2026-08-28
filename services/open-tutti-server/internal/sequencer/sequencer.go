@@ -254,7 +254,7 @@ func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason
 	}); err != nil {
 		return snap, err
 	}
-	if err := m.repo.AddCASRefs(context.Background(), roomID, snapshotHashes(snap)); err != nil {
+	if err := m.repo.AddCASRefs(context.Background(), roomID, m.snapshotRefs(snap)); err != nil {
 		return snap, err
 	}
 	m.send.BroadcastRoom(roomID, vmprotocol.Event{
@@ -265,11 +265,21 @@ func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason
 	return snap, nil
 }
 
-func snapshotHashes(snap vmprotocol.WorkspaceSnapshot) []string {
-	out := make([]string, 0, len(snap.Entries))
+// snapshotRefs collects every object hash a snapshot makes downloadable:
+// each entry's manifest plus the manifest's complete chunk graph — text
+// snapshots write chunk objects too, and CAS reads authorize per room
+// reference, so missing chunk refs would 404 mid-bootstrap.
+func (m *Manager) snapshotRefs(snap vmprotocol.WorkspaceSnapshot) []string {
+	out := make([]string, 0, len(snap.Entries)*2)
 	for _, e := range snap.Entries {
-		if e.Manifest != "" {
-			out = append(out, e.Manifest)
+		if e.Manifest == "" {
+			continue
+		}
+		out = append(out, e.Manifest)
+		if data, err := m.cas.Get(e.Manifest); err == nil {
+			if manifest, err := vmcas.DecodeManifest(data); err == nil {
+				out = append(out, manifest.Chunks...)
+			}
 		}
 	}
 	return out

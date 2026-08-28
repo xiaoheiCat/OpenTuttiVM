@@ -109,23 +109,33 @@ func (h *Handler) List(path string) ([]roomfs.DirEntry, error) {
 	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
 		type childInfo struct{ dir bool }
 		children := map[string]*childInfo{}
+		mark := func(name string, dir bool) {
+			c := children[name]
+			if c == nil {
+				c = &childInfo{}
+				children[name] = c
+			}
+			if dir {
+				c.dir = true
+			}
+		}
 		for _, p := range state.Paths() {
 			if !strings.HasPrefix(p, prefix) || len(p) == len(prefix) {
 				continue
 			}
 			rest := p[len(prefix):]
 			if idx := strings.IndexByte(rest, '/'); idx >= 0 {
-				name := rest[:idx]
-				c := children[name]
-				if c == nil {
-					c = &childInfo{}
-					children[name] = c
-				}
-				c.dir = true
+				// A deeper path proves the child is a directory even
+				// when the directory entry itself is absent.
+				mark(rest[:idx], true)
 				continue
 			}
-			if children[rest] == nil {
-				children[rest] = &childInfo{}
+			if info, ok := state.EntryInfo(p); ok {
+				// Direct entry: empty directories carry their type
+				// only here — a zero-value would emit S_IFREG.
+				mark(rest, info.IsDir)
+			} else {
+				mark(rest, false)
 			}
 		}
 		out = make([]roomfs.DirEntry, 0, len(children))
@@ -143,7 +153,14 @@ func (h *Handler) Write(path string, content []byte) error {
 	if err != nil {
 		old = nil
 	}
-	op, err := vmsync.ConvertChange(h.nextOpID(), path, old, content,
+	// The base hash must match what the authoritative state tracks for
+	// the file (content hash while text-tracked, manifest hash once
+	// blob-tracked) or the server rejects the transition.
+	var base string
+	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
+		base = state.CurrentBaseHash(path)
+	})
+	op, err := vmsync.ConvertChange(h.nextOpID(), path, base, old, content,
 		func(manifest vmcas.Manifest, chunks [][]byte) error {
 			if h.uploader == nil {
 				return fmt.Errorf("no chunk uploader configured")

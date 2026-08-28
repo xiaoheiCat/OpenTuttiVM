@@ -66,7 +66,10 @@ func run() error {
 	hub := realtime.NewHub(nil, rooms, previews, borrows, log)
 	seq := sequencer.NewManager(repo, cfg, cas, hub, log)
 	hub.SetSequencer(seq)
-	relay := tunnel.NewRelay(log)
+	// The relay only dials routes the target device advertised in the
+	// preview registry — announced ports, not arbitrary session-network
+	// TCP targets.
+	relay := tunnel.NewRelay(log, previews)
 	server := api.New(cfg, rooms, seq, hub, previews, borrows, relay, cas, repo, log)
 	rooms.SetBroadcaster(hub)
 

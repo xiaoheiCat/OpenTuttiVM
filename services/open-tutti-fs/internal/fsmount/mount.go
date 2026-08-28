@@ -77,9 +77,20 @@ func (n *roomNode) invalidatePath(path string) {
 	n.mu.Lock()
 	server := n.server
 	n.mu.Unlock()
-	if server != nil {
-		server.EntryNotify(parent.StableAttr().Ino, segs[len(segs)-1])
+	if server == nil {
+		return
 	}
+	// Entry invalidation alone does not touch an already-open file: the
+	// Go-side buffer and the kernel data cache would keep serving the
+	// pre-edit bytes (and a later local flush would clobber the accepted
+	// remote edit). Drop both caches for file targets.
+	if child := parent.GetChild(segs[len(segs)-1]); child != nil {
+		if fn, ok := child.Operations().(*fileNode); ok {
+			fn.invalidate()
+			server.InodeNotify(child.StableAttr().Ino, 0, -1)
+		}
+	}
+	server.EntryNotify(parent.StableAttr().Ino, segs[len(segs)-1])
 }
 
 func (n *roomNode) path(child string) string {
@@ -212,6 +223,15 @@ type fileNode struct {
 	loaded bool
 	// mode carries a setattr mode change into the next flush.
 	mode uint32
+}
+
+// invalidate drops the cached content so the next read reloads the
+// authoritative bytes (remote invalidation path).
+func (f *fileNode) invalidate() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.buffer = nil
+	f.loaded = false
 }
 
 func (f *fileNode) load() syscall.Errno {
