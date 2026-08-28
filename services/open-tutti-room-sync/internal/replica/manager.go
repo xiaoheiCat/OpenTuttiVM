@@ -74,6 +74,11 @@ func New(deviceID string, cache vmcas.Store, policy Policy, fetcher ChunkFetcher
 	// accepted blob replacements immediately. The hook runs from inside
 	// locked manager paths, so it must not re-acquire mu.
 	m.Replica.State.Materializer = m.materializeLocked
+	// Only full replicas keep the eager blob-copy promise; lazy policy
+	// stays lazy on accepted replacements too (the text-base path in
+	// materializeLocked is NOT gated — authoritative patches always
+	// need their base).
+	m.Replica.State.EagerBlobs = m.Policy == Full
 	return m
 }
 

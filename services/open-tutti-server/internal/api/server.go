@@ -231,6 +231,15 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 		s.hub.DropDevice(roomID, deviceID)
 		s.relay.DropDevice(roomID, deviceID)
 		s.previews.DropDevice(roomID, deviceID)
+		// Same borrow teardown as the kick path: the leaver's shared
+		// agents die with their owner and remaining members learn via
+		// revocations — leases and approvals must not outlive the owner
+		// while the room continues.
+		for _, revoked := range s.borrows.DropDevice(roomID, deviceID) {
+			s.hub.BroadcastRoom(roomID, vmprotocol.Event{
+				Topic: vmagent.TopicBorrowRevoked, RoomID: roomID, Payload: mustJSON(revoked),
+			})
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "left"})
 }
@@ -455,7 +464,7 @@ func (s *Server) handleRoomWS(w http.ResponseWriter, r *http.Request, roomID, de
 	// A valid text_patch envelope can carry up to MaxTextFile (8 MiB) of
 	// inserted text; the library default of 32 KiB would close every
 	// large paste as message-too-big before the sequencer sees it.
-	ws.SetReadLimit(int64(vmsync.MaxTextFile) + 64<<10)
+	ws.SetReadLimit(int64(vmsync.MaxTextFile)*6 + 1<<20)
 	if err := s.rooms.MarkOnline(r.Context(), roomID, deviceID); err != nil {
 		ws.Close(websocket.StatusPolicyViolation, "membership offline")
 		return

@@ -114,6 +114,11 @@ type WorkspaceState struct {
 	// workspaces cannot materialize "README" and "readme" as distinct
 	// entries, so creates/mkdirs/renames are refused on collision.
 	ciPaths map[string]string
+	// EagerBlobs gates eager blob materialization on accepted
+	// replacements: full replicas (owner-survival contract) fetch
+	// immediately; lazy replicas defer to first read and stay lazy on
+	// bandwidth/disk.
+	EagerBlobs bool
 	// Materializer, when set, fetches CAS-referenced content for a path
 	// into memory (text restore, eager full-replica blob fetch). The
 	// replica owner wires it; the server leaves it nil.
@@ -476,7 +481,14 @@ func (w *WorkspaceState) applyMkdir(op vmprotocol.FileOperation) error {
 	if w.pathTreeConflict(op.Path, true) || w.ciConflict(op.Path) {
 		return &RejectionError{Reason: RejectInvalid}
 	}
-	w.files[op.Path] = &fileState{IsDir: true, Mode: 0o755}
+	// Requested directory permissions ride the operation (RoomFS mkdir
+	// carries them): snapshots, peer replicas, and Apply-to-Workspace
+	// must expose what the caller asked (e.g. 0700), not a widened 0755.
+	mode := uint32(0o755)
+	if op.Mode != nil && op.Mode.Mode != 0 {
+		mode = op.Mode.Mode & 0o7777
+	}
+	w.files[op.Path] = &fileState{IsDir: true, Mode: mode}
 	w.trackPath(op.Path)
 	return nil
 }
@@ -523,24 +535,14 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 	if existing, ok := w.ciPaths[pathCIKey(r.NewPath)]; ok && existing != r.NewPath && existing != r.OldPath {
 		return &RejectionError{Reason: RejectInvalid}
 	}
-	w.files[r.NewPath] = f
-	delete(w.files, r.OldPath)
-	w.untrackPath(r.OldPath)
-	w.trackPath(r.NewPath)
-	// OT context must follow the entry for files too: a stale patch
-	// submitted against the new path would otherwise skip the base-hash
-	// check (no history under the new key) and apply without
-	// transformation over intervening edits.
-	w.rekeyHistory(r.OldPath, r.NewPath)
+	// Descendant PREFLIGHT before ANY mutation: collecting and validating
+	// every moved destination after moving the root already changed
+	// authoritative state, and returning RejectInvalid then would leave
+	// this replica diverged from the sequenced stream.
+	var descendants []string
 	if f.IsDir {
-		// A nonempty directory rename moves every descendant with it;
-		// leaving them under the old prefix corrupts snapshots and
-		// Apply-to-Workspace output. Preflight every moved destination:
-		// an implied "dst/x" colliding with an UNRELATED existing entry
-		// (no explicit "dst" to have rejected it) would otherwise be
-		// silently overwritten, losing valid authoritative content.
 		prefix := r.OldPath + "/"
-		descendants := make([]string, 0, 8)
+		descendants = make([]string, 0, 8)
 		for p := range w.files {
 			if strings.HasPrefix(p, prefix) {
 				descendants = append(descendants, p)
@@ -558,6 +560,21 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 				return &RejectionError{Reason: RejectInvalid}
 			}
 		}
+	}
+	w.files[r.NewPath] = f
+	delete(w.files, r.OldPath)
+	w.untrackPath(r.OldPath)
+	w.trackPath(r.NewPath)
+	// OT context must follow the entry for files too: a stale patch
+	// submitted against the new path would otherwise skip the base-hash
+	// check (no history under the new key) and apply without
+	// transformation over intervening edits.
+	w.rekeyHistory(r.OldPath, r.NewPath)
+	if f.IsDir {
+		// A nonempty directory rename moves every descendant with it;
+		// leaving them under the old prefix corrupts snapshots and
+		// Apply-to-Workspace output. Every destination was preflighted
+		// above, so the moves cannot lose unrelated existing content.
 		for _, p := range descendants {
 			moved := r.NewPath + p[len(r.OldPath):]
 			w.files[moved] = w.files[p]

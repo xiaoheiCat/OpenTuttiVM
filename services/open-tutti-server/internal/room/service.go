@@ -290,6 +290,20 @@ func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string)
 	s.clearShareAttempts(shareID)
 	ticket = "jt_" + randomToken(32)
 	expiresAt = s.clock.Now().Add(s.cfg.JoinTicketTTL)
+	// The Argon2 window above is seconds wide: the owner may have
+	// revoked the share or rotated the password meanwhile. Re-read the
+	// room and re-validate before persisting, or an old-password
+	// request receives a redeemable ticket for a revoked share.
+	current, err := s.repo.GetRoom(ctx, room.ID)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	if current.ShareRevokedAt != nil {
+		return "", time.Time{}, errors.New("share link revoked")
+	}
+	if !VerifyRoomPassword(password, current.PasswordHash) {
+		return "", time.Time{}, errors.New("wrong room password")
+	}
 	if err := s.repo.CreateJoinTicket(ctx, store.JoinTicket{
 		Hash: hashToken(ticket), RoomID: room.ID, ShareID: shareID, ExpiresAt: expiresAt,
 	}); err != nil {
@@ -341,8 +355,19 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	if s.clock.Now().After(rec.ExpiresAt) {
 		return "", "", errors.New("join ticket expired")
 	}
-	// Existing device ids must prove possession of their enrolled key
-	// before anything refreshes: the one-time ticket is the challenge.
+	// Serialize with every lifecycle mutation (dissolution and transfer
+	// run under s.mu) AND re-run the identity decision inside the lock:
+	// two concurrent joins claiming the same previously unseen device
+	// both observe GetDevice-missing before the lock, and the later
+	// UpsertDevice would otherwise overwrite the first joiner's
+	// Ed25519 key without proof, breaking the immutable-identity
+	// contract. The lookup/proof decision therefore lives under the
+	// same serialization; it also keeps a dissolution committing between
+	// ticket consumption and the membership insert from letting this
+	// insert recreate a member of a dissolved room whose token still
+	// authenticates routes/CAS/tunnels after the room ended.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if existing, err := s.repo.GetDevice(ctx, device.ID); err == nil {
 		if device.Proof == "" || existing.PublicKeyPEM == "" {
 			return "", "", errors.New("device identity proof required")
@@ -354,14 +379,6 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 		// an existing device id.
 		device.PublicKey = existing.PublicKeyPEM
 	}
-	// Serialize with every lifecycle mutation (dissolution and transfer
-	// run under s.mu): a dissolution committing between the ticket
-	// consumption and the membership insert would delete the room's
-	// memberships and let this insert recreate one for a dissolved
-	// room — a token that still authenticates routes/CAS/tunnels after
-	// the room ended.
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	room, err := s.repo.GetRoom(ctx, rec.RoomID)
 	if err != nil {
 		return "", "", err
@@ -558,6 +575,20 @@ func (s *Service) AbortTransfer(ctx context.Context, roomID, ownerDeviceID strin
 
 // MarkOnline records a realtime connection. The first connection time of
 // the current presence session decides grace-period succession order.
+// ReportReplicaPolicy records a member's self-reported replica policy:
+// automatic succession promotes only full replicas (owner-survival).
+func (s *Service) ReportReplicaPolicy(ctx context.Context, roomID, deviceID, policy string) error {
+	switch policy {
+	case "full", "lazy":
+	default:
+		return errors.New("policy must be full or lazy")
+	}
+	if _, err := s.repo.GetMembership(ctx, roomID, deviceID); err != nil {
+		return err
+	}
+	return s.repo.UpdateMembershipPolicy(ctx, roomID, deviceID, policy)
+}
+
 func (s *Service) MarkOnline(ctx context.Context, roomID, deviceID string) error {
 	// Presence columns only: this runs on every heartbeat ping, and a
 	// full-membership write would (a) clobber a token refresh that
@@ -644,6 +675,31 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 		}
 		return true, nil
 	}
+	// Automatic succession needs a FULL replica, like explicit transfer:
+	// promoting a lazy default would hand ownership to a device whose
+	// snapshot-backed blobs exist nowhere after a server failure,
+	// breaking the owner-survival contract. Prefer the longest
+	// continuously connected FULL replica; with none online the room
+	// waits (members can still run an explicit transfer, whose
+	// readiness phase materializes the candidate) and re-checks here
+	// on the next cycle.
+	full := make([]store.Membership, 0, len(online))
+	for _, m := range online {
+		if m.ReplicaPolicy == "full" {
+			full = append(full, m)
+		}
+	}
+	if len(full) == 0 {
+		// Members learn the room is leaderless: an explicit transfer
+		// (with its readiness phase) is the way out until someone
+		// reports a full replica.
+		s.broadcast(roomID, vmprotocol.Event{
+			Topic: vmprotocol.TopicOwnerLost, RoomID: roomID,
+			Payload: []byte(`{"reason":"owner lost; full-replica successor required"}`),
+		})
+		return false, nil
+	}
+	online = full
 	// Longest continuous presence wins: earliest ConnectedAt of the current
 	// presence session, not the earliest join.
 	sort.Slice(online, func(i, j int) bool {

@@ -298,28 +298,65 @@ func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error
 	h.mu.Lock()
 	r := h.resolver
 	duty := h.resolverDuty[op.Path]
-	delete(h.resolverDuty, op.Path)
 	var movedDuties []string
 	if rn := op.Rename; op.Kind == vmprotocol.OpRename && rn != nil {
 		for p := range h.resolverDuty {
 			if p == rn.OldPath || strings.HasPrefix(p, rn.OldPath+"/") {
-				delete(h.resolverDuty, p)
 				newPath := rn.NewPath + p[len(rn.OldPath):]
+				if p == op.Path {
+					delete(h.resolverDuty, p)
+				}
 				h.resolverDuty[newPath] = true
 				movedDuties = append(movedDuties, newPath)
 			}
 		}
+	} else {
+		delete(h.resolverDuty, op.Path)
 	}
 	h.mu.Unlock()
+	// Duty clears ONLY on an acknowledged resolution: if the socket
+	// drops before ResolveBarrier is written, the barrier stays up on
+	// the server and retrying the same content would be a no-change
+	// write — the retained duty keeps the resolution retryable
+	// (RetryDuties after reconnect).
 	if duty && r != nil {
 		if err := r.ResolveBarrier(op.Path); err != nil {
+			h.mu.Lock()
+			h.resolverDuty[op.Path] = true
+			h.mu.Unlock()
 			return fmt.Errorf("lift conflict barrier on %s: %w", op.Path, err)
 		}
 	}
 	for _, p := range movedDuties {
 		if err := r.ResolveBarrier(p); err != nil {
+			h.mu.Lock()
+			h.resolverDuty[p] = true
+			h.mu.Unlock()
 			return fmt.Errorf("lift moved conflict barrier on %s: %w", p, err)
 		}
 	}
 	return nil
+}
+
+// RetryDuties re-attempts barrier resolutions whose confirmation never
+// reached the server (socket dropped mid-send): the authoritative fence
+// is still locked and only the assigned resolver can lift it.
+func (h *Handler) RetryDuties() {
+	h.mu.Lock()
+	r := h.resolver
+	paths := make([]string, 0, len(h.resolverDuty))
+	for p := range h.resolverDuty {
+		paths = append(paths, p)
+	}
+	h.mu.Unlock()
+	if r == nil {
+		return
+	}
+	for _, p := range paths {
+		if err := r.ResolveBarrier(p); err == nil {
+			h.mu.Lock()
+			delete(h.resolverDuty, p)
+			h.mu.Unlock()
+		}
+	}
 }

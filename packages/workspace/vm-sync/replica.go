@@ -73,8 +73,10 @@ func (w *WorkspaceState) ApplySequenced(env vmprotocol.Envelope) error {
 		f.Size = op.Blob.Size
 		f.Materialized = false
 		// Full-policy owners eagerly fetch accepted replacements so the
-		// promised server-failure-survival copy exists immediately.
-		if w.Materializer != nil {
+		// promised server-failure-survival copy exists immediately;
+		// lazy replicas defer (EagerBlobs) and materialize on first
+		// read — the manifest reference itself is already authoritative.
+		if w.Materializer != nil && w.EagerBlobs {
 			if err := w.Materializer(op.Path); err != nil {
 				return fmt.Errorf("materialize replaced blob %s: %w", op.Path, err)
 			}

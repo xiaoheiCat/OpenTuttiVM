@@ -231,9 +231,26 @@ func TestOwnerGracePeriodAutoTransfer(t *testing.T) {
 		t.Fatalf("owner changed inside grace window: %s", room.OwnerDeviceID)
 	}
 
-	// After the grace period ownership goes to the longest-connected
-	// participant (bob), not the earliest joiner.
+	// After the grace period NO successor is promoted yet: succession
+	// requires a FULL replica (owner-survival), and every online member
+	// still reports the default lazy policy. The room waits.
 	clock.Advance(6 * time.Minute)
+	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
+		t.Fatal(err)
+	}
+	room, _ = svc.repo.GetRoom(ctx, created.RoomID)
+	if room.OwnerDeviceID != "dev_owner" {
+		t.Fatalf("lazy-only room promoted a successor: %s", room.OwnerDeviceID)
+	}
+
+	// The longest-connected FULL participant (bob) inherits — not the
+	// earliest joiner, and never a lazy replica.
+	if err := svc.ReportReplicaPolicy(ctx, created.RoomID, "dev_bob", "full"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReportReplicaPolicy(ctx, created.RoomID, "dev_carol", "full"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
 		t.Fatal(err)
 	}

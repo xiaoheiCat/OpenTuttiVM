@@ -221,7 +221,7 @@ func (c *Client) Dial(ctx context.Context) (*Session, error) {
 	// Accepted text patches carry up to 8 MiB of inserted text; the
 	// library's 32 KiB default would close the socket on every large
 	// broadcast and force the whole room to resync.
-	conn.SetReadLimit(int64(vmsync.MaxTextFile) + 64<<10)
+	conn.SetReadLimit(int64(vmsync.MaxTextFile)*6 + 1<<20)
 	sctx, cancel := context.WithCancel(ctx)
 	s := &Session{conn: conn, client: c, ctx: sctx, cancel: cancel}
 	s.lastActivity.Store(time.Now().UnixNano())
@@ -370,6 +370,12 @@ func (s *Session) write(msg []byte) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	return s.conn.Write(s.ctx, websocket.MessageText, msg)
+}
+
+// ReportPolicy tells the server this device's replica policy
+// ("full"|"lazy"): automatic succession only promotes full replicas.
+func (s *Session) ReportPolicy(policy string) error {
+	return s.writeTyped("policy", map[string]string{"policy": policy})
 }
 
 // ShareAgent enables or disables borrowing for one local agent instance.

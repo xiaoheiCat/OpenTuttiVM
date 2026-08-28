@@ -40,6 +40,11 @@ const (
 	// TopicPortsChanged announces TCP ports observed listening in an agent or
 	// terminal session, feeding the room preview registry.
 	TopicPortsChanged EventTopic = "room.ports_changed"
+	// TopicOwnerLost announces the owner disappeared past the grace
+	// period while no full-replica successor is online: the room waits;
+	// members should run an explicit transfer (whose readiness phase
+	// materializes the candidate) or bring a full replica online.
+	TopicOwnerLost EventTopic = "room.owner_lost"
 	// TopicRoomEnding announces the room is ending (last leave, disband, or
 	// server shutdown) so devices can run their local finalize path.
 	TopicRoomEnding EventTopic = "room.ending"

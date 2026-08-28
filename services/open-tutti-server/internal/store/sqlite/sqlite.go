@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS memberships (
 	last_seen_at INTEGER NOT NULL,
 	online INTEGER NOT NULL DEFAULT 0,
 	session_token_hash TEXT NOT NULL DEFAULT '',
+	replica_policy TEXT NOT NULL DEFAULT 'lazy',
 	PRIMARY KEY (room_id, device_id)
 );
 CREATE TABLE IF NOT EXISTS join_tickets (
@@ -97,7 +98,24 @@ CREATE INDEX IF NOT EXISTS idx_cas_refs_hash ON cas_refs(hash);
 			return fmt.Errorf("migrate share_revoked_at: %w", err)
 		}
 	}
+	// Databases created before replica-policy reporting existed: every
+	// member reads as lazy until it says otherwise.
+	if _, err := db.Exec(`ALTER TABLE memberships ADD COLUMN replica_policy TEXT NOT NULL DEFAULT 'lazy'`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate replica_policy: %w", err)
+		}
+	}
 	return nil
+}
+
+// UpdateMembershipPolicy records one member's replica policy ("full" or
+// "lazy"): automatic succession must only hand ownership to a device
+// that actually keeps the full replica, per the owner-survival contract.
+func (r *Repo) UpdateMembershipPolicy(ctx context.Context, roomID, deviceID, policy string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE memberships SET replica_policy=? WHERE room_id=? AND device_id=?`,
+		policy, roomID, deviceID)
+	return err
 }
 
 // Close closes the database.
@@ -259,14 +277,14 @@ func (r *Repo) GetDevice(ctx context.Context, id string) (store.Device, error) {
 	return d, nil
 }
 
-const membershipCols = "room_id, device_id, joined_at, connected_at, last_seen_at, online, session_token_hash"
+const membershipCols = "room_id, device_id, joined_at, connected_at, last_seen_at, online, session_token_hash, replica_policy"
 
 func scanMembership(row interface{ Scan(...any) error }) (store.Membership, error) {
 	var m store.Membership
 	var connected sql.NullInt64
 	var joined, lastSeen int64
 	var online int
-	err := row.Scan(&m.RoomID, &m.DeviceID, &joined, &connected, &lastSeen, &online, &m.SessionTokenHash)
+	err := row.Scan(&m.RoomID, &m.DeviceID, &joined, &connected, &lastSeen, &online, &m.SessionTokenHash, &m.ReplicaPolicy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.Membership{}, store.ErrNotFound
 	}
@@ -280,6 +298,9 @@ func scanMembership(row interface{ Scan(...any) error }) (store.Membership, erro
 	}
 	m.JoinedAt = time.Unix(joined, 0).UTC()
 	m.LastSeenAt = time.Unix(lastSeen, 0).UTC()
+	if m.ReplicaPolicy == "" {
+		m.ReplicaPolicy = "lazy"
+	}
 	return m, nil
 }
 
@@ -292,14 +313,19 @@ func (r *Repo) UpsertMembership(ctx context.Context, m store.Membership) error {
 	if m.Online {
 		online = 1
 	}
+	policy := m.ReplicaPolicy
+	if policy == "" {
+		policy = "lazy"
+	}
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?)
+		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?)
 		 ON CONFLICT(room_id, device_id) DO UPDATE SET
 		   connected_at=excluded.connected_at,
 		   last_seen_at=excluded.last_seen_at,
 		   online=excluded.online,
-		   session_token_hash=excluded.session_token_hash`,
-		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), online, m.SessionTokenHash)
+		   session_token_hash=excluded.session_token_hash,
+		   replica_policy=excluded.replica_policy`,
+		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), online, m.SessionTokenHash, policy)
 	return err
 }
 

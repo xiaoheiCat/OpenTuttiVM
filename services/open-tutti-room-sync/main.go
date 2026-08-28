@@ -364,6 +364,15 @@ func run() error {
 		// previous socket (deduplicated server-side when they actually
 		// committed before the disconnect).
 		resubmitPending(sess)
+		// Replica policy feeds automatic succession: only full replicas
+		// may inherit a lost owner (owner-survival contract).
+		if err := sess.ReportPolicy(string(policy)); err != nil {
+			fmt.Fprintf(os.Stderr, "room-sync: report policy: %v\n", err)
+		}
+		// Barrier resolutions whose confirmation was lost with the old
+		// socket: the fences are still up server-side, and only this
+		// session (the assigned resolver) can lift them.
+		bridge.RetryDuties()
 		runErr := sess.Run(mgr)
 		sess.Close()
 		sessionRef.clear(sess)

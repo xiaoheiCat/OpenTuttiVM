@@ -89,7 +89,11 @@ jobs:
   server-image:
     name: Server image → ghcr.io
     runs-on: ubuntu-latest
-    needs: validate
+    # The image push publishes BOTH the version tag and the mutable
+    # :latest to GHCR — it must not land while any release-validation
+    # lane (native Windows included) can still fail, or an unqualified
+    # partial release goes live with no matching GitHub release.
+    needs: [validate, validate-windows]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3

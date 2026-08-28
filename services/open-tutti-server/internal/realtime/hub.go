@@ -22,10 +22,11 @@ import (
 
 // ClientMessage is anything a room client sends on the business socket.
 type ClientMessage struct {
-	Type     string          `json:"type"` // "op" | "ports" | "ping" | "conflict_resolved" | "agent_share" | "borrow_command" | "approval_request" | "approval_decision"
+	Type     string          `json:"type"` // "op" | "ports" | "ping" | "policy" | "conflict_resolved" | "agent_share" | "borrow_command" | "approval_request" | "approval_decision"
 	Envelope json.RawMessage `json:"envelope,omitempty"`
 
 	Ports            *vmprotocol.PortsChangedPayload  `json:"ports,omitempty"`
+	Policy           *PolicyReportPayload             `json:"policy,omitempty"`
 	Path             string                           `json:"path,omitempty"`
 	AgentSession     string                           `json:"agent_session,omitempty"`
 	AgentShare       *vmagent.AgentSharedPayload      `json:"agent_share,omitempty"`
@@ -433,8 +434,21 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 			h.SendTo(c.RoomID, owner, vmprotocol.Event{
 				Topic: vmagent.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p),
 			})
+		case "policy":
+			if msg.Policy != nil {
+				// Succession readiness: only members reporting a full
+				// replica may automatically inherit a lost owner.
+				if err := h.rooms.ReportReplicaPolicy(c.Ctx, c.RoomID, c.DeviceID, msg.Policy.Policy); err != nil {
+					h.log.Warn("policy report", "room", c.RoomID, "device", c.DeviceID, "err", err)
+				}
+			}
 		case "ping":
 			_ = h.rooms.MarkOnline(c.Ctx, c.RoomID, c.DeviceID)
+			// The client's idle deadline counts RECEIVED frames: without
+			// an answer a healthy-but-quiet room would cancel its socket
+			// every idle window (reconnect/bootstrap churn). A bare
+			// "pong" (not an event) keeps OnEvent streams clean.
+			h.deliver(c, ServerMessage{Type: "pong"})
 		}
 	}
 }
@@ -446,6 +460,11 @@ func labelAgent(sessionLabel string) string {
 		}
 	}
 	return sessionLabel
+}
+
+// PolicyReportPayload reports a member's replica policy ("full"|"lazy").
+type PolicyReportPayload struct {
+	Policy string `json:"policy"`
 }
 
 func mustJSON(v any) []byte {

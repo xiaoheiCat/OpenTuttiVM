@@ -50,6 +50,10 @@ type Membership struct {
 	Online      bool
 	// SessionTokenHash authorizes this membership's API and WS calls.
 	SessionTokenHash string
+	// ReplicaPolicy is the member's self-reported replica policy
+	// ("full" or "lazy"): automatic succession only promotes members
+	// keeping a full replica (owner-survival contract).
+	ReplicaPolicy string
 }
 
 // JoinTicket is a one-time, short-lived ticket issued by the share page
@@ -98,6 +102,8 @@ type Repository interface {
 	// reset succession order and disconnects cannot clobber token
 	// refreshes.
 	UpdatePresence(ctx context.Context, roomID, deviceID string, online bool, now time.Time) error
+	// UpdateMembershipPolicy records a member replica policy report.
+	UpdateMembershipPolicy(ctx context.Context, roomID, deviceID, policy string) error
 	ListActiveRooms(ctx context.Context) ([]Room, error)
 
 	// Devices

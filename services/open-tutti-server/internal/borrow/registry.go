@@ -129,6 +129,20 @@ func (r *Registry) Revoke(roomID, ownerDeviceID, agentInstanceID string) (vmagen
 	inst.LeaseGeneration++
 	inst.Shared = false
 	inst.LastBorrower = ""
+	// The revoked generation's bookkeeping dies with the lease: a
+	// decision submitted for an approval opened before revocation must
+	// not still route to the owner, and stale command mappings must not
+	// keep steering approval prompts.
+	for key, ap := range r.approvals {
+		if ap.roomID == roomID && keyAgent(key) == agentInstanceID {
+			delete(r.approvals, key)
+		}
+	}
+	for key := range r.commandBorrowers {
+		if k := strings.SplitN(key, "\x00", 3); len(k) == 3 && k[0] == roomID && k[1] == agentInstanceID {
+			delete(r.commandBorrowers, key)
+		}
+	}
 	shared := vmagent.AgentSharedPayload{
 		AgentInstanceID: inst.ID, OwnerDeviceID: inst.OwnerDeviceID,
 		Provider: inst.Provider, Borrowable: inst.Borrowable,
@@ -245,6 +259,15 @@ func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID s
 // provider-local approval id.
 func approvalScope(roomID, agentInstanceID, approvalID string) string {
 	return roomID + "\x00" + agentInstanceID + "\x00" + approvalID
+}
+
+// keyAgent extracts the agent-instance segment of an approval key.
+func keyAgent(scope string) string {
+	parts := strings.SplitN(scope, "\x00", 3)
+	if len(parts) != 3 {
+		return ""
+	}
+	return parts[1]
 }
 
 // ResolveDecision validates that the deciding device is the session
