@@ -273,10 +273,15 @@ func run() error {
 					fmt.Fprintf(os.Stderr, "room-sync: gateway sync: %v\n", err)
 				}
 			case vmprotocol.TopicOperation:
-				// A remote participant's operation applied locally:
+				// A REMOTE participant's operation applied locally:
 				// connected mounts must drop cached attributes/content.
+				// Our own acknowledgement is skipped: the submitting
+				// mount already holds the new content, and discarding
+				// its buffer would let an already-open handle read
+				// empty bytes (a duplicate flush could then truncate
+				// the authoritative file).
 				var env vmprotocol.Envelope
-				if json.Unmarshal(ev.Payload, &env) == nil {
+				if json.Unmarshal(ev.Payload, &env) == nil && env.AuthorDeviceID != deviceID {
 					bridge.InvalidateRemote(env.Operation.Path)
 					// Renames must drop BOTH sides: the source entry
 					// disappears, the destination appears (a cached

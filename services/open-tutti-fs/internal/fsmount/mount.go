@@ -225,6 +225,10 @@ type fileNode struct {
 	mu     sync.Mutex
 	buffer []byte
 	loaded bool
+	// dirty marks buffered content not yet acknowledged by the room: a
+	// clean flush (touch, repeated flush of one handle) must succeed
+	// without submitting a no-op whole-file write the room would reject.
+	dirty bool
 	// mode carries a setattr mode change into the next flush.
 	mode uint32
 	// srvMode is the authoritative permission bits from the protocol
@@ -234,12 +238,14 @@ type fileNode struct {
 }
 
 // invalidate drops the cached content so the next read reloads the
-// authoritative bytes (remote invalidation path).
+// authoritative bytes (remote invalidation path). A handle that stays
+// open re-reads lazily — Read reloads when it finds the buffer gone.
 func (f *fileNode) invalidate() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.buffer = nil
 	f.loaded = false
+	f.dirty = false
 }
 
 func (f *fileNode) load() syscall.Errno {
@@ -267,6 +273,17 @@ func (f *fileNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint3
 func (f *fileNode) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// An invalidated (unloaded) buffer must reload on read: reporting
+	// empty bytes to an already-open handle would corrupt what the
+	// caller sees after a remote edit.
+	if !f.loaded {
+		content, err := f.client.Read(f.path)
+		if err != nil {
+			return nil, syscall.EIO
+		}
+		f.buffer = content
+		f.loaded = true
+	}
 	if off >= int64(len(f.buffer)) {
 		return fuse.ReadResultData(nil), 0
 	}
@@ -280,6 +297,7 @@ func (f *fileNode) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadR
 func (f *fileNode) Write(ctx context.Context, fh fs.FileHandle, data []byte, off int64) (uint32, syscall.Errno) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.dirty = true
 	end := off + int64(len(data))
 	if int64(len(f.buffer)) < end {
 		grown := make([]byte, end)
@@ -293,12 +311,22 @@ func (f *fileNode) Write(ctx context.Context, fh fs.FileHandle, data []byte, off
 func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	f.mu.Lock()
 	content := append([]byte(nil), f.buffer...)
+	dirty := f.dirty
 	f.mu.Unlock()
+	// Clean flushes (touch with no write, a second flush of one handle)
+	// are successes: the room rejects same-content whole-file writes by
+	// design, and surfacing that as EAGAIN fails legitimate operations.
+	if !dirty {
+		return 0
+	}
 	if err := f.client.Write(f.path, content); err != nil {
 		// Room-level rejections (base mismatch, barrier fencing) map to
 		// EAGAIN so editors retry against the fresh revision.
 		return syscall.EAGAIN
 	}
+	f.mu.Lock()
+	f.dirty = false
+	f.mu.Unlock()
 	return 0
 }
 
@@ -323,6 +351,7 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 	// changes ride the next flush's metadata.
 	if sz, ok := in.GetSize(); ok {
 		f.mu.Lock()
+		f.dirty = true
 		switch {
 		case int(sz) < len(f.buffer):
 			f.buffer = append([]byte(nil), f.buffer[:sz]...)

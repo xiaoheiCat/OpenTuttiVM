@@ -357,6 +357,26 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	if room.DissolvedAt != nil {
 		return "", "", errors.New("room already dissolved")
 	}
+	// Canonical .tutti hosts are "<label>.<slug>.tutti": two members
+	// whose hostnames normalize to the same slug would mint identical
+	// hosts for the same label+port, and the gateway's listener map
+	// would silently route connections to the wrong member. Reject the
+	// collision at enrollment — the joining device retries after
+	// changing its machine name.
+	slug := vmprotocol.SlugifyHostname(device.Hostname)
+	members, err := s.repo.ListMemberships(ctx, room.ID)
+	if err != nil {
+		return "", "", err
+	}
+	for _, m := range members {
+		if m.DeviceID == device.ID {
+			continue // rejoin of the same device is fine
+		}
+		if other, err := s.repo.GetDevice(ctx, m.DeviceID); err == nil &&
+			vmprotocol.SlugifyHostname(other.Hostname) == slug {
+			return "", "", errors.New("device hostname conflicts with an existing member")
+		}
+	}
 	token, tokenHash, err := s.tokens.mint(room.ID, device.ID)
 	if err != nil {
 		return "", "", err
@@ -490,6 +510,14 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 	}
 	if !replicaFull || !workspaceInitialized {
 		return ErrTransferIncomplete
+	}
+	// Revalidate at commit time: the prepared candidate may have left or
+	// been kicked between phases, and assigning ownership to a
+	// non-member would leave the room with an absent owner until grace
+	// handling intervenes. The caller-supplied readiness booleans say
+	// nothing about membership.
+	if _, err := s.repo.GetMembership(ctx, roomID, candidateDeviceID); err != nil {
+		return errors.New("transfer candidate is no longer a room member")
 	}
 	room.OwnerDeviceID = candidateDeviceID
 	room.PendingTransferToDevice = ""

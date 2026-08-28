@@ -214,7 +214,10 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 		return
 	}
 	// Only a dissolved room tears down engine state; a participant
-	// leaving while the room lives must not reset the workspace.
+	// leaving while the room lives must not reset the workspace — but
+	// the LEAVER's own live transports must die either way, or an
+	// already-authenticated business socket keeps submitting operations
+	// with no remaining membership and its tunnel/routes stay usable.
 	if room, err := s.rooms.GetRoom(r.Context(), roomID); err == nil && room.DissolvedAt != nil {
 		s.seq.CloseRoom(roomID)
 		s.previews.ClearRoom(roomID)
@@ -223,6 +226,10 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 		// tunnel so nothing sequences past the room's end.
 		s.hub.DropRoom(roomID)
 		s.relay.DropRoom(roomID)
+	} else {
+		s.hub.DropDevice(roomID, deviceID)
+		s.relay.DropDevice(roomID, deviceID)
+		s.previews.DropDevice(roomID, deviceID)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "left"})
 }
