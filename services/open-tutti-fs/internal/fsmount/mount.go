@@ -55,6 +55,11 @@ func Mount(ctx context.Context, dir string, client *roomfs.Client) error {
 type roomNode struct {
 	fs.Inode
 	client *roomfs.Client
+	// dirMode is the authoritative directory permission set
+	// (server-reported or the creating mkdir): reporting a widened 0755
+	// for a 0700 directory would let local processes rely on
+	// permissions the room never granted.
+	dirMode uint32
 
 	mu     sync.Mutex
 	server *fuse.Server
@@ -128,8 +133,16 @@ func (n *roomNode) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errn
 }
 
 func (n *roomNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
-	out.Attr.Mode = 0o755 | syscall.S_IFDIR
+	out.Attr.Mode = n.dirPerms() | syscall.S_IFDIR
 	return 0
+}
+
+// dirPerms returns the node's directory permission bits (0755 default).
+func (n *roomNode) dirPerms() uint32 {
+	if m := n.dirMode & 0o7777; m != 0 {
+		return m
+	}
+	return 0o755
 }
 
 func (n *roomNode) Opendir(ctx context.Context) syscall.Errno { return 0 }
@@ -141,8 +154,12 @@ func (n *roomNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 		return nil, syscall.ENOENT
 	}
 	if st.Dir {
-		out.Attr.Mode = 0o755 | syscall.S_IFDIR
-		child := &roomNode{client: n.client}
+		dirMode := st.Mode & 0o7777
+		if dirMode == 0 {
+			dirMode = 0o755
+		}
+		out.Attr.Mode = dirMode | syscall.S_IFDIR
+		child := &roomNode{client: n.client, dirMode: dirMode}
 		return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFDIR}), 0
 	}
 	fileMode := st.Mode & 0o7777
@@ -175,8 +192,12 @@ func (n *roomNode) Mkdir(ctx context.Context, name string, mode uint32, out *fus
 	if err := n.client.Mkdir(n.path(name), mode); err != nil {
 		return nil, syscall.EIO
 	}
-	out.Attr.Mode = 0o755 | syscall.S_IFDIR
-	child := &roomNode{client: n.client}
+	perms := mode & 0o7777
+	if perms == 0 {
+		perms = 0o755
+	}
+	out.Attr.Mode = perms | syscall.S_IFDIR
+	child := &roomNode{client: n.client, dirMode: perms}
 	return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFDIR}), 0
 }
 

@@ -114,6 +114,11 @@ type WorkspaceState struct {
 	// workspaces cannot materialize "README" and "readme" as distinct
 	// entries, so creates/mkdirs/renames are refused on collision.
 	ciPaths map[string]string
+	// structSeqs records, per path, the sequences of STRUCTURAL changes
+	// (create/remove/mkdir/rmdir/rename) that touched it: a text patch
+	// based before such a change edits a different file generation even
+	// when its content hash coincidentally matches (remove+recreate).
+	structSeqs map[string][]uint64
 	// EagerBlobs gates eager blob materialization on accepted
 	// replacements: full replicas (owner-survival contract) fetch
 	// immediately; lazy replicas defer to first read and stay lazy on
@@ -128,12 +133,13 @@ type WorkspaceState struct {
 // NewWorkspaceState returns an empty workspace at sequence 0.
 func NewWorkspaceState() *WorkspaceState {
 	return &WorkspaceState{
-		files:    map[string]*fileState{},
-		history:  map[string][]appliedPatch{},
-		hashLog:  map[string][]seqHash{},
-		barriers: map[string]*barrier{},
-		accepted: map[string]int{},
-		ciPaths:  map[string]string{},
+		files:      map[string]*fileState{},
+		history:    map[string][]appliedPatch{},
+		hashLog:    map[string][]seqHash{},
+		barriers:   map[string]*barrier{},
+		accepted:   map[string]int{},
+		ciPaths:    map[string]string{},
+		structSeqs: map[string][]uint64{},
 	}
 }
 
@@ -304,10 +310,31 @@ func asRejection(err error) error {
 	return &RejectionError{Reason: RejectInvalid, CurrentHash: err.Error()}
 }
 
+// markStructural records a structural change on one path (generation
+// fence for later text patches).
+func (w *WorkspaceState) markStructural(path string, seq uint64) {
+	w.structSeqs[path] = append(w.structSeqs[path], seq)
+}
+
 func (w *WorkspaceState) record(env *vmprotocol.Envelope) {
 	w.ops = append(w.ops, *env)
 	op := env.Operation
 	w.recordHistory(env)
+	// Creates are the GENERATION ORIGIN (a first patch legitimately
+	// bases on the just-created empty file with the pre-create seq);
+	// only removals and renames interrupt an existing generation.
+	switch op.Kind {
+	case vmprotocol.OpRemove, vmprotocol.OpRmdir:
+		w.markStructural(op.Path, env.ServerSeq)
+	case vmprotocol.OpRename:
+		if rn := op.Rename; rn != nil {
+			// A rename interrupts OT history at BOTH paths: patches
+			// based before it lack the rename in their transform
+			// window, so re-read rather than transform.
+			w.markStructural(rn.OldPath, env.ServerSeq)
+			w.markStructural(rn.NewPath, env.ServerSeq)
+		}
+	}
 	switch {
 	case op.Kind == vmprotocol.OpRename && op.Rename != nil:
 		w.pushHash(op.Rename.OldPath, env.ServerSeq, "")
@@ -374,6 +401,15 @@ func (w *WorkspaceState) applyTextPatch(env *vmprotocol.Envelope) error {
 	// the author claims knowledge of a future state.
 	if env.BaseSeq > w.seq {
 		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
+	}
+	// Generation fence: a structural change (remove+recreate, rename)
+	// after the author's base means this patch targets a DIFFERENT file
+	// generation even when the old generation's hash matches — offset-
+	// zero edits must not land on the unrelated recreated file.
+	for _, s := range w.structSeqs[op.Path] {
+		if s > env.BaseSeq {
+			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
+		}
 	}
 	// A base older than the retained transform window cannot be safely
 	// transformed: the dropped patches would skew every offset.
@@ -562,6 +598,13 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 		for _, p := range descendants {
 			moved := r.NewPath + p[len(r.OldPath):]
 			if _, exists := w.files[moved]; exists {
+				return &RejectionError{Reason: RejectInvalid}
+			}
+			// Tree conflicts too: an unrelated implicit-parent entry
+			// like "dst/a/b" must not survive under a moved FILE
+			// "dst/a" — the authoritative tree would be impossible to
+			// materialize on any filesystem.
+			if w.pathTreeConflict(moved, w.files[p].IsDir) {
 				return &RejectionError{Reason: RejectInvalid}
 			}
 			// Same case-only exclusion as the rename root: the moved

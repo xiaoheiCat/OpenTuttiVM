@@ -30,6 +30,9 @@ func (s *Server) handleSharePage(w http.ResponseWriter, r *http.Request) {
 	page = strings.ReplaceAll(page, "{{NETWORK_ERROR}}", jsEscape(l.NetworkError))
 	page = strings.ReplaceAll(page, "{{SHARE_ID}}", jsEscape(shareID))
 	page = strings.ReplaceAll(page, "{{SERVER}}", jsEscape(s.cfg.PublicURL))
+	page = strings.ReplaceAll(page, "{{MANUAL_INFO}}", htmlEscape(l.ManualInfo))
+	page = strings.ReplaceAll(page, "{{COPY_INFO}}", htmlEscape(l.CopyInfo))
+	page = strings.ReplaceAll(page, "{{COPIED}}", jsEscape(l.Copied))
 	w.Write([]byte(page))
 }
 

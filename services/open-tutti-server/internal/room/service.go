@@ -266,7 +266,19 @@ func (s *Service) KickMember(ctx context.Context, roomID, ownerDeviceID, targetD
 	if targetDeviceID == ownerDeviceID {
 		return errors.New("owners leave via leave/transfer, not kick")
 	}
+	// Serialize the membership deletion with lifecycle mutations: a
+	// CommitTransfer assigning this candidate as the new owner between
+	// the check and the delete would leave OwnerDeviceID pointing at a
+	// deleted membership whose token no longer authenticates — the room
+	// becomes administrable by nobody.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, err := s.repo.GetMembership(ctx, roomID, targetDeviceID); err != nil {
+		return err
+	}
+	// Revalidate ownership under the same lock: a transfer may have
+	// landed since authorizeOwnerOf read the room.
+	if _, _, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID); err != nil {
 		return err
 	}
 	if err := s.repo.DeleteMembership(ctx, roomID, targetDeviceID); err != nil {

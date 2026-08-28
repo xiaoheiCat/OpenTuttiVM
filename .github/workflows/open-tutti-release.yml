@@ -162,13 +162,22 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          find apps/desktop -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} artifacts/ \; 2>/dev/null || true
+          # A missing installer must FAIL this job: swallowing it with
+          # `|| true` plus a warn-only upload would let the release job
+          # publish a GitHub release silently missing the macOS or
+          # Windows client while other artifacts keep release-assets/*
+          # nonempty.
+          find apps/desktop -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} artifacts/ \;
+          if [ -z "$(ls artifacts/ 2>/dev/null)" ]; then
+            echo "::error::no desktop installer produced for this platform"
+            exit 1
+          fi
           ls -la artifacts
       - uses: actions/upload-artifact@v4
         with:
           name: client-${{ matrix.artifact }}
           path: artifacts/
-          if-no-files-found: warn
+          if-no-files-found: error
 
   client-runtimes:
     name: Client runtimes (room-sync)
