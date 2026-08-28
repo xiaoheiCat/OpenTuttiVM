@@ -49,6 +49,12 @@ func New(cfg config.Config, rooms *room.Service, seq *sequencer.Manager, hub *re
 	return &Server{cfg: cfg, rooms: rooms, seq: seq, hub: hub, previews: previews, borrows: borrows, relay: relay, cas: cas, repo: repo, log: log}
 }
 
+// WaitIdle blocks until every business-socket pump finished its detach
+// sequence — embedders and tests call it after closing the HTTP listener
+// and before closing the store, so the final membership writes cannot
+// race the store close.
+func (s *Server) WaitIdle() { s.hub.WaitPumps() }
+
 // Handler builds the route table.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()

@@ -67,6 +67,11 @@ type Hub struct {
 
 	mu    sync.RWMutex
 	conns map[string]map[string]*Conn
+	// pumping tracks live Handle goroutines so shutdowns can wait for
+	// the detach sequence (which writes membership state) to finish
+	// before the store closes — otherwise a closing repository races
+	// the last writes and Windows keeps the file handle open.
+	pumping sync.WaitGroup
 }
 
 // NewHub wires the hub. Attach the sequencer after construction to break
@@ -77,6 +82,10 @@ func NewHub(seq *sequencer.Manager, rooms *room.Service, previews *preview.Regis
 		log: log, conns: map[string]map[string]*Conn{},
 	}
 }
+
+// WaitPumps blocks until every business-socket pump finished its detach
+// sequence (test/embedder shutdown ordering).
+func (h *Hub) WaitPumps() { h.pumping.Wait() }
 
 // SetSequencer attaches the operation sequencer.
 func (h *Hub) SetSequencer(seq *sequencer.Manager) { h.seq = seq }
@@ -177,6 +186,8 @@ func (h *Hub) Detach(c *Conn) {
 
 // Handle pumps one websocket until it closes.
 func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
+	h.pumping.Add(1)
+	defer h.pumping.Done()
 	// Force-close path (kick/membership revocation): cancelling the read
 	// context unblocks the pump and runs the normal detach sequence.
 	readCtx, cancelReads := context.WithCancel(c.Ctx)

@@ -53,7 +53,15 @@ func newTestStack(t *testing.T) *testStack {
 	api := New(cfg, rooms, seq, hub, previews, borrow.NewRegistry(), relay, cas, repo, log)
 	rooms.SetBroadcaster(hub)
 	ts := httptest.NewServer(api.Handler())
-	t.Cleanup(ts.Close)
+	// Runs FIRST (LIFO): close the listener, then wait for every hijacked
+	// business-socket pump to finish its detach writes, and only then
+	// (repo cleanup, registered earlier) does the store close — on
+	// Windows a racing store close leaves api.db held open and TempDir
+	// cleanup fails.
+	t.Cleanup(func() {
+		ts.Close()
+		api.WaitIdle()
+	})
 	return &testStack{srv: ts, client: ts.Client()}
 }
 
