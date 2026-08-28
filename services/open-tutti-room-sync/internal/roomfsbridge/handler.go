@@ -149,17 +149,10 @@ func (h *Handler) List(path string) ([]roomfs.DirEntry, error) {
 
 // Write implements roomfs.Handler: whole-file write → File Operation.
 func (h *Handler) Write(path string, content []byte) error {
-	old, err := h.mgr.Read(context.Background(), path)
-	if err != nil {
-		old = nil
-	}
-	// The base hash must match what the authoritative state tracks for
-	// the file (content hash while text-tracked, manifest hash once
-	// blob-tracked) or the server rejects the transition.
-	var base string
-	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
-		base = state.CurrentBaseHash(path)
-	})
+	// Old content, tracked base hash, and base sequence come from ONE
+	// locked snapshot: a remote operation landing between separate reads
+	// would splice stale offsets onto a fresh revision's hash and seq.
+	old, base, baseSeq, _ := h.mgr.PrepareWrite(context.Background(), path)
 	op, err := vmsync.ConvertChange(h.nextOpID(), path, base, old, content,
 		func(manifest vmcas.Manifest, chunks [][]byte) error {
 			if h.uploader == nil {
@@ -170,7 +163,7 @@ func (h *Handler) Write(path string, content []byte) error {
 	if err != nil {
 		return err
 	}
-	return h.submit(op)
+	return h.submitAtSeq(op, baseSeq)
 }
 
 // Create implements roomfs.Handler.
@@ -214,10 +207,17 @@ func (h *Handler) Rename(from, to string) error {
 // submit sends one operation and reports success only after the server
 // accepted it (broadcast acknowledgement); rejections surface as errors.
 func (h *Handler) submit(op vmprotocol.FileOperation) error {
+	return h.submitAtSeq(op, h.mgr.Replica.AppliedSeq)
+}
+
+// submitAtSeq is submit with an explicit base sequence (write path: the
+// sequence captured atomically with the content the splice offsets were
+// derived from).
+func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error {
 	env := vmprotocol.Envelope{
 		OperationID: op.ID, Operation: op,
 		AuthorDeviceID: h.deviceID, AgentSessionID: h.sessionID,
-		BaseSeq: h.mgr.Replica.AppliedSeq,
+		BaseSeq: baseSeq,
 	}
 	err := h.mgr.SubmitAndWait(context.Background(), env, func() error {
 		return h.submitter.Submit(env)

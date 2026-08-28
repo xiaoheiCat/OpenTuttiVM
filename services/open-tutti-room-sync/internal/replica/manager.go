@@ -199,6 +199,24 @@ func (m *Manager) Read(ctx context.Context, path string) ([]byte, error) {
 	return m.readLocked(ctx, path)
 }
 
+// PrepareWrite snapshots everything a whole-file write derives from — the
+// old content, the base hash the authoritative state tracks, and the
+// applied sequence — under ONE lock. Sampling them separately would let a
+// remote operation land in between: splice offsets from revision N would
+// claim revision N+1's hash and sequence, and the server would apply the
+// stale offsets without transformation.
+func (m *Manager) PrepareWrite(ctx context.Context, path string) (content []byte, baseHash string, baseSeq uint64, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	content, err = m.readLocked(ctx, path)
+	if err != nil {
+		// Unknown path = new file: empty base is safe (the server's
+		// create guard rejects if a remote create raced us).
+		return nil, "", m.Replica.AppliedSeq, err
+	}
+	return content, m.Replica.State.CurrentBaseHash(path), m.Replica.AppliedSeq, nil
+}
+
 func (m *Manager) readLocked(ctx context.Context, path string) ([]byte, error) {
 	if content, ok := m.Replica.State.CurrentContent(path); ok {
 		return content, nil

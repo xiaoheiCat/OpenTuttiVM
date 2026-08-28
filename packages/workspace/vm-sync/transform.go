@@ -34,6 +34,11 @@ func TransformPatch(patch *vmprotocol.TextPatch, concurrent []appliedPatch) Tran
 	for _, c := range concurrent {
 		for si := range patch.Splices {
 			s := &patch.Splices[si]
+			// All of c's splices live in c's original frame, and so does
+			// s at this point: accumulate the shift from every splice
+			// and apply it once instead of mutating s.Offset mid-pass
+			// (a shifted s would compare later splices in a mixed frame).
+			shift := 0
 			for ci := range c.Patch.Splices {
 				o := c.Patch.Splices[ci]
 				delta := len(o.Insert) - o.DeleteLen
@@ -42,7 +47,7 @@ func TransformPatch(patch *vmprotocol.TextPatch, concurrent []appliedPatch) Tran
 
 				switch {
 				case oEnd <= s.Offset:
-					s.Offset += delta
+					shift += delta
 				case o.Offset >= sEnd:
 					// Concurrent edit at or after our end boundary.
 				default:
@@ -52,6 +57,7 @@ func TransformPatch(patch *vmprotocol.TextPatch, concurrent []appliedPatch) Tran
 					}
 				}
 			}
+			s.Offset += shift
 		}
 	}
 	return res

@@ -227,7 +227,6 @@ func run() error {
 			fmt.Fprintf(os.Stderr, "room-sync: tunnel dial: %v\n", err)
 		} else {
 			tunnelRef.set(tun)
-			defer tun.Close()
 			// Inbound leg: another device connected to one of this
 			// device's advertised routes; forward each relayed stream
 			// to the owning session container on the room network.
@@ -236,6 +235,14 @@ func run() error {
 		runErr := sess.Run(mgr)
 		sess.Close()
 		sessionRef.clear(sess)
+		// Tear this iteration's tunnel down before reconnecting: a
+		// leaked tunnel keeps a yamux session alive, and its
+		// server-side unregister would later delete the replacement
+		// tunnel's relay entry, stranding advertised routes.
+		if tun != nil {
+			tunnelRef.clearLocked(tun)
+			tun.Close()
+		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -337,6 +344,16 @@ type liveTunnel struct {
 }
 
 func (l *liveTunnel) set(t *tunneldial.Tunnel) { l.mu.Lock(); l.t = t; l.mu.Unlock() }
+
+// clearLocked drops the reference only if it still points at t, so
+// closing a stale iteration's tunnel cannot unregister a newer one.
+func (l *liveTunnel) clearLocked(t *tunneldial.Tunnel) {
+	l.mu.Lock()
+	if l.t == t {
+		l.t = nil
+	}
+	l.mu.Unlock()
+}
 
 func (l *liveTunnel) Connect(route vmprotocol.RouteKey) (net.Conn, error) {
 	l.mu.Lock()

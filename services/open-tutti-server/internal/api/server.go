@@ -17,6 +17,7 @@ import (
 	"github.com/coder/websocket"
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
+	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
 
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/borrow"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/config"
@@ -411,6 +412,10 @@ func (s *Server) handleRoomWS(w http.ResponseWriter, r *http.Request, roomID, de
 	if err != nil {
 		return
 	}
+	// A valid text_patch envelope can carry up to MaxTextFile (8 MiB) of
+	// inserted text; the library default of 32 KiB would close every
+	// large paste as message-too-big before the sequencer sees it.
+	ws.SetReadLimit(int64(vmsync.MaxTextFile) + 64<<10)
 	if err := s.rooms.MarkOnline(r.Context(), roomID, deviceID); err != nil {
 		ws.Close(websocket.StatusPolicyViolation, "membership offline")
 		return

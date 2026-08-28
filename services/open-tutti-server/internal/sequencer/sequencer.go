@@ -154,8 +154,11 @@ func (m *Manager) validateBlobGraph(manifestHash string) error {
 	if manifest.Hash != manifestHash {
 		return fmt.Errorf("manifest %s self-hash mismatch", manifestHash)
 	}
-	if len(manifest.Chunks) == 0 {
-		return fmt.Errorf("manifest %s has no chunks", manifestHash)
+	// A zero-byte file legitimately has no chunks (BuildManifest emits
+	// exactly that); any OTHER zero-chunk manifest would declare a
+	// positive size and fail the total check below.
+	if len(manifest.Chunks) == 0 && manifest.Size != 0 {
+		return fmt.Errorf("manifest %s declares %d bytes but has no chunks", manifestHash, manifest.Size)
 	}
 	var total int64
 	for i, chunk := range manifest.Chunks {

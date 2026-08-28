@@ -15,9 +15,10 @@ COPY packages/workspace packages/workspace
 COPY services/open-tutti-server services/open-tutti-server
 # GOWORK=off: the staged image contains only this server's module graph;
 # the repository-wide go.work references modules that are not copied in.
-RUN GOWORK=off CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
-    -o /out/open-tutti-server \
-    github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server
+# Build from inside the module directory — with GOWORK=off the /src root
+# has no go.mod, so package-path builds cannot resolve.
+RUN GOWORK=off CGO_ENABLED=0 GOOS=linux go -C services/open-tutti-server build \
+    -trimpath -ldflags="-s -w" -o /out/open-tutti-server .
 
 FROM alpine:3.21
 RUN addgroup -S tutti && adduser -S tutti -G tutti \

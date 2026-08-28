@@ -13,6 +13,7 @@ package gateway
 
 import (
 	"fmt"
+	"html/template"
 	"net"
 	"strings"
 
@@ -84,17 +85,20 @@ func sessionIDFromLabel(label string) string { return "sess-" + label }
 
 // SessionSelectorPage renders the minimal H5 picker for an ambiguous HTTPS
 // device address. The local CA terminates TLS so the picker can appear
-// before the origin responds.
+// before the origin responds. CanonicalHost embeds the participant-controlled
+// session label, so every interpolation goes through html/template escaping
+// — never raw string building.
 func SessionSelectorPage(candidates []vmprotocol.SessionCandidate) string {
-	var b strings.Builder
-	b.WriteString(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Choose a session</title>
+	tpl := template.Must(template.New("selector").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Choose a session</title>
 <style>body{font-family:system-ui,sans-serif;background:#0f1115;color:#e7eaf0;display:flex;justify-content:center;padding-top:10vh}
 .card{background:#171a21;border:1px solid #2a2f3a;border-radius:12px;padding:24px;width:min(420px,90vw)}
 a.btn{display:block;margin:8px 0;padding:12px;border-radius:8px;background:#4c7dff;color:#fff;text-decoration:none;text-align:center}</style></head>
-<body><main class="card"><h1>Multiple sessions share this port</h1>`)
-	for _, c := range candidates {
-		fmt.Fprintf(&b, `<a class="btn" href="http://%s">%s</a>`, c.CanonicalHost, c.CanonicalHost)
+<body><main class="card"><h1>Multiple sessions share this port</h1>
+{{range .}}<a class="btn" href="http://{{.CanonicalHost}}">{{.CanonicalHost}}</a>{{end}}
+</main></body></html>`))
+	var b strings.Builder
+	if err := tpl.Execute(&b, candidates); err != nil {
+		return "<!doctype html><html lang=\"en\"><body><p>Multiple sessions share this port.</p></body></html>"
 	}
-	b.WriteString(`</main></body></html>`)
 	return b.String()
 }
