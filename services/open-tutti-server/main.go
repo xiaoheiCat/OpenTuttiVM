@@ -78,6 +78,12 @@ func run() error {
 	// startup sweep) drops object-store entries whose last reference
 	// died, keeping OPEN_TUTTI_OBJECTS_DIR bounded.
 	rooms.SetCASCollector(casCollector{repo: repo, cas: cas, log: log})
+	// Token refresh (rejoin recovery) tears the device's live
+	// transports down, matching kick and leave semantics.
+	rooms.SetConnectionDropper(func(roomID, deviceID string) {
+		hub.DropDevice(roomID, deviceID)
+		relay.DropDevice(roomID, deviceID)
+	})
 
 	// The server never restores rooms across restarts: end everything still
 	// marked active so CAS references release and objects can be

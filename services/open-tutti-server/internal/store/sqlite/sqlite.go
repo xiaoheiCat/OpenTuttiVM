@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" driver
@@ -31,7 +32,13 @@ func Open(path string) (*Repo, error) {
 }
 
 // Repo implements store.Repository.
-type Repo struct{ db *sql.DB }
+type Repo struct {
+	db *sql.DB
+	// casMu serializes CAS object publication (filesystem write +
+	// reference insertion) with reference collection; see
+	// CASPublication and CollectUnreferencedCAS.
+	casMu sync.Mutex
+}
 
 func applySchema(db *sql.DB) error {
 	const schema = `
@@ -456,6 +463,16 @@ func (r *Repo) HasCASRef(ctx context.Context, roomID, hash string) (bool, error)
 	return true, nil
 }
 
+// CASPublication serializes object publication (filesystem write +
+// reference insertion) with collection: both hold casMu, so a
+// collection can never observe a zero count in the gap between a
+// freshly written object and its reference row.
+func (r *Repo) CASPublication(fn func() error) error {
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
+	return fn()
+}
+
 // CollectUnreferencedCAS deletes the caller-provided objects whose last
 // reference died, running the refcount check AND the deletion callback
 // inside ONE write transaction: a concurrent AddCASRefs waits on the
@@ -463,6 +480,8 @@ func (r *Repo) HasCASRef(ctx context.Context, roomID, hash string) (bool, error)
 // the post-collection refs and can never end up referencing a deleted
 // object. A failed deletion callback merely leaks the object (safe).
 func (r *Repo) CollectUnreferencedCAS(ctx context.Context, hashes []string, del func(hash string) error) error {
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

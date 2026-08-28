@@ -626,6 +626,15 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 	// check (no history under the new key) and apply without
 	// transformation over intervening edits.
 	w.rekeyHistory(r.OldPath, r.NewPath)
+	// The ROOT's conflict barrier moves too (the descendant loop below
+	// only covers directories): leaving the fence on the nonexistent
+	// old path keeps the renamed file unfenced — other agents could
+	// edit it before resolution — while the resolver's fix on the new
+	// path would be rejected as unfenced.
+	if b, ok := w.barriers[r.OldPath]; ok {
+		w.barriers[r.NewPath] = b
+		delete(w.barriers, r.OldPath)
+	}
 	if f.IsDir {
 		// A nonempty directory rename moves every descendant with it;
 		// leaving them under the old prefix corrupts snapshots and

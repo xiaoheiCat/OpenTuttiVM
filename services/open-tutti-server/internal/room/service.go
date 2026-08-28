@@ -56,12 +56,13 @@ var (
 
 // Service implements room lifecycle.
 type Service struct {
-	repo   store.Repository
-	cfg    config.Config
-	clock  Clock
-	bcast  Broadcaster
-	cas    CASCollector
-	tokens *tokenMinter
+	repo     store.Repository
+	cfg      config.Config
+	clock    Clock
+	bcast    Broadcaster
+	cas      CASCollector
+	dropConn func(roomID, deviceID string)
+	tokens   *tokenMinter
 
 	mu sync.Mutex
 	// shareAttempts throttles share-password verification per share id:
@@ -107,6 +108,14 @@ type CASCollector interface {
 
 // SetCASCollector attaches the post-dissolution object collector.
 func (s *Service) SetCASCollector(c CASCollector) { s.cas = c }
+
+// SetConnectionDropper attaches the transport teardown used when a
+// device's session token is refreshed (rejoin): the OLD token stops
+// authenticating future requests, but transports already admitted with
+// it (business WebSocket, tunnel) stay registered with full access
+// until they are explicitly closed — the same teardown kick and leave
+// already perform.
+func (s *Service) SetConnectionDropper(drop func(roomID, deviceID string)) { s.dropConn = drop }
 
 // broadcast is nil-safe so lifecycle tests can run without a hub.
 func (s *Service) broadcast(roomID string, ev vmprotocol.Event) {
@@ -264,11 +273,24 @@ func (s *Service) RevokeShareLink(ctx context.Context, roomID, deviceID string) 
 	}
 	if room.ShareRevokedAt == nil {
 		now := s.clock.Now()
-		// Field-specific update: a full-record write would clobber a
-		// transfer/dissolution committed since authorizeOwnerOf read
-		// the room (stale owner restored, dissolved room resurrected).
-		if err := s.repo.UpdateRoomShareRevoked(ctx, room.ID, now); err != nil {
+		// Serialize with lifecycle mutations AND reauthorize under the
+		// lock: a transfer committing between authorizeOwnerOf and this
+		// update would let the FORMER owner permanently revoke the new
+		// owner's share link. The field-specific update still avoids
+		// clobbering concurrent room fields.
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		current, err := s.repo.GetRoom(ctx, room.ID)
+		if err != nil {
 			return err
+		}
+		if current.OwnerDeviceID != deviceID {
+			return fmt.Errorf("%w: not the room owner", store.ErrNotFound)
+		}
+		if current.ShareRevokedAt == nil {
+			if err := s.repo.UpdateRoomShareRevoked(ctx, room.ID, now); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -506,6 +528,12 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 		if err := s.repo.UpsertMembership(ctx, m); err != nil {
 			return "", "", err
 		}
+		// The old token (possibly exposed — that is why the device is
+		// rejoining) stops authenticating future requests, but already
+		// admitted transports keep full access until closed.
+		if s.dropConn != nil {
+			s.dropConn(room.ID, device.ID)
+		}
 	} else {
 		return "", "", err
 	}
@@ -544,15 +572,23 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 			return ErrOwnerMustApply
 		}
 		if in.Disband {
-			if err := s.repo.DeleteMembership(ctx, in.RoomID, in.DeviceID); err != nil {
-				return err
-			}
+			// Dissolve FIRST, membership deletion second: if dissolution
+			// fails (cancellation, I/O, transaction error) after the
+			// deletion committed, the room stays active with
+			// OwnerDeviceID pointing at a membership that no longer
+			// exists — its token cannot authenticate and NOBODY can
+			// administer the room. A failed membership deletion after a
+			// committed dissolution is harmless: the room is terminal,
+			// and dissolved rooms reject every operation path.
 			s.broadcast(in.RoomID, vmprotocol.Event{
 				Topic:   vmprotocol.TopicPresence,
 				RoomID:  in.RoomID,
 				Payload: mustJSON(vmprotocol.PresenceDevice{DeviceID: in.DeviceID, Online: false}),
 			})
-			return s.dissolveLocked(ctx, in.RoomID)
+			if err := s.dissolveLocked(ctx, in.RoomID); err != nil {
+				return err
+			}
+			return s.repo.DeleteMembership(ctx, in.RoomID, in.DeviceID)
 		}
 		// Without disband, the owner may only leave after a completed
 		// transfer moved ownership away.

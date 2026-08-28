@@ -135,6 +135,9 @@ type Repository interface {
 	// with the refcount check and deletion serialized in one write
 	// transaction against concurrent reference acquisition.
 	CollectUnreferencedCAS(ctx context.Context, hashes []string, del func(hash string) error) error
+	// CASPublication serializes a CAS object's publication (filesystem
+	// write plus reference insertion) with collection.
+	CASPublication(fn func() error) error
 	DeleteRoomCASRefs(ctx context.Context, roomID string) error
 	// HasCASRef reports whether the room references the object hash;
 	// CAS reads are authorized per room, not by global object existence.

@@ -166,6 +166,23 @@ Server-side state lives in `services/open-tutti-server/internal/borrow`
 decider) are always stamped from the authenticated connection, never
 trusted from the wire.
 
+## Why room events do not use the `packages/events` catalog
+
+`vm-protocol`'s room event bus is a deliberate second seam, not an
+oversight. `packages/events` is the daemon's schema-first DOMAIN event
+catalog: versioned, generated-validation records persisted and replayed
+across tuttid's HTTP/query surfaces. The room bus is a live, ordered,
+in-memory TRANSPORT stream — envelope + `json.RawMessage` payload over
+one WebSocket per device, where the sequencer's ordering (and its
+rejection/barrier protocol) IS the contract. Routing it through the
+generated catalog would add version ceremony to a stream whose
+consumers all deploy in lockstep with the server (same repo, same
+release), while making a workspace package depend on daemon domain
+schema. Room topics therefore stay in `vm-protocol` (workspace-owned
+wire contract); if a room event ever needs to PERSIST into tuttid's
+domain streams, the adapter translating it belongs in
+`services/tuttid`, not in the room bus.
+
 ## Compatibility
 
 Go modules build and test on Linux, macOS, and Windows; the FUSE layer is

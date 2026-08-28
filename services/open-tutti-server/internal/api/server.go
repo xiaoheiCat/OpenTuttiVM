@@ -369,12 +369,22 @@ func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, _ 
 		writeErr(w, http.StatusRequestEntityTooLarge, "chunk exceeds 4 MiB")
 		return
 	}
-	if err := s.cas.Put(hash, body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err := s.repo.AddCASRefs(r.Context(), roomID, []string{hash}); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	// Publication (object write + reference insertion) is serialized
+	// with dissolution collection: running unlocked, a collector could
+	// observe zero references in the gap between the fresh object and
+	// its ref row, delete the object, and leave this room holding a
+	// durable reference to missing content.
+	if err := s.repo.CASPublication(func() error {
+		if err := s.cas.Put(hash, body); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return err
+		}
+		if err := s.repo.AddCASRefs(r.Context(), roomID, []string{hash}); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return err
+		}
+		return nil
+	}); err != nil {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"hash": hash})

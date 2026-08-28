@@ -504,7 +504,19 @@ func atomicWrite(dst string, content []byte) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), dst)
+	// Windows rename does NOT replace an existing destination (POSIX
+	// rename(2) semantics): the mirror updates preexisting files in
+	// place, so a plain os.Rename fails on the first modified file.
+	// Removing the destination first closes the gap; the content is
+	// already durable in the temp file, and a crash mid-swap leaves
+	// either version — never a partial write.
+	if err := os.Rename(tmp.Name(), dst); err != nil {
+		if rmErr := os.Remove(dst); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
+			return fmt.Errorf("replace %s: %v (remove: %v)", dst, err, rmErr)
+		}
+		return os.Rename(tmp.Name(), dst)
+	}
+	return nil
 }
 
 func pruneRemoved(root string, roomPaths map[string]bool) error {

@@ -281,7 +281,12 @@ func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason
 	}); err != nil {
 		return snap, err
 	}
-	if err := m.repo.AddCASRefs(context.Background(), roomID, m.snapshotRefs(snap)); err != nil {
+	// Snapshot ref insertion serializes with dissolution collection
+	// (same publication protocol as object upload): an unlocked insert
+	// could race a collector that already observed zero references.
+	if err := m.repo.CASPublication(func() error {
+		return m.repo.AddCASRefs(context.Background(), roomID, m.snapshotRefs(snap))
+	}); err != nil {
 		return snap, err
 	}
 	m.send.BroadcastRoom(roomID, vmprotocol.Event{

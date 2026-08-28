@@ -65,7 +65,7 @@ func (s *DNSServer) answer(msg []byte) []byte {
 	qType := binary.BigEndian.Uint16(msg[qEnd-4:])
 	host, err := vmprotocol.ParseTuttiHost(strings.ToLower(name))
 	if err != nil || qType != 1 {
-		return buildHeader(msg, 0)
+		return buildHeader(msg, qEnd, 0)
 	}
 	ip := s.vips.Assign(host)
 	rr := make([]byte, 0, 16)
@@ -77,12 +77,17 @@ func (s *DNSServer) answer(msg []byte) []byte {
 	rr = binary.BigEndian.AppendUint32(rr, 5)
 	rr = binary.BigEndian.AppendUint16(rr, 4)
 	rr = append(rr, ipb[:]...)
-	return append(buildHeader(msg, 1), rr...)
+	return append(buildHeader(msg, qEnd, 1), rr...)
 }
 
-func buildHeader(msg []byte, answers int) []byte {
-	out := make([]byte, 12, 12+len(msg)+16)
-	copy(out, msg[:12])
+// buildHeader copies ONLY the header and question (through qEnd): the
+// request body may carry an EDNS OPT additional record, and copying it
+// while declaring ARCOUNT=0 leaves a stray record where parsers expect
+// the answer section, pushing the appended A record past the declared
+// sections so EDNS-capable resolvers see no usable address.
+func buildHeader(msg []byte, qEnd int, answers int) []byte {
+	out := make([]byte, qEnd, qEnd+16)
+	copy(out, msg[:qEnd])
 	out[2] = 0x81 // response, recursion not desired
 	out[3] = 0x80 // no error
 	// ANCOUNT/NSCOUNT/ARCOUNT live at 6-7/8-9/10-11; write each pair at
@@ -90,7 +95,7 @@ func buildHeader(msg []byte, answers int) []byte {
 	binary.BigEndian.PutUint16(out[6:], uint16(answers))
 	binary.BigEndian.PutUint16(out[8:], 0)
 	binary.BigEndian.PutUint16(out[10:], 0)
-	return append(out, msg[12:]...)
+	return out
 }
 
 // parseQuestion walks the question section and returns the offset just
