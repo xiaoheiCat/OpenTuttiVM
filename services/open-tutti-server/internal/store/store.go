@@ -141,10 +141,13 @@ type Repository interface {
 	// CASPublication serializes a CAS object's publication (filesystem
 	// write plus reference insertion) with collection.
 	CASPublication(fn func() error) error
+	// CreateRoomWithOwner commits device enrollment, room creation,
+	// and the owner membership atomically.
+	CreateRoomWithOwner(ctx context.Context, d Device, room Room, m Membership) error
 	// EnrollWithTicket commits ticket consumption, device enrollment,
 	// and membership upsert atomically; ErrTicketUsed marks a lost
 	// redemption race.
-	EnrollWithTicket(ctx context.Context, hash string, d Device, m Membership) error
+	EnrollWithTicket(ctx context.Context, hash string, now time.Time, d Device, m Membership) error
 	DeleteRoomCASRefs(ctx context.Context, roomID string) error
 	// HasCASRef reports whether the room references the object hash;
 	// CAS reads are authorized per room, not by global object existence.

@@ -297,6 +297,14 @@ func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason
 	// (same publication protocol as object upload): an unlocked insert
 	// could race a collector that already observed zero references.
 	if err := m.repo.CASPublication(func() error {
+		// Dissolution fence, INSIDE the publication lock: the engine()
+		// liveness read earlier can race a dissolve that deletes all
+		// room references; publishing snapshot refs for an already
+		// dissolved room would either point at deleted objects or pin
+		// them forever.
+		if room, err := m.repo.GetRoom(context.Background(), roomID); err != nil || room.DissolvedAt != nil {
+			return fmt.Errorf("room dissolved before snapshot publication")
+		}
 		return m.repo.AddCASRefs(context.Background(), roomID, m.snapshotRefs(snap))
 	}); err != nil {
 		return snap, err

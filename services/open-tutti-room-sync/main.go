@@ -444,17 +444,6 @@ func run() error {
 			}
 		}
 		sessionRef.set(sess)
-		// Seed an EMPTY room from the owner's workspace directory: the
-		// shared mount must contain the workspace being shared, not
-		// start blank and later prune the owner's original files as
-		// "stale host state" at Apply-to-Workspace. Owner-only, runs
-		// once, only while the authoritative sequence is still zero.
-		if seedDir != "" && !seeded && isOwner && mgr.Replica.AppliedSeq == 0 {
-			if err := seedWorkspace(ctx, bridge, seedDir); err != nil {
-				fmt.Fprintf(os.Stderr, "room-sync: seed: %v\n", err)
-			}
-			seeded = true
-		}
 		// Announce this device's session ports so the preview registry
 		// (and through it /routes, the selector, and relay
 		// authorization) knows what the session serves. The room
@@ -476,7 +465,19 @@ func run() error {
 		// socket: the fences are still up server-side, and only this
 		// session (the assigned resolver) can lift them.
 		bridge.RetryDuties()
-		runErr := sess.Run(mgr)
+		// The reader runs BEFORE/WITH the seeder: sess.Run is the only
+		// consumer of operation acknowledgements, so seeding before it
+		// would time out every SubmitAndWait and permanently drop the
+		// rest of the workspace. Seed asynchronously; Run blocks below.
+		runErrCh := make(chan error, 1)
+		go func() { runErrCh <- sess.Run(mgr) }()
+		if seedDir != "" && !seeded && isOwner && mgr.Replica.AppliedSeq == 0 {
+			if err := seedWorkspace(ctx, bridge, seedDir); err != nil {
+				fmt.Fprintf(os.Stderr, "room-sync: seed: %v\n", err)
+			}
+			seeded = true
+		}
+		runErr := <-runErrCh
 		sess.Close()
 		sessionRef.clear(sess)
 		if ctx.Err() != nil {
@@ -761,8 +762,23 @@ func seedWorkspace(ctx context.Context, bridge *roomfsbridge.Handler, root strin
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		rel := strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
-		if rel == "" {
+		// Windows separators must normalize away: WalkDir joins with
+		// "\" there, and a backslash-prefixed path fails workspace
+		// path validation, blocking every Windows owner's seed.
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "." || rel == "" {
+			return nil
+		}
+		// The protocol has no symlink kind, and dereferencing one would
+		// upload whatever it points at (potentially OUTSIDE the
+		// selected workspace, e.g. credentials -> ../.ssh/id_rsa) as an
+		// ordinary shared file. Skip with a loud log line.
+		if d.Type()&fs.ModeSymlink != 0 {
+			fmt.Fprintf(os.Stderr, "room-sync: seed: skipping symlink %s\n", rel)
 			return nil
 		}
 		info, err := d.Info()

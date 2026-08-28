@@ -194,7 +194,9 @@ func (s *Service) CreateRoom(ctx context.Context, in CreateRoomInput) (CreatedRo
 		}
 		in.Device.PublicKey = existing.PublicKeyPEM
 	}
-	if err := s.upsertDevice(ctx, in.Device); err != nil {
+	// Device-field validation still runs before anything persists
+	// (upsertDevice folded into the creation transaction below).
+	if err := validateDevice(&in.Device); err != nil {
 		return CreatedRoom{}, err
 	}
 	roomID := "room_" + randomToken(16)
@@ -205,21 +207,25 @@ func (s *Service) CreateRoom(ctx context.Context, in CreateRoomInput) (CreatedRo
 		return CreatedRoom{}, err
 	}
 	now := s.clock.Now()
-	if err := s.repo.CreateRoom(ctx, store.Room{
-		ID: roomID, ShareID: shareID, PasswordHash: hash,
-		OwnerDeviceID: in.Device.ID, CreatedAt: now,
-	}); err != nil {
-		return CreatedRoom{}, fmt.Errorf("create room: %w", err)
-	}
 	token, tokenHash, err := s.tokens.mint(roomID, in.Device.ID)
 	if err != nil {
 		return CreatedRoom{}, err
 	}
-	if err := s.repo.UpsertMembership(ctx, store.Membership{
+	// Device, room, and owner membership commit in ONE transaction: a
+	// failed membership write after the room row committed left an
+	// active room nobody could administer (OwnerDeviceID with no
+	// membership, credentials never returned) until a server restart.
+	if err := s.repo.CreateRoomWithOwner(ctx, store.Device{
+		ID: in.Device.ID, DisplayName: in.Device.DisplayName, Hostname: in.Device.Hostname,
+		PublicKeyPEM: in.Device.PublicKey, FirstSeenAt: now,
+	}, store.Room{
+		ID: roomID, ShareID: shareID, PasswordHash: hash,
+		OwnerDeviceID: in.Device.ID, CreatedAt: now,
+	}, store.Membership{
 		RoomID: roomID, DeviceID: in.Device.ID, JoinedAt: now, LastSeenAt: now,
 		SessionTokenHash: tokenHash,
 	}); err != nil {
-		return CreatedRoom{}, err
+		return CreatedRoom{}, fmt.Errorf("create room: %w", err)
 	}
 	return CreatedRoom{
 		RoomID: roomID, ShareID: shareID,
@@ -533,7 +539,7 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return "", "", err
 	}
-	if err := s.repo.EnrollWithTicket(ctx, rec.Hash, store.Device{
+	if err := s.repo.EnrollWithTicket(ctx, rec.Hash, now, store.Device{
 		ID: device.ID, DisplayName: device.DisplayName, Hostname: device.Hostname,
 		PublicKeyPEM: device.PublicKey, FirstSeenAt: now,
 	}, store.Membership{

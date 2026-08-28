@@ -164,6 +164,43 @@ func (r *Repo) CreateRoom(ctx context.Context, room store.Room) error {
 	return err
 }
 
+// CreateRoomWithOwner commits device enrollment, room creation, and the
+// owner membership in ONE transaction: a membership write failing after
+// CreateRoom committed left an active room whose OwnerDeviceID pointed
+// at no membership — the caller never got credentials and nobody could
+// administer or dissolve the room until a server restart.
+func (r *Repo) CreateRoomWithOwner(ctx context.Context, d store.Device, room store.Room, m store.Membership) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO devices (id, display_name, hostname, public_key_pem, first_seen_at)
+		 VALUES (?,?,?,?,?)
+		 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, hostname=excluded.hostname, public_key_pem=excluded.public_key_pem`,
+		d.ID, d.DisplayName, d.Hostname, d.PublicKeyPEM, d.FirstSeenAt.Unix()); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?)`,
+		room.ID, room.ShareID, room.PasswordHash, room.OwnerDeviceID,
+		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice,
+		nilTime(room.ShareRevokedAt)); err != nil {
+		return err
+	}
+	var connected any
+	if m.ConnectedAt != nil {
+		connected = m.ConnectedAt.Unix()
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?)`,
+		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), 0, m.SessionTokenHash, "lazy"); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (r *Repo) GetRoom(ctx context.Context, id string) (store.Room, error) {
 	return scanRoom(r.db.QueryRowContext(ctx, `SELECT `+roomCols+` FROM rooms WHERE id = ?`, id))
 }
@@ -402,13 +439,18 @@ func (r *Repo) GetJoinTicket(ctx context.Context, hash string) (store.JoinTicket
 // redemption's loser clobber the winner's token (same device) or leave
 // a ghost membership (different device) after its compare-and-set
 // fails at the end.
-func (r *Repo) EnrollWithTicket(ctx context.Context, hash string, d store.Device, m store.Membership) error {
+func (r *Repo) EnrollWithTicket(ctx context.Context, hash string, now time.Time, d store.Device, m store.Membership) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE join_tickets SET redeemed=1 WHERE hash=? AND redeemed=0`, hash)
+	// Expiry is enforced at COMMIT time, not at the earlier request
+	// check: a redemption that waited on the lifecycle mutex behind a
+	// long operation must not turn elapsed credentials into a member.
+	// `now` is the caller's clock at redemption time — the ticket stays
+	// valid through its final second (>=).
+	res, err := tx.ExecContext(ctx, `UPDATE join_tickets SET redeemed=1 WHERE hash=? AND redeemed=0 AND expires_at>=?`, hash, now.Unix())
 	if err != nil {
 		return err
 	}

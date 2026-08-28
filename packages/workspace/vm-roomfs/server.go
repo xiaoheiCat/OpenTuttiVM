@@ -122,6 +122,15 @@ func (s *Server) dispatch(req Request, body []byte) Response {
 		if err != nil {
 			return errorResponse(req.ID, err)
 		}
+		// Preflight the frame bound BEFORE writing: an oversized body
+		// would have the client reject the advertised length and shut
+		// down the mount's single shared connection, breaking every
+		// later operation. Fail THIS read instead (CAS-backed files
+		// beyond the protocol bound surface a per-read error, not a
+		// dead mount).
+		if uint64(len(content)) > MaxBodyBytes {
+			return errorResponse(req.ID, fmt.Errorf("roomfs: read of %s exceeds protocol body limit (%d bytes)", req.Path, MaxBodyBytes))
+		}
 		res.Body = content
 	case TypeList:
 		entries, err := s.handler.List(req.Path)

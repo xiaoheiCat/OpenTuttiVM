@@ -436,7 +436,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		}
 		// Executability and other synchronized permission bits survive
 		// the mirror; CreateTemp's 0600 must not be the final mode.
-		applyMode(dst, info.Mode)
+		if err := applyMode(dst, info.Mode); err != nil {
+			return fmt.Errorf("chmod %s: %w", dst, err)
+		}
 	}
 	// Bottom-up so children never chmod-block their parent's remaining
 	// work — deepest paths first means a restrictive parent runs after
@@ -445,7 +447,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		return deferredDirs[i].dst > deferredDirs[j].dst
 	})
 	for _, d := range deferredDirs {
-		applyMode(d.dst, d.mode)
+		if err := applyMode(d.dst, d.mode); err != nil {
+			return fmt.Errorf("chmod %s: %w", d.dst, err)
+		}
 	}
 	// Mirror: remove host files the room no longer has.
 	return pruneRemoved(targetDir, roomPaths)
@@ -489,11 +493,15 @@ func ensureUnder(root, dir string) error {
 }
 
 // applyMode chmods a mirrored path when the room recorded a mode.
-func applyMode(dst string, mode uint32) {
+// Failures PROPAGATE: a silently swallowed chmod would let
+// Apply-to-Workspace report success (and a following owner leave
+// dissolve the room) while the mirror carries permissions the room
+// never granted — with the authoritative state gone.
+func applyMode(dst string, mode uint32) error {
 	if mode == 0 {
-		return
+		return nil
 	}
-	_ = os.Chmod(dst, fs.FileMode(mode&0o7777))
+	return os.Chmod(dst, fs.FileMode(mode&0o7777))
 }
 
 func atomicWrite(dst string, content []byte) error {
