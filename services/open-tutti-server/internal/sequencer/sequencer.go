@@ -253,6 +253,18 @@ func (m *Manager) Bootstrap(ctx context.Context, roomID string) (vmprotocol.Work
 	return snap, eng.state.OpsSince(snap.ServerSeq), nil
 }
 
+// WorkspaceSeq returns the room's current authoritative sequence (the
+// leave fence compares it against the applying owner's captured base).
+func (m *Manager) WorkspaceSeq(roomID string) uint64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	eng, ok := m.engines[roomID]
+	if !ok {
+		return 0
+	}
+	return eng.state.Seq()
+}
+
 // SnapshotForTransfer checkpoints before an ownership transfer commits so
 // the incoming owner can complete a full replica.
 func (m *Manager) SnapshotForTransfer(ctx context.Context, roomID string) (vmprotocol.WorkspaceSnapshot, error) {

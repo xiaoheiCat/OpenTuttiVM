@@ -195,6 +195,11 @@ func (m *Manager) materializeLocked(path string) error {
 // the promised server-failure-survival copy exists immediately.
 func (m *Manager) PromoteToFull(ctx context.Context) error {
 	m.mu.Lock()
+	// Tentatively eager for the materialization pass, REVERTED on any
+	// failure: the presence handler retries promotion only while the
+	// policy is not full, so a fetch failure that left Policy=Full
+	// would permanently suppress retries and strand an owner that
+	// cannot survive server loss.
 	m.Policy = Full
 	m.Replica.State.EagerBlobs = true
 	// EVERY non-directory path, like full bootstrap: lazy participants
@@ -204,15 +209,15 @@ func (m *Manager) PromoteToFull(ctx context.Context) error {
 	var paths []string
 	paths = append(paths, m.Replica.State.TextPaths()...)
 	paths = append(paths, m.Replica.State.BlobPaths()...)
-	m.mu.Unlock()
 	for _, p := range paths {
-		m.mu.Lock()
-		err := m.materializeLocked(p)
-		m.mu.Unlock()
-		if err != nil {
+		if err := m.materializeLocked(p); err != nil {
+			m.Policy = Lazy
+			m.Replica.State.EagerBlobs = false
+			m.mu.Unlock()
 			return err
 		}
 	}
+	m.mu.Unlock()
 	return nil
 }
 

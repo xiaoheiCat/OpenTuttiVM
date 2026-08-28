@@ -397,6 +397,53 @@ func (r *Repo) GetJoinTicket(ctx context.Context, hash string) (store.JoinTicket
 	return t, nil
 }
 
+// EnrollWithTicket commits ticket consumption, device enrollment, and
+// membership upsert in ONE transaction: split writes let a concurrent
+// redemption's loser clobber the winner's token (same device) or leave
+// a ghost membership (different device) after its compare-and-set
+// fails at the end.
+func (r *Repo) EnrollWithTicket(ctx context.Context, hash string, d store.Device, m store.Membership) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE join_tickets SET redeemed=1 WHERE hash=? AND redeemed=0`, hash)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return store.ErrTicketUsed
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO devices (id, display_name, hostname, public_key_pem, first_seen_at)
+		 VALUES (?,?,?,?,?)
+		 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, hostname=excluded.hostname, public_key_pem=excluded.public_key_pem`,
+		d.ID, d.DisplayName, d.Hostname, d.PublicKeyPEM, d.FirstSeenAt.Unix()); err != nil {
+		return err
+	}
+	policy := string(m.ReplicaPolicy)
+	if policy == "" {
+		policy = "lazy"
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?)
+		 ON CONFLICT(room_id, device_id) DO UPDATE SET
+		   connected_at=excluded.connected_at,
+		   last_seen_at=excluded.last_seen_at,
+		   online=excluded.online,
+		   session_token_hash=excluded.session_token_hash,
+		   replica_policy=excluded.replica_policy`,
+		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), nil, m.LastSeenAt.Unix(), 0, m.SessionTokenHash, policy); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (r *Repo) MarkTicketRedeemed(ctx context.Context, hash string) error {
 	res, err := r.db.ExecContext(ctx, `UPDATE join_tickets SET redeemed=1 WHERE hash=? AND redeemed=0`, hash)
 	if err != nil {

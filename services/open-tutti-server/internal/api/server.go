@@ -192,8 +192,9 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request, roomID, _ st
 }
 
 type leaveRequest struct {
-	WorkspaceApplied bool `json:"workspace_applied"`
-	Disband          bool `json:"disband"`
+	WorkspaceApplied bool   `json:"workspace_applied"`
+	Disband          bool   `json:"disband"`
+	WorkspaceBaseSeq uint64 `json:"workspace_base_seq"`
 }
 
 func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
@@ -205,6 +206,7 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 	err := s.rooms.Leave(r.Context(), room.LeaveInput{
 		RoomID: roomID, DeviceID: deviceID,
 		WorkspaceApplied: req.WorkspaceApplied, Disband: req.Disband,
+		WorkspaceBaseSeq: req.WorkspaceBaseSeq,
 	})
 	if err != nil {
 		status := http.StatusConflict

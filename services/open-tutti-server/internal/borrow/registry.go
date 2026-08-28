@@ -103,7 +103,22 @@ func (r *Registry) Share(roomID string, p borrowagent.AgentSharedPayload) (borro
 	}
 	if existing != nil {
 		inst.LeaseGeneration = existing.LeaseGeneration + 1
-		inst.LastBorrower = existing.LastBorrower
+		// A re-share starts a NEW lease: carrying the previous
+		// generation's operator, command mappings, and approvals would
+		// let an old-generation borrower keep receiving and deciding
+		// approvals after its lease was fenced — the same cleanup
+		// revocation performs.
+		inst.LastBorrower = ""
+		for key, ap := range r.approvals {
+			if ap.roomID == roomID && keyAgent(key) == p.AgentInstanceID {
+				delete(r.approvals, key)
+			}
+		}
+		for key := range r.commandBorrowers {
+			if k := strings.SplitN(key, "\x00", 3); len(k) == 3 && k[0] == roomID && k[1] == p.AgentInstanceID {
+				delete(r.commandBorrowers, key)
+			}
+		}
 	} else {
 		inst.LeaseGeneration = 1
 	}

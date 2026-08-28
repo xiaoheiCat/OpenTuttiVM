@@ -119,32 +119,51 @@ func run() error {
 	// boolean by some other client. Two triggers: SIGUSR1 (POSIX) and
 	// the one-shot OPEN_TUTTI_APPLY_AND_LEAVE=1 bootstrap mode (Windows
 	// has no SIGUSR1).
-	applyOnce := func() {
+	applyOnce := func() error {
 		wsDir := os.Getenv("OPEN_TUTTI_WORKSPACE_DIR")
 		if wsDir == "" {
-			fmt.Fprintln(os.Stderr, "room-sync: apply-and-leave: OPEN_TUTTI_WORKSPACE_DIR not set")
-			return
+			return fmt.Errorf("apply-and-leave: OPEN_TUTTI_WORKSPACE_DIR not set")
 		}
-		if err := mgr.ApplyToWorkspace(context.Background(), wsDir); err != nil {
-			fmt.Fprintf(os.Stderr, "room-sync: apply-to-workspace: %v\n", err)
-			return
+		// The leave fence needs the sequence the mirror captured at;
+		// an edit landing after it makes the server reject the leave
+		// (its only authoritative copy must not vanish at disband), so
+		// the whole capture-mirror-leave cycle retries.
+		const attempts = 3
+		for i := 0; i < attempts; i++ {
+			baseSeq := mgr.Replica.AppliedSeq
+			if err := mgr.ApplyToWorkspace(context.Background(), wsDir); err != nil {
+				return fmt.Errorf("apply-to-workspace: %w", err)
+			}
+			disband := os.Getenv("OPEN_TUTTI_DISBAND") == "1"
+			if err := c.Leave(context.Background(), true, disband, baseSeq); err != nil {
+				if i < attempts-1 && strings.Contains(err.Error(), "workspace changed since apply") {
+					fmt.Fprintln(os.Stderr, "room-sync: workspace changed during apply; retrying")
+					continue
+				}
+				return fmt.Errorf("owner leave: %w", err)
+			}
+			fmt.Fprintln(os.Stderr, "room-sync: workspace applied; owner left")
+			return nil
 		}
-		disband := os.Getenv("OPEN_TUTTI_DISBAND") == "1"
-		if err := c.Leave(context.Background(), true, disband); err != nil {
-			fmt.Fprintf(os.Stderr, "room-sync: owner leave: %v\n", err)
-			return
-		}
-		fmt.Fprintln(os.Stderr, "room-sync: workspace applied; owner left")
+		return fmt.Errorf("apply-and-leave: workspace kept changing across %d attempts", attempts)
 	}
-	registerApplySignal(applyOnce)
 	if err := mgr.Bootstrap(ctx, boot.Snapshot, boot.Ops); err != nil {
 		return fmt.Errorf("replica bootstrap: %w", err)
 	}
-	// One-shot mode runs only after the replica holds the snapshot:
-	// applying before bootstrap would mirror an empty workspace.
+	// Register the destructive hook only AFTER bootstrap completed: a
+	// SIGUSR1 racing the initial materialization would mirror the
+	// manager's still-empty state, prune the host workspace, and leave
+	// asserting an apply that never happened.
+	registerApplySignal(func() {
+		if err := applyOnce(); err != nil {
+			fmt.Fprintf(os.Stderr, "room-sync: %v\n", err)
+		}
+	})
+	// One-shot mode propagates failures: exiting 0 after a transient
+	// error would strand an active, unapplied room with no signal to
+	// the launcher that anything needs retrying.
 	if os.Getenv("OPEN_TUTTI_APPLY_AND_LEAVE") == "1" {
-		applyOnce()
-		return nil
+		return applyOnce()
 	}
 
 	// The room CA persists in device-private storage and reloads across

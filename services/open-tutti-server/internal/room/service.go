@@ -48,6 +48,9 @@ var (
 	// ErrOwnerMustApply: the owner cannot leave before applying the final
 	// workspace state back to the host workspace.
 	ErrOwnerMustApply = errors.New("owner must apply the workspace before leaving")
+	// ErrWorkspaceStale rejects an owner leave whose asserted apply was
+	// captured before the room sequenced further edits.
+	ErrWorkspaceStale = errors.New("workspace changed since apply; re-apply and retry")
 	// ErrOwnerMustDisbandOrTransfer: leaving requires ending the meeting.
 	ErrOwnerMustDisbandOrTransfer = errors.New("owner must disband the room or complete an ownership transfer before leaving")
 	// ErrTransferIncomplete: the 3-phase transfer has not finished.
@@ -62,6 +65,7 @@ type Service struct {
 	bcast    Broadcaster
 	cas      CASCollector
 	dropConn func(roomID, deviceID string)
+	seqProbe func(roomID string) uint64
 	tokens   *tokenMinter
 
 	mu sync.Mutex
@@ -108,6 +112,13 @@ type CASCollector interface {
 
 // SetCASCollector attaches the post-dissolution object collector.
 func (s *Service) SetCASCollector(c CASCollector) { s.cas = c }
+
+// SetSeqProbe attaches the authoritative-sequence probe used to fence
+// owner Apply-and-Leave: the leave assertion carries the sequence the
+// final mirror was captured at, and a mismatching current sequence
+// means an edit landed after the mirror — asserting it applied would
+// discard that edit's only copy at disband.
+func (s *Service) SetSeqProbe(probe func(roomID string) uint64) { s.seqProbe = probe }
 
 // SetConnectionDropper attaches the transport teardown used when a
 // device's session token is refreshed (rejoin): the OLD token stops
@@ -503,47 +514,38 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	if err != nil {
 		return "", "", err
 	}
-	// Enrollment persistence FIRST, ticket consumption strictly LAST:
-	// an irreversibly-redeemed ticket followed by a failed upsert or
-	// membership write would burn the one-time ticket on a transient
-	// error and force the user back through the password flow. The
-	// UPDATE is an atomic compare-and-set, so a concurrent double
-	// redemption still loses.
-	if err := s.upsertDevice(ctx, device); err != nil {
+	// One transaction commits ticket consumption, device enrollment,
+	// and the membership/token write ATOMICALLY. Split writes had two
+	// failure shapes under concurrent redemptions of the same ticket:
+	// same device — the loser refreshes the membership to ITS token and
+	// drops transports before failing at the ticket compare-and-set,
+	// invalidating the winner's returned token; different devices —
+	// the loser leaves a ghost membership. A transient write failure
+	// rolls everything back and leaves the ticket usable for a
+	// corrected retry.
+	now := s.clock.Now()
+	rejoining := false
+	if _, err := s.repo.GetMembership(ctx, room.ID, device.ID); err == nil {
+		rejoining = true
+	} else if !errors.Is(err, store.ErrNotFound) {
 		return "", "", err
 	}
-	now := s.clock.Now()
-	if _, err := s.repo.GetMembership(ctx, room.ID, device.ID); errors.Is(err, store.ErrNotFound) {
-		if err := s.repo.UpsertMembership(ctx, store.Membership{
-			RoomID: room.ID, DeviceID: device.ID, JoinedAt: now, LastSeenAt: now,
-			SessionTokenHash: tokenHash,
-		}); err != nil {
-			return "", "", err
-		}
-	} else if err == nil {
-		// Rejoining device: refresh its session token.
-		m, _ := s.repo.GetMembership(ctx, room.ID, device.ID)
-		m.SessionTokenHash = tokenHash
-		m.LastSeenAt = now
-		if err := s.repo.UpsertMembership(ctx, m); err != nil {
-			return "", "", err
-		}
+	if err := s.repo.EnrollWithTicket(ctx, rec.Hash, store.Device{
+		ID: device.ID, DisplayName: device.DisplayName, Hostname: device.Hostname,
+		PublicKeyPEM: device.PublicKey, FirstSeenAt: now,
+	}, store.Membership{
+		RoomID: room.ID, DeviceID: device.ID, JoinedAt: now, LastSeenAt: now,
+		SessionTokenHash: tokenHash,
+	}); err != nil {
+		return "", "", err
+	}
+	if rejoining {
 		// The old token (possibly exposed — that is why the device is
 		// rejoining) stops authenticating future requests, but already
 		// admitted transports keep full access until closed.
 		if s.dropConn != nil {
 			s.dropConn(room.ID, device.ID)
 		}
-	} else {
-		return "", "", err
-	}
-	// Every fallible step (proof, collisions, mint, device, membership)
-	// committed: consume the ticket NOW. Failing to mark it merely
-	// allows one corrected retry — safe — while marking earlier would
-	// burn it on transient write failures. Atomic compare-and-set, so
-	// concurrent double redemption still loses.
-	if err := s.repo.MarkTicketRedeemed(ctx, rec.Hash); err != nil {
-		return "", "", err
 	}
 	return room.ID, token, nil
 }
@@ -555,6 +557,12 @@ type LeaveInput struct {
 	DeviceID         string `json:"-"`
 	WorkspaceApplied bool   `json:"workspace_applied"`
 	Disband          bool   `json:"disband"`
+	// WorkspaceBaseSeq is the authoritative sequence the owner's final
+	// mirror was captured at; required when WorkspaceAppliad asserts an
+	// apply. The leave fence rejects a mismatch: an edit sequenced after
+	// the capture is not in the host workspace, and disband would
+	// destroy its only authoritative copy.
+	WorkspaceBaseSeq uint64 `json:"workspace_base_seq"`
 }
 
 // Leave removes a participant, or ends/transfers ownership for the owner.
@@ -570,6 +578,14 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 	if room.OwnerDeviceID == in.DeviceID {
 		if !in.WorkspaceApplied {
 			return ErrOwnerMustApply
+		}
+		// Apply-and-Leave fence: edits sequenced after the owner's
+		// captured mirror must not be silently discarded by the disband
+		// that follows.
+		if s.seqProbe != nil {
+			if cur := s.seqProbe(in.RoomID); cur != in.WorkspaceBaseSeq {
+				return ErrWorkspaceStale
+			}
 		}
 		if in.Disband {
 			// Dissolve FIRST, membership deletion second: if dissolution

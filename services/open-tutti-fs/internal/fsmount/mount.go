@@ -65,9 +65,31 @@ type roomNode struct {
 	server *fuse.Server
 }
 
+// invalidateDescendants drops the cached file state of every FILE
+// inode beneath one node (recursively), without touching the tree.
+func invalidateDescendants(node *fs.Inode) {
+	for _, child := range node.Children() {
+		invalidateDescendants(child)
+		if ops := child.Operations(); ops != nil {
+			if fn, ok := ops.(*fileNode); ok {
+				fn.invalidate()
+			}
+		}
+	}
+}
+
 func (n *roomNode) invalidatePath(path string) {
 	segs := strings.Split(strings.Trim(path, "/"), "/")
 	if len(segs) == 0 || segs[0] == "" {
+		// Whole-tree resync (reconnect bootstrap): RmAllChildren alone
+		// drops DENTRIES, but an OPEN file inode keeps its fileNode and
+		// buffered bytes — such a handle would keep reading
+		// pre-bootstrap content and could later flush it over the
+		// resynchronized authority, exactly what this invalidation
+		// exists to prevent. Invalidate every cached descendant's file
+		// state (dirty buffers survive per the invalidation contract;
+		// stale clean ones die) before dropping the tree.
+		invalidateDescendants(&n.Inode)
 		n.RmAllChildren()
 		return
 	}

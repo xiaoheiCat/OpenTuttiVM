@@ -589,12 +589,16 @@ func (c *Client) RoomRoutes(ctx context.Context) ([]vmprotocol.LiveRoute, error)
 
 // Leave exits the room (owner path requires apply + disband/transfer done
 // first, per the meeting rules).
-func (c *Client) Leave(ctx context.Context, workspaceApplied, disband bool) error {
+func (c *Client) Leave(ctx context.Context, workspaceApplied, disband bool, workspaceBaseSeq uint64) error {
 	c.mu.Lock()
 	token, roomID := c.token, c.roomID
 	c.mu.Unlock()
 	return postJSON(ctx, c.http, c.server.BaseURL+"/api/rooms/"+roomID+"/leave",
-		map[string]bool{"workspace_applied": workspaceApplied, "disband": disband}, nil, authHeader(token))
+		map[string]any{
+			"workspace_applied":  workspaceApplied,
+			"disband":            disband,
+			"workspace_base_seq": workspaceBaseSeq,
+		}, nil, authHeader(token))
 }
 
 func postJSON(ctx context.Context, hc *http.Client, url string, body any, out any, opts ...func(*http.Request)) error {

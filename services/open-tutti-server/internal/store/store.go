@@ -85,6 +85,9 @@ type CASRef struct {
 }
 
 // Repository is the durable metadata store.
+// ErrTicketUsed reports a lost redemption race.
+var ErrTicketUsed = errors.New("join ticket already used")
+
 type Repository interface {
 	// Rooms
 	CreateRoom(ctx context.Context, room Room) error
@@ -138,6 +141,10 @@ type Repository interface {
 	// CASPublication serializes a CAS object's publication (filesystem
 	// write plus reference insertion) with collection.
 	CASPublication(fn func() error) error
+	// EnrollWithTicket commits ticket consumption, device enrollment,
+	// and membership upsert atomically; ErrTicketUsed marks a lost
+	// redemption race.
+	EnrollWithTicket(ctx context.Context, hash string, d Device, m Membership) error
 	DeleteRoomCASRefs(ctx context.Context, roomID string) error
 	// HasCASRef reports whether the room references the object hash;
 	// CAS reads are authorized per room, not by global object existence.
