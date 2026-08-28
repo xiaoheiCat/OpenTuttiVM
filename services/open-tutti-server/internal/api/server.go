@@ -301,7 +301,13 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request, roomID,
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"snapshot": snap, "ops": ops})
+	owner := ""
+	if room, err := s.rooms.GetRoom(r.Context(), roomID); err == nil {
+		owner = room.OwnerDeviceID
+	}
+	// The caller derives its replica policy from ownership (owners keep
+	// a full replica per the owner-survival contract).
+	writeJSON(w, http.StatusOK, map[string]any{"snapshot": snap, "ops": ops, "owner_device_id": owner})
 }
 
 type transferPrepareRequest struct {

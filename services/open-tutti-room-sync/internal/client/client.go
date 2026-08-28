@@ -160,16 +160,26 @@ func (c *Client) Join(ctx context.Context, roomID, ticket string, device DeviceI
 }
 
 // Bootstrap re-fetches the checkpoint and replay window for resync.
-func (c *Client) Bootstrap(ctx context.Context) (vmprotocol.WorkspaceSnapshot, []vmprotocol.Envelope, error) {
+// BootstrapResult carries the authoritative snapshot, the replay
+// window, and the room's current owner (callers derive replica policy
+// from ownership).
+type BootstrapResult struct {
+	Snapshot      vmprotocol.WorkspaceSnapshot
+	Ops           []vmprotocol.Envelope
+	OwnerDeviceID string
+}
+
+func (c *Client) Bootstrap(ctx context.Context) (BootstrapResult, error) {
 	c.mu.Lock()
 	token, roomID := c.token, c.roomID
 	c.mu.Unlock()
 	var res struct {
-		Snapshot vmprotocol.WorkspaceSnapshot `json:"snapshot"`
-		Ops      []vmprotocol.Envelope        `json:"ops"`
+		Snapshot      vmprotocol.WorkspaceSnapshot `json:"snapshot"`
+		Ops           []vmprotocol.Envelope        `json:"ops"`
+		OwnerDeviceID string                       `json:"owner_device_id"`
 	}
 	err := getJSON(ctx, c.http, c.server.BaseURL+"/api/rooms/"+roomID+"/bootstrap", token, &res)
-	return res.Snapshot, res.Ops, err
+	return BootstrapResult{Snapshot: res.Snapshot, Ops: res.Ops, OwnerDeviceID: res.OwnerDeviceID}, err
 }
 
 // Session is one business WebSocket connection.

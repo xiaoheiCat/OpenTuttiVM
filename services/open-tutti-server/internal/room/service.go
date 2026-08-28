@@ -60,6 +60,7 @@ type Service struct {
 	cfg    config.Config
 	clock  Clock
 	bcast  Broadcaster
+	cas    CASCollector
 	tokens *tokenMinter
 
 	mu sync.Mutex
@@ -95,6 +96,17 @@ func NewService(repo store.Repository, cfg config.Config, clock Clock, bcast Bro
 
 // SetBroadcaster attaches or replaces the event fanout.
 func (s *Service) SetBroadcaster(b Broadcaster) { s.bcast = b }
+
+// CASCollector deletes object-store entries whose last reference died
+// with a dissolved room: without collection, every chunk ever uploaded
+// stays in OPEN_TUTTI_OBJECTS_DIR forever and the persistent volume
+// grows until the server runs out of disk.
+type CASCollector interface {
+	Collect(ctx context.Context, hashes []string)
+}
+
+// SetCASCollector attaches the post-dissolution object collector.
+func (s *Service) SetCASCollector(c CASCollector) { s.cas = c }
 
 // broadcast is nil-safe so lifecycle tests can run without a hub.
 func (s *Service) broadcast(roomID string, ev vmprotocol.Event) {
@@ -146,7 +158,13 @@ func (s *Service) CreateRoom(ctx context.Context, in CreateRoomInput) (CreatedRo
 	// under the victim's device id with their own key, silently replacing
 	// the enrolled key and then passing join proofs. Enrolled keys are
 	// immutable, and reusing an existing device id anywhere requires
-	// proving possession of that enrolled key.
+	// proving possession of that enrolled key. The lookup/proof decision
+	// AND the insert run under the lifecycle lock (user-confirmed change):
+	// two concurrent first-time creates claiming the same id both observe
+	// it absent, and the later write would otherwise overwrite the first
+	// key without proof.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if existing, err := s.repo.GetDevice(ctx, in.Device.ID); err == nil {
 		if in.Device.Proof == "" || existing.PublicKeyPEM == "" {
 			return CreatedRoom{}, errors.New("device identity proof required")
@@ -401,9 +419,20 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 		if m.DeviceID == device.ID {
 			continue // rejoin of the same device is fine
 		}
-		if other, err := s.repo.GetDevice(ctx, m.DeviceID); err == nil &&
-			vmprotocol.SlugifyHostname(other.Hostname) == slug {
-			return "", "", errors.New("device hostname conflicts with an existing member")
+		// Raw-id vs slug collisions matter beyond canonical hosts: the
+		// preview registry resolves raw device ids before slug keys, so
+		// a member whose DEVICE ID equals another member's slug would
+		// capture the victim's canonical .tutti routes. Reject both
+		// directions.
+		if m.DeviceID == slug {
+			return "", "", errors.New("device hostname conflicts with an existing member id")
+		}
+		if other, err := s.repo.GetDevice(ctx, m.DeviceID); err == nil {
+			if otherSlug := vmprotocol.SlugifyHostname(other.Hostname); otherSlug == slug {
+				return "", "", errors.New("device hostname conflicts with an existing member")
+			} else if otherSlug == device.ID {
+				return "", "", errors.New("device id conflicts with an existing member hostname")
+			}
 		}
 	}
 	token, tokenHash, err := s.tokens.mint(room.ID, device.ID)
@@ -744,7 +773,17 @@ func (s *Service) dissolveLocked(ctx context.Context, roomID string) error {
 		Topic: vmprotocol.TopicRoomEnding, RoomID: roomID,
 		Payload: mustJSON(map[string]string{"reason": "dissolved"}),
 	})
-	return s.repo.DissolveRoom(ctx, roomID, s.clock.Now())
+	refs, refErr := s.repo.RoomCASRefs(ctx, roomID)
+	if err := s.repo.DissolveRoom(ctx, roomID, s.clock.Now()); err != nil {
+		return err
+	}
+	// Reference-aware collection AFTER the refs died: the collector
+	// re-checks global refcounts so objects other rooms still share
+	// survive.
+	if s.cas != nil && refErr == nil && len(refs) > 0 {
+		s.cas.Collect(ctx, refs)
+	}
+	return nil
 }
 
 // DissolveAllActive ends every active room; called at startup because the

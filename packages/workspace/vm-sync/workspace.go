@@ -359,11 +359,21 @@ func (w *WorkspaceState) applyTextPatch(env *vmprotocol.Envelope) error {
 	patch := *op.Patch
 
 	// Guard: the author's base hash must match the path content as of their
-	// base sequence; this detects stale or duplicated submissions.
-	if patch.BaseHash != "" {
-		if base := w.hashAt(op.Path, env.BaseSeq); base != "" && base != patch.BaseHash {
-			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
-		}
+	// base sequence; this detects stale or duplicated submissions. An
+	// EMPTY base hash is not a bypass: it is the protocol's only
+	// content-version guard, and a stale or buggy client omitting it
+	// would have its offsets applied to whatever content is present
+	// without validation.
+	if patch.BaseHash == "" {
+		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
+	}
+	if base := w.hashAt(op.Path, env.BaseSeq); base != "" && base != patch.BaseHash {
+		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
+	}
+	// A base sequence BEYOND the current revision is equally invalid:
+	// the author claims knowledge of a future state.
+	if env.BaseSeq > w.seq {
+		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
 	}
 	// A base older than the retained transform window cannot be safely
 	// transformed: the dropped patches would skew every offset.

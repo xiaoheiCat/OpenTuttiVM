@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 var hashPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
@@ -29,10 +31,14 @@ type Store interface {
 	Get(hash string) ([]byte, error)
 	// Missing filters hashes down to the ones not present.
 	Missing(hashes []string) ([]string, error)
+	// Delete removes one chunk object; room dissolution collects
+	// objects whose last reference died with the room.
+	Delete(hash string) error
 }
 
 // MemoryStore is an in-memory Store for tests and caches.
 type MemoryStore struct {
+	mu      sync.Mutex
 	objects map[string][]byte
 }
 
@@ -60,6 +66,14 @@ func (s *MemoryStore) Get(hash string) ([]byte, error) {
 		return nil, ErrObjectNotFound
 	}
 	return append([]byte(nil), c...), nil
+}
+
+// Delete drops one chunk from the in-memory store.
+func (s *MemoryStore) Delete(hash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.objects, hash)
+	return nil
 }
 
 func (s *MemoryStore) Missing(hashes []string) ([]string, error) {
@@ -161,6 +175,19 @@ func (s *LocalStore) Get(hash string) ([]byte, error) {
 		return nil, ErrObjectNotFound
 	}
 	return data, err
+}
+
+// Delete removes one chunk object file; a missing file is already
+// collected (idempotent).
+func (s *LocalStore) Delete(hash string) error {
+	p, err := s.path(hash)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func (s *LocalStore) Missing(hashes []string) ([]string, error) {

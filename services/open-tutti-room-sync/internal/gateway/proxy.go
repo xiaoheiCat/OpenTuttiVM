@@ -112,7 +112,10 @@ func (p *Proxy) Sync(ctx context.Context) error {
 	addWant := func(host string, port int, t *routeTarget) {
 		var addr string
 		if sharedMode {
-			addr = net.JoinHostPort(sharedAddr.String(), fmt.Sprintf("%d", port))
+			// Bind EVERY interface: DNS answers the process's own
+			// namespace address, which is reachable only when the
+			// listener does not pin itself to one address.
+			addr = net.JoinHostPort("0.0.0.0", fmt.Sprintf("%d", port))
 		} else {
 			h, err := vmprotocol.ParseTuttiHost(host)
 			if err != nil {
@@ -344,12 +347,20 @@ func (p *Proxy) pickShared(client *bufferedConn, b *routeBinding, sniHost string
 			}
 		}
 	}
-	if len(b.shared) == 1 {
-		for _, t := range b.shared {
+	// Sole-target fallback for hostless raw TCP: count distinct ROUTES,
+	// not hostnames — one advertised route registers its session host
+	// AND its device-level alias, so hostname counting would reject
+	// every raw connection even when it can only land on one session.
+	targets := map[vmprotocol.RouteKey]*routeTarget{}
+	for _, t := range b.shared {
+		targets[t.route] = t
+	}
+	if len(targets) == 1 {
+		for _, t := range targets {
 			return t
 		}
 	}
-	p.log.Warn("tutti shared listener cannot identify host (no SNI/Host header) and port serves multiple hosts")
+	p.log.Warn("tutti shared listener cannot identify host (no SNI/Host header) and port serves multiple routes")
 	return nil
 }
 

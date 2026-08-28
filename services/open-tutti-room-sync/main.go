@@ -93,12 +93,21 @@ func run() error {
 		return err
 	}
 
-	snap, ops, err := c.Bootstrap(ctx)
+	boot, err := c.Bootstrap(ctx)
 	if err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
 	}
+	// The room OWNER keeps a full replica (owner-survival contract):
+	// nothing else sets OPEN_TUTTI_POLICY for owners, and a lazy owner
+	// would never fetch untouched snapshot blobs — after a server
+	// failure the final workspace would be unrecoverable. An explicit
+	// OPEN_TUTTI_POLICY still wins (operators can force lazy owners in
+	// throwaway rooms).
+	if os.Getenv("OPEN_TUTTI_POLICY") == "" && boot.OwnerDeviceID == deviceID {
+		policy = replica.Full
+	}
 	mgr := replica.New(deviceID, cache, policy, c)
-	if err := mgr.Bootstrap(ctx, snap, ops); err != nil {
+	if err := mgr.Bootstrap(ctx, boot.Snapshot, boot.Ops); err != nil {
 		return fmt.Errorf("replica bootstrap: %w", err)
 	}
 
@@ -217,11 +226,11 @@ func run() error {
 	// invalidation is the only correct granularity — the bootstrap may
 	// have moved anything.
 	resyncFromServer := func(ctx context.Context) error {
-		snap, ops, err := c.Bootstrap(ctx)
+		boot, err := c.Bootstrap(ctx)
 		if err != nil {
 			return err
 		}
-		if err := mgr.Bootstrap(ctx, snap, ops); err != nil {
+		if err := mgr.Bootstrap(ctx, boot.Snapshot, boot.Ops); err != nil {
 			return err
 		}
 		bridge.InvalidateRemote("")

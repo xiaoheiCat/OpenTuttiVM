@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"net"
 	"testing"
 
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
@@ -17,8 +16,10 @@ func TestVIPAllocatorSharedMode(t *testing.T) {
 
 	host := vmprotocol.TuttiHost{Device: "annas-macbook-pro", Session: "main"}
 	ip := a.Assign(host)
-	if !ip.Equal(net.IP{127, 0, 0, 1}) {
-		t.Fatalf("shared mode assigned %s, want 127.0.0.1", ip)
+	// One process-wide answer: the first non-loopback unicast IPv4
+	// (container/bridge address) or 127.0.0.1 when none exists.
+	if want := probeSharedAddr(); !ip.Equal(want) {
+		t.Fatalf("shared mode assigned %s, want %s", ip, want)
 	}
 	// Shared mode is one address for every host; identity moves to the
 	// proxy's SNI/Host demultiplexer.

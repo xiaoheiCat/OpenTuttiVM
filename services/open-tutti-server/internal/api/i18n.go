@@ -18,6 +18,9 @@ type locale struct {
 	JoinError       string
 	NetworkError    string
 	InvalidShareMsg string
+	ManualInfo      string
+	CopyInfo        string
+	Copied          string
 }
 
 var shareLocales = map[string]locale{
@@ -31,6 +34,9 @@ var shareLocales = map[string]locale{
 		JoinError:       "Cannot join this room.",
 		NetworkError:    "Network error. Try again.",
 		InvalidShareMsg: "This share link is invalid or the meeting has ended.",
+		ManualInfo:      "Did the app not open? Join manually with:",
+		CopyInfo:        "Copy join info",
+		Copied:          "Copied",
 	},
 	"zh": {
 		Lang:            "zh",
@@ -42,6 +48,9 @@ var shareLocales = map[string]locale{
 		JoinError:       "无法加入此房间",
 		NetworkError:    "网络出错，请重试",
 		InvalidShareMsg: "分享链接无效，或会议已结束",
+		ManualInfo:      "应用没有打开？手动加入信息：",
+		CopyInfo:        "复制加入信息",
+		Copied:          "已复制",
 	},
 }
 

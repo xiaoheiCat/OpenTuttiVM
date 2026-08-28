@@ -283,6 +283,16 @@ type fileNode struct {
 func (f *fileNode) invalidate() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.dirty {
+		// A completed-but-unflushed Write already acknowledged success
+		// to the local process: dropping the buffer here would make
+		// the later Flush report success WITHOUT submitting those
+		// bytes — silent data loss. Keep the pending content; the
+		// Flush submits it and the room's base-hash guard turns a
+		// genuinely stale edit into EAGAIN (editor retry), never a
+		// silent drop.
+		return
+	}
 	f.buffer = nil
 	f.loaded = false
 	f.dirty = false
@@ -430,6 +440,7 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		}
 		f.srvSize = int64(sz)
 		content := append([]byte(nil), f.buffer...)
+		gen := f.writeGen
 		f.mu.Unlock()
 		// Without an open handle there is no guaranteed later flush:
 		// submit the resize now or truncate(2) "succeeds" while the
@@ -439,7 +450,11 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 				return syscall.EAGAIN
 			}
 			f.mu.Lock()
-			f.dirty = false
+			// Same race as Flush: a concurrent Write while the resize
+			// awaited its acknowledgement must keep the node dirty.
+			if f.writeGen == gen {
+				f.dirty = false
+			}
 			f.mu.Unlock()
 		}
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/realtime"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/room"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/sequencer"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/store"
 	store_sqlite "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/store/sqlite"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/tunnel"
 )
@@ -72,6 +73,10 @@ func run() error {
 	relay := tunnel.NewRelay(log, previews)
 	server := api.New(cfg, rooms, seq, hub, previews, borrows, relay, cas, repo, log)
 	rooms.SetBroadcaster(hub)
+	// Reference-aware CAS collection: dissolution (per-room and the
+	// startup sweep) drops object-store entries whose last reference
+	// died, keeping OPEN_TUTTI_OBJECTS_DIR bounded.
+	rooms.SetCASCollector(casCollector{repo: repo, cas: cas, log: log})
 
 	// The server never restores rooms across restarts: end everything still
 	// marked active so CAS references release and objects can be collected.
@@ -142,5 +147,28 @@ func logLevel(s string) slog.Level {
 		return slog.LevelError
 	default:
 		return slog.LevelInfo
+	}
+}
+
+// casCollector deletes dissolved rooms' objects once no surviving room
+// references them.
+type casCollector struct {
+	repo store.Repository
+	cas  vmcas.Store
+	log  *slog.Logger
+}
+
+func (c casCollector) Collect(ctx context.Context, hashes []string) {
+	counts, err := c.repo.ListCASRefCounts(ctx)
+	if err != nil {
+		c.log.Warn("cas collection: refcounts", "err", err)
+		return
+	}
+	for _, h := range hashes {
+		if counts[h] == 0 {
+			if err := c.cas.Delete(h); err != nil {
+				c.log.Warn("cas collection: delete", "hash", h, "err", err)
+			}
+		}
 	}
 }

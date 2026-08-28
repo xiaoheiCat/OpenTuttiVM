@@ -453,6 +453,25 @@ func (r *Repo) HasCASRef(ctx context.Context, roomID, hash string) (bool, error)
 	return true, nil
 }
 
+// RoomCASRefs lists the object hashes one room references (collection
+// input at dissolution).
+func (r *Repo) RoomCASRefs(ctx context.Context, roomID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT hash FROM cas_refs WHERE room_id=?`, roomID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repo) ListCASRefCounts(ctx context.Context) (map[string]int, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT hash, COUNT(*) FROM cas_refs GROUP BY hash`)
 	if err != nil {

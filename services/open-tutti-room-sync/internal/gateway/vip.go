@@ -50,9 +50,36 @@ func ipFromOffset(device, index uint32) net.IP {
 	return net.IP{100, 96, byte(device), byte(index)}
 }
 
-// sharedAddr is the single shared-address answer in modeShared (only
-// 127.0.0.1 is bindable on stock macOS/Windows without configuration).
-var sharedAddr = net.IP{127, 0, 0, 1}
+// sharedAddrMu/record cache the shared-mode answer: the room-sync
+// process's first non-loopback unicast IPv4. DNS consumers (agent and
+// session containers) live in OTHER network namespaces, so 127.0.0.1
+// would point back into the CALLING container; the process's own
+// bridge/overlay address is the one its listeners can serve. Hosts
+// without any non-loopback address fall back to 127.0.0.1 (single-
+// namespace dev setups, tests).
+var (
+	sharedAddrOnce sync.Once
+	sharedAddr     net.IP
+)
+
+func probeSharedAddr() net.IP {
+	sharedAddrOnce.Do(func() {
+		sharedAddr = net.IP{127, 0, 0, 1}
+		addrs, err := net.InterfaceAddrs()
+		if err != nil {
+			return
+		}
+		for _, a := range addrs {
+			ipNet, ok := a.(*net.IPNet)
+			if !ok || ipNet.IP.IsLoopback() || ipNet.IP.To4() == nil || ipNet.IP.IsLinkLocalUnicast() {
+				continue
+			}
+			sharedAddr = ipNet.IP.To4()
+			return
+		}
+	})
+	return sharedAddr
+}
 
 // Probe decides the addressing mode BEFORE the first Assign: binding a
 // reserved address that no adapter owns fails with EADDRNOTAVAIL on every
@@ -91,8 +118,9 @@ func (a *VIPAllocator) Assign(host vmprotocol.TuttiHost) net.IP {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if vipMode(a.mode.Load()) == modeShared {
-		a.byKey[host.String()] = sharedAddr
-		return sharedAddr
+		addr := probeSharedAddr()
+		a.byKey[host.String()] = addr
+		return addr
 	}
 	key := host.String()
 	if ip, ok := a.byKey[key]; ok {

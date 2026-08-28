@@ -74,9 +74,14 @@ button{width:100%;margin-top:14px;padding:10px;border:0;border-radius:8px;backgr
 <button type="submit">{{SUBMIT}}</button>
 </form>
 <div id="msg" role="alert"></div>
+<div id="manual" hidden style="margin-top:16px">
+<p class="sub">{{MANUAL_INFO}}</p>
+<code id="joininfo" style="display:block;font-size:11px;word-break:break-all;background:#0f1115;border:1px solid #2a2f3a;border-radius:6px;padding:8px;color:#9aa3b2"></code>
+<button type="button" id="copybtn" style="background:#2a2f3a">{{COPY_INFO}}</button>
+</div>
 <script>
 const shareID = "{{SHARE_ID}}", server = "{{SERVER}}";
-const copy = {joinError: "{{JOIN_ERROR}}", networkError: "{{NETWORK_ERROR}}"};
+const copy = {joinError: "{{JOIN_ERROR}}", networkError: "{{NETWORK_ERROR}}", copied: "{{COPIED}}"};
 document.getElementById("f").addEventListener("submit", async (e) => {
   e.preventDefault();
   const msg = document.getElementById("msg");
@@ -91,6 +96,18 @@ document.getElementById("f").addEventListener("submit", async (e) => {
     if (!res.ok) { msg.textContent = data.error || copy.joinError; return; }
     // The desktop registers the "tutti" scheme; room id rides along
     // because join redemption requires it.
+    // The deep link needs the desktop app; until it registers the
+    // tutti://join handoff, the same credentials stay on-screen for a
+    // manual join (the one-time ticket is short-lived either way).
+    const info = server + "\nroom: " + data.room_id + "\nticket: " + data.ticket;
+    document.getElementById("joininfo").textContent = info;
+    document.getElementById("manual").hidden = false;
+    document.getElementById("copybtn").onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(info);
+        msg.textContent = copy.copied;
+      } catch (err) { /* selection remains copyable from the code block */ }
+    };
     window.location.href = "tutti://join?server=" + encodeURIComponent(server) +
       "&room=" + encodeURIComponent(data.room_id) +
       "&ticket=" + encodeURIComponent(data.ticket);
