@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
+	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
@@ -223,8 +223,13 @@ func (c *Client) Dial(ctx context.Context) (*Session, error) {
 	}
 	wsURL := strings.Replace(c.server.BaseURL, "http://", "ws://", 1)
 	wsURL = strings.Replace(wsURL, "https://", "wss://", 1)
-	wsURL += "/api/rooms/" + roomID + "/ws?token=" + token
-	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	// Credentials ride the Authorization header, never the URL: proxies
+	// and request loggers record request targets, and the membership
+	// token grants full room access until rotated.
+	wsURL += "/api/rooms/" + roomID + "/ws"
+	conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": []string{"Bearer " + token}},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -390,25 +395,25 @@ func (s *Session) ReportPolicy(policy string) error {
 
 // ShareAgent enables or disables borrowing for one local agent instance.
 // The server stamps ownership from the authenticated connection.
-func (s *Session) ShareAgent(p vmagent.AgentSharedPayload) error {
+func (s *Session) ShareAgent(p borrowagent.AgentSharedPayload) error {
 	return s.writeTyped("agent_share", p)
 }
 
 // BorrowCommand sends one instruction to a shared agent; the server
 // validates the lease generation and routes to the owner's device.
-func (s *Session) BorrowCommand(p vmagent.BorrowCommandPayload) error {
+func (s *Session) BorrowCommand(p borrowagent.BorrowCommandPayload) error {
 	return s.writeTyped("borrow_command", p)
 }
 
 // RequestApproval is used by the owning device's agent runtime to surface
 // a permission prompt to the current borrower (the session operator).
-func (s *Session) RequestApproval(p vmagent.ApprovalRequestPayload) error {
+func (s *Session) RequestApproval(p borrowagent.ApprovalRequestPayload) error {
 	return s.writeTyped("approval_request", p)
 }
 
 // DecideApproval answers a pending prompt; only the session operator's
 // decision is accepted.
-func (s *Session) DecideApproval(p vmagent.ApprovalDecisionPayload) error {
+func (s *Session) DecideApproval(p borrowagent.ApprovalDecisionPayload) error {
 	return s.writeTyped("approval_decision", p)
 }
 

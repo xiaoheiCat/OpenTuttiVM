@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"net"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -50,13 +51,15 @@ func ipFromOffset(device, index uint32) net.IP {
 	return net.IP{100, 96, byte(device), byte(index)}
 }
 
-// sharedAddrMu/record cache the shared-mode answer: the room-sync
-// process's first non-loopback unicast IPv4. DNS consumers (agent and
-// session containers) live in OTHER network namespaces, so 127.0.0.1
-// would point back into the CALLING container; the process's own
-// bridge/overlay address is the one its listeners can serve. Hosts
-// without any non-loopback address fall back to 127.0.0.1 (single-
-// namespace dev setups, tests).
+// sharedAddrMu/record cache the shared-mode answer. On LINUX (the
+// room container topology) DNS consumers (agent and session
+// containers) live in OTHER network namespaces, so 127.0.0.1 would
+// point back into the CALLING container: answer the process's own
+// bridge/overlay address, which is private to the compose network and
+// unreachable from the LAN. On OTHER systems room-sync runs native in
+// one namespace (no container bridge to cross), so the answer stays
+// loopback — binding a LAN interface there would expose unauthenticated
+// room-only services to the local network.
 var (
 	sharedAddrOnce sync.Once
 	sharedAddr     net.IP
@@ -65,6 +68,9 @@ var (
 func probeSharedAddr() net.IP {
 	sharedAddrOnce.Do(func() {
 		sharedAddr = net.IP{127, 0, 0, 1}
+		if runtime.GOOS != "linux" {
+			return
+		}
 		addrs, err := net.InterfaceAddrs()
 		if err != nil {
 			return

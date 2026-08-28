@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"strings"
 
 	"github.com/coder/websocket"
@@ -25,8 +26,12 @@ type Tunnel struct {
 func Dial(ctx context.Context, serverURL, token string) (*Tunnel, error) {
 	wsURL := strings.Replace(serverURL, "http://", "ws://", 1)
 	wsURL = strings.Replace(wsURL, "https://", "wss://", 1)
-	wsURL += "/api/tunnel?token=" + token
-	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	// Header credentials: the URL (with the token) is what proxies and
+	// access loggers record.
+	wsURL += "/api/tunnel"
+	conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": []string{"Bearer " + token}},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("tunnel dial: %w", err)
 	}

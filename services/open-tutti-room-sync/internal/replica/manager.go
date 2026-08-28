@@ -86,6 +86,11 @@ func New(deviceID string, cache vmcas.Store, policy Policy, fetcher ChunkFetcher
 // authoritative acknowledgement before failing the caller.
 const ackWaitTimeout = 10 * time.Second
 
+// ErrNotSent marks definite pre-send failures: the transport wrote
+// NOTHING (no live session), so the operation has no unknown fate on
+// the wire and must not be replayed by the reconnect path.
+var ErrNotSent = errors.New("operation was not sent")
+
 // SubmitAndWait submits one operation and blocks until the server accepts
 // (broadcast ack) or rejects it. The submit function performs the actual
 // transport write; separating it keeps the manager transport-agnostic.
@@ -96,15 +101,21 @@ func (m *Manager) SubmitAndWait(ctx context.Context, env vmprotocol.Envelope, su
 	m.Replica.Submit(env.OperationID)
 	m.pendingEnvs[env.OperationID] = env
 	m.mu.Unlock()
-	drop := func() {
+	drop := func(keepPending bool) {
 		m.mu.Lock()
 		delete(m.waiters, env.OperationID)
-		// Keep pendingEnvs: a timeout means unknown fate, not rejection
-		// — the reconnect path may still reconcile it.
+		if !keepPending {
+			delete(m.pendingEnvs, env.OperationID)
+		}
+		// keepPending: a timeout or ambiguous write means unknown fate,
+		// not rejection — the reconnect path may still reconcile it.
 		m.mu.Unlock()
 	}
 	if err := submit(); err != nil {
-		drop()
+		// Definite PRE-SEND failures (ErrNotSent) wrote nothing: keep
+		// pendingEnvs in that state and a caller retry would double-
+		// apply when resubmitPending replays the original ID.
+		drop(!errors.Is(err, ErrNotSent))
 		return err
 	}
 	timer := time.NewTimer(ackWaitTimeout)
@@ -113,10 +124,10 @@ func (m *Manager) SubmitAndWait(ctx context.Context, env vmprotocol.Envelope, su
 	case err := <-ch:
 		return err
 	case <-timer.C:
-		drop()
+		drop(true)
 		return fmt.Errorf("operation %s not acknowledged within %s", env.OperationID, ackWaitTimeout)
 	case <-ctx.Done():
-		drop()
+		drop(true)
 		return ctx.Err()
 	}
 }
@@ -353,6 +364,14 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		return err
 	}
 	roomPaths := map[string]bool{}
+	// Restrictive directory modes (0555, 0500…) apply AFTER every
+	// descendant exists: sorted paths visit the directory first, and an
+	// immediate chmod would strip the owner's write permission before
+	// the children's CreateTemp lands beneath it.
+	var deferredDirs []struct {
+		dst  string
+		mode uint32
+	}
 	for _, path := range m.Replica.State.Paths() {
 		roomPaths[path] = true
 		info, ok := m.Replica.State.EntryInfo(path)
@@ -389,7 +408,12 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			if err := os.MkdirAll(dst, 0o755); err != nil {
 				return err
 			}
-			applyMode(dst, info.Mode)
+			if info.Mode != 0 {
+				deferredDirs = append(deferredDirs, struct {
+					dst  string
+					mode uint32
+				}{dst, info.Mode})
+			}
 			continue
 		}
 		content, err := m.readLocked(ctx, path)
@@ -408,6 +432,15 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		// Executability and other synchronized permission bits survive
 		// the mirror; CreateTemp's 0600 must not be the final mode.
 		applyMode(dst, info.Mode)
+	}
+	// Bottom-up so children never chmod-block their parent's remaining
+	// work — deepest paths first means a restrictive parent runs after
+	// everything beneath it is already in place.
+	sort.Slice(deferredDirs, func(i, j int) bool {
+		return deferredDirs[i].dst > deferredDirs[j].dst
+	})
+	for _, d := range deferredDirs {
+		applyMode(d.dst, d.mode)
 	}
 	// Mirror: remove host files the room no longer has.
 	return pruneRemoved(targetDir, roomPaths)

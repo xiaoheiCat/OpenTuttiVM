@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
+	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/borrow"
@@ -25,14 +25,14 @@ type ClientMessage struct {
 	Type     string          `json:"type"` // "op" | "ports" | "ping" | "policy" | "conflict_resolved" | "agent_share" | "borrow_command" | "approval_request" | "approval_decision"
 	Envelope json.RawMessage `json:"envelope,omitempty"`
 
-	Ports            *vmprotocol.PortsChangedPayload  `json:"ports,omitempty"`
-	Policy           *PolicyReportPayload             `json:"policy,omitempty"`
-	Path             string                           `json:"path,omitempty"`
-	AgentSession     string                           `json:"agent_session,omitempty"`
-	AgentShare       *vmagent.AgentSharedPayload      `json:"agent_share,omitempty"`
-	BorrowCommand    *vmagent.BorrowCommandPayload    `json:"borrow_command,omitempty"`
-	ApprovalRequest  *vmagent.ApprovalRequestPayload  `json:"approval_request,omitempty"`
-	ApprovalDecision *vmagent.ApprovalDecisionPayload `json:"approval_decision,omitempty"`
+	Ports            *vmprotocol.PortsChangedPayload      `json:"ports,omitempty"`
+	Policy           *PolicyReportPayload                 `json:"policy,omitempty"`
+	Path             string                               `json:"path,omitempty"`
+	AgentSession     string                               `json:"agent_session,omitempty"`
+	AgentShare       *borrowagent.AgentSharedPayload      `json:"agent_share,omitempty"`
+	BorrowCommand    *borrowagent.BorrowCommandPayload    `json:"borrow_command,omitempty"`
+	ApprovalRequest  *borrowagent.ApprovalRequestPayload  `json:"approval_request,omitempty"`
+	ApprovalDecision *borrowagent.ApprovalDecisionPayload `json:"approval_decision,omitempty"`
 }
 
 // ServerMessage is anything the server sends.
@@ -198,9 +198,21 @@ func (h *Hub) SendTo(roomID, deviceID string, ev vmprotocol.Event) {
 }
 
 // Attach registers an authenticated connection.
-func (h *Hub) Attach(c *Conn) {
+func (h *Hub) Attach(c *Conn, admit func() error) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	// Admission recheck INSIDE the registration lock: a kick between the
+	// caller's MarkOnline and Attach deletes the membership while
+	// DropDevice finds nothing registered to close; without this check
+	// the kicked client attaches indefinitely and keeps submitting
+	// operations. Kick (DropDevice) and registration serialize on h.mu,
+	// so either the kick lands first (admission fails) or DropDevice
+	// closes the just-attached connection.
+	if admit != nil {
+		if err := admit(); err != nil {
+			return err
+		}
+	}
 	if h.conns[c.RoomID] == nil {
 		h.conns[c.RoomID] = map[string]*Conn{}
 	}
@@ -215,6 +227,7 @@ func (h *Hub) Attach(c *Conn) {
 		}
 	}
 	h.conns[c.RoomID][c.DeviceID] = c
+	return nil
 }
 
 // Detach removes a connection and runs the disconnect path — but only
@@ -251,8 +264,9 @@ func (h *Hub) Detach(c *Conn) {
 	})
 }
 
-// Handle pumps one websocket until it closes.
-func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
+// Handle pumps one websocket until it closes. admit is the membership
+// recheck executed inside Attach's registration lock.
+func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 	h.pumping.Add(1)
 	defer h.pumping.Done()
 	// Force-close path (kick/membership revocation): cancelling the read
@@ -262,7 +276,10 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 	c.close = cancelReads
 	defer cancelReads()
 
-	h.Attach(c)
+	if err := h.Attach(c, admit); err != nil {
+		ws.Close(websocket.StatusPolicyViolation, "membership revoked")
+		return
+	}
 	defer h.Detach(c)
 	defer ws.Close(websocket.StatusNormalClosure, "")
 
@@ -354,7 +371,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 					continue
 				}
 				h.BroadcastRoom(c.RoomID, vmprotocol.Event{
-					Topic: vmagent.TopicAgentShared, RoomID: c.RoomID, Payload: mustJSON(out),
+					Topic: borrowagent.TopicAgentShared, RoomID: c.RoomID, Payload: mustJSON(out),
 				})
 			} else {
 				shared, revoked, err := h.borrows.Revoke(c.RoomID, c.DeviceID, p.AgentInstanceID)
@@ -363,10 +380,10 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 					continue
 				}
 				h.BroadcastRoom(c.RoomID, vmprotocol.Event{
-					Topic: vmagent.TopicAgentShared, RoomID: c.RoomID, Payload: mustJSON(shared),
+					Topic: borrowagent.TopicAgentShared, RoomID: c.RoomID, Payload: mustJSON(shared),
 				})
 				h.BroadcastRoom(c.RoomID, vmprotocol.Event{
-					Topic: vmagent.TopicBorrowRevoked, RoomID: c.RoomID, Payload: mustJSON(revoked),
+					Topic: borrowagent.TopicBorrowRevoked, RoomID: c.RoomID, Payload: mustJSON(revoked),
 				})
 			}
 		case "borrow_command":
@@ -381,8 +398,8 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 				// Stale or unknown lease: the borrower learns immediately
 				// that their generation is dead.
 				h.SendTo(c.RoomID, c.DeviceID, vmprotocol.Event{
-					Topic: vmagent.TopicBorrowRevoked, RoomID: c.RoomID,
-					Payload: mustJSON(vmagent.BorrowRevokedPayload{
+					Topic: borrowagent.TopicBorrowRevoked, RoomID: c.RoomID,
+					Payload: mustJSON(borrowagent.BorrowRevokedPayload{
 						AgentInstanceID: p.AgentInstanceID,
 						Reason:          err.Error(),
 					}),
@@ -394,7 +411,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 				continue
 			}
 			h.SendTo(c.RoomID, owner.OwnerDeviceID, vmprotocol.Event{
-				Topic: vmagent.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out),
+				Topic: borrowagent.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out),
 			})
 		case "approval_request":
 			if msg.ApprovalRequest == nil {
@@ -418,7 +435,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 			}
 			p.SessionOperatorDeviceID = operator
 			h.SendTo(c.RoomID, operator, vmprotocol.Event{
-				Topic: vmagent.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p),
+				Topic: borrowagent.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p),
 			})
 		case "approval_decision":
 			if msg.ApprovalDecision == nil {
@@ -432,7 +449,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 				continue
 			}
 			h.SendTo(c.RoomID, owner, vmprotocol.Event{
-				Topic: vmagent.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p),
+				Topic: borrowagent.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p),
 			})
 		case "policy":
 			if msg.Policy != nil {

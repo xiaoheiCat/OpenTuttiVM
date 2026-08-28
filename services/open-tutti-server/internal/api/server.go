@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/coder/websocket"
-	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
+	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
@@ -237,7 +237,7 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 		// while the room continues.
 		for _, revoked := range s.borrows.DropDevice(roomID, deviceID) {
 			s.hub.BroadcastRoom(roomID, vmprotocol.Event{
-				Topic: vmagent.TopicBorrowRevoked, RoomID: roomID, Payload: mustJSON(revoked),
+				Topic: borrowagent.TopicBorrowRevoked, RoomID: roomID, Payload: mustJSON(revoked),
 			})
 		}
 	}
@@ -289,7 +289,7 @@ func (s *Server) handleKickMember(w http.ResponseWriter, r *http.Request, roomID
 	// keep routing to an absent owner and ghost approvals persist.
 	for _, revoked := range s.borrows.DropDevice(roomID, target) {
 		s.hub.BroadcastRoom(roomID, vmprotocol.Event{
-			Topic: vmagent.TopicBorrowRevoked, RoomID: roomID, Payload: mustJSON(revoked),
+			Topic: borrowagent.TopicBorrowRevoked, RoomID: roomID, Payload: mustJSON(revoked),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "kicked", "device_id": target})
@@ -488,7 +488,19 @@ func (s *Server) handleRoomWS(w http.ResponseWriter, r *http.Request, roomID, de
 			DeviceID: deviceID, Online: true, IsOwner: s.isOwner(r, roomID, deviceID),
 		}),
 	})
-	s.hub.Handle(conn, ws)
+	// Admission recheck inside Attach's registration lock: a kick between
+	// MarkOnline and Attach must not leave a revoked membership's socket
+	// attached and submitting operations.
+	admit := func() error {
+		// Membership check (not token re-derivation): a kick deletes the
+		// membership row itself, which is exactly what must block
+		// attach.
+		if _, err := s.repo.GetMembership(r.Context(), roomID, deviceID); err != nil {
+			return err
+		}
+		return nil
+	}
+	s.hub.Handle(conn, ws, admit)
 }
 
 func (s *Server) handleTunnelWS(w http.ResponseWriter, r *http.Request) {

@@ -112,10 +112,12 @@ func (p *Proxy) Sync(ctx context.Context) error {
 	addWant := func(host string, port int, t *routeTarget) {
 		var addr string
 		if sharedMode {
-			// Bind EVERY interface: DNS answers the process's own
-			// namespace address, which is reachable only when the
-			// listener does not pin itself to one address.
-			addr = net.JoinHostPort("0.0.0.0", fmt.Sprintf("%d", port))
+			// Bind exactly the interface the DNS answer points at
+			// (container bridge on Linux, loopback on native runs):
+			// wildcard-binding every interface would expose
+			// unauthenticated room services to whatever else the host
+			// is attached to.
+			addr = net.JoinHostPort(probeSharedAddr().String(), fmt.Sprintf("%d", port))
 		} else {
 			h, err := vmprotocol.ParseTuttiHost(host)
 			if err != nil {

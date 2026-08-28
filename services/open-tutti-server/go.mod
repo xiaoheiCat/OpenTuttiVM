@@ -6,7 +6,7 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/hashicorp/yamux v0.1.2
 	github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas v0.0.0
-	github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent v0.0.0
+	github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow v0.0.0
 	github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol v0.0.0
 	github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync v0.0.0
 	golang.org/x/crypto v0.36.0
@@ -26,7 +26,7 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent => ../../packages/workspace/vm-agent
+replace github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow => ../../packages/agent/borrow
 
 replace github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas => ../../packages/workspace/vm-cas
 

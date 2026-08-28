@@ -14,7 +14,7 @@ import (
 	"errors"
 	"log/slog"
 
-	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
+	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
 )
 
 // Host executes borrowed-agent lifecycle work on the owning device.
@@ -24,19 +24,19 @@ type Host interface {
 	// ExecuteCommand runs one borrower instruction against the shared
 	// agent instance; results stream back through the host's own
 	// channels (terminal/file operations), not this return value.
-	ExecuteCommand(p vmagent.BorrowCommandPayload) error
+	ExecuteCommand(p borrowagent.BorrowCommandPayload) error
 	// ApprovalRequest surfaces a permission prompt raised during a
 	// borrowed execution to the OWNER's UI? No — the server routes
 	// prompts to the borrower; the owner receives nothing. This lands
 	// here only for owner-authored sessions.
-	ApprovalRequest(p vmagent.ApprovalRequestPayload) error
+	ApprovalRequest(p borrowagent.ApprovalRequestPayload) error
 	// ApprovalDecision resumes a borrowed execution that was waiting on
 	// the borrower's choice.
-	ApprovalDecision(p vmagent.ApprovalDecisionPayload) error
+	ApprovalDecision(p borrowagent.ApprovalDecisionPayload) error
 	// Shared reflects this device's own share-state changes.
-	Shared(p vmagent.AgentSharedPayload) error
+	Shared(p borrowagent.AgentSharedPayload) error
 	// Revoked ends every in-flight command holding the old generation.
-	Revoked(p vmagent.BorrowRevokedPayload) error
+	Revoked(p borrowagent.BorrowRevokedPayload) error
 }
 
 // Noop is the default host: it observes routed events without executing
@@ -58,31 +58,31 @@ func (n *Noop) log(what string, v ...any) {
 var ErrHostNotWired = errors.New("borrow execution requires an Agent Host adapter; room-sync runs without one")
 
 // ExecuteCommand implements Host.
-func (n *Noop) ExecuteCommand(p vmagent.BorrowCommandPayload) error {
+func (n *Noop) ExecuteCommand(p borrowagent.BorrowCommandPayload) error {
 	n.log("borrow_command_rejected_not_wired", "agent", p.AgentInstanceID, "command", p.CommandID)
 	return ErrHostNotWired
 }
 
 // ApprovalRequest implements Host.
-func (n *Noop) ApprovalRequest(p vmagent.ApprovalRequestPayload) error {
+func (n *Noop) ApprovalRequest(p borrowagent.ApprovalRequestPayload) error {
 	n.log("approval_request", "approval", p.ApprovalID)
 	return nil
 }
 
 // ApprovalDecision implements Host.
-func (n *Noop) ApprovalDecision(p vmagent.ApprovalDecisionPayload) error {
+func (n *Noop) ApprovalDecision(p borrowagent.ApprovalDecisionPayload) error {
 	n.log("approval_decision", "approval", p.ApprovalID, "choice", p.Choice)
 	return nil
 }
 
 // Shared implements Host.
-func (n *Noop) Shared(p vmagent.AgentSharedPayload) error {
+func (n *Noop) Shared(p borrowagent.AgentSharedPayload) error {
 	n.log("agent_shared", "agent", p.AgentInstanceID, "shared", p.Shared)
 	return nil
 }
 
 // Revoked implements Host.
-func (n *Noop) Revoked(p vmagent.BorrowRevokedPayload) error {
+func (n *Noop) Revoked(p borrowagent.BorrowRevokedPayload) error {
 	n.log("borrow_revoked", "agent", p.AgentInstanceID, "generation", p.FinalGeneration)
 	return nil
 }

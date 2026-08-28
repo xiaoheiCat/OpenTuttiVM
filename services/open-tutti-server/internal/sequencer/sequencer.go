@@ -313,20 +313,27 @@ func (m *Manager) snapshotRefs(snap vmprotocol.WorkspaceSnapshot) []string {
 }
 
 func (m *Manager) engine(roomID string) (*engine, error) {
-	eng, ok := m.engines[roomID]
-	if !ok {
-		room, err := m.repo.GetRoom(context.Background(), roomID)
-		if err != nil {
-			return nil, fmt.Errorf("room %s: %w", roomID, err)
-		}
-		// A dissolved room is terminal: a stale socket must not
-		// recreate an empty engine and sequence post-ending operations.
-		if room.DissolvedAt != nil {
-			return nil, fmt.Errorf("room %s is dissolved", roomID)
-		}
-		eng = &engine{state: vmsync.NewWorkspaceState()}
-		m.engines[roomID] = eng
+	// Re-read the room on EVERY acquisition, cached engine included:
+	// a socket submission acquiring the sequencer lock after
+	// DissolveRoom commits but before the leave/grace path calls
+	// CloseRoom would otherwise be accepted and broadcast after the
+	// terminal room-ending event — a client could observe a successful
+	// edit that teardown then discards (and a snapshot could recreate
+	// CAS references).
+	room, err := m.repo.GetRoom(context.Background(), roomID)
+	if err != nil {
+		return nil, fmt.Errorf("room %s: %w", roomID, err)
 	}
+	// A dissolved room is terminal: a stale socket must not recreate an
+	// empty engine and sequence post-ending operations.
+	if room.DissolvedAt != nil {
+		return nil, fmt.Errorf("room %s is dissolved", roomID)
+	}
+	if eng, ok := m.engines[roomID]; ok {
+		return eng, nil
+	}
+	eng := &engine{state: vmsync.NewWorkspaceState()}
+	m.engines[roomID] = eng
 	return eng, nil
 }
 

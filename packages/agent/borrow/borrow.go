@@ -1,4 +1,4 @@
-// Package vmagent is the Agent Borrowing contract: owners share agent
+// Package borrow is the Agent Borrowing contract: owners share agent
 // instances into a room, borrowers command them, execution stays on the
 // owner's device (their open-tutti-vm-<roomId>), and streams, terminal
 // output, and file changes flow back through the room so everyone sees
@@ -8,7 +8,7 @@
 // The payloads and topics live in their own seam (not vm-protocol) so
 // the workspace synchronization contract stays narrow; the event ENVELOPE
 // itself (vmprotocol.Event) is shared transport.
-package vmagent
+package borrow
 
 import vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 

@@ -163,6 +163,13 @@ func (c *Client) List(path string) ([]DirEntry, error) {
 // Write submits a whole-file write; room-sync converts it into an
 // operation against its local replica.
 func (c *Client) Write(path string, content []byte) error {
+	// Preflight the protocol bound: sending an oversized frame would
+	// have the server reject the body length and close the stream,
+	// poisoning the mount's single shared connection for every later
+	// operation. Fail THIS operation instead.
+	if uint64(len(content)) > MaxBodyBytes {
+		return fmt.Errorf("roomfs: write of %s exceeds protocol body limit (%d bytes)", path, MaxBodyBytes)
+	}
 	_, err := c.call(Request{Type: TypeWrite, Path: path}, content)
 	return err
 }

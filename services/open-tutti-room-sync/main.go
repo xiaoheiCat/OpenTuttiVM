@@ -47,7 +47,7 @@ import (
 	"syscall"
 	"time"
 
-	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
+	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
@@ -350,16 +350,16 @@ func run() error {
 				if json.Unmarshal(ev.Payload, &cp) == nil {
 					bridge.OnConflictDetected(cp)
 				}
-			case vmagent.TopicAgentShared:
-				var p vmagent.AgentSharedPayload
+			case borrowagent.TopicAgentShared:
+				var p borrowagent.AgentSharedPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					borrowHost.Shared(p)
 				}
-			case vmagent.TopicBorrowCommand:
+			case borrowagent.TopicBorrowCommand:
 				// A borrower's instruction routed to this owning
 				// device: execution belongs to the host's agent
 				// runtime, never to room-sync itself.
-				var p vmagent.BorrowCommandPayload
+				var p borrowagent.BorrowCommandPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					if err := borrowHost.ExecuteCommand(p); err != nil {
 						// Visible failure, never a silent fake success:
@@ -368,18 +368,18 @@ func run() error {
 						fmt.Fprintf(os.Stderr, "room-sync: borrow command %s: %v\n", p.CommandID, err)
 					}
 				}
-			case vmagent.TopicBorrowRevoked:
-				var p vmagent.BorrowRevokedPayload
+			case borrowagent.TopicBorrowRevoked:
+				var p borrowagent.BorrowRevokedPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					borrowHost.Revoked(p)
 				}
-			case vmagent.TopicApprovalRequest:
-				var p vmagent.ApprovalRequestPayload
+			case borrowagent.TopicApprovalRequest:
+				var p borrowagent.ApprovalRequestPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					borrowHost.ApprovalRequest(p)
 				}
-			case vmagent.TopicApprovalDecision:
-				var p vmagent.ApprovalDecisionPayload
+			case borrowagent.TopicApprovalDecision:
+				var p borrowagent.ApprovalDecisionPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					borrowHost.ApprovalDecision(p)
 				}
@@ -574,7 +574,7 @@ func (l *liveSession) ResolveBarrier(path string) error {
 	s := l.s
 	l.mu.Unlock()
 	if s == nil {
-		return fmt.Errorf("room socket reconnecting")
+		return fmt.Errorf("room socket reconnecting: %w", replica.ErrNotSent)
 	}
 	return s.ResolveBarrier(path)
 }
@@ -584,7 +584,7 @@ func (l *liveSession) Submit(env vmprotocol.Envelope) error {
 	s := l.s
 	l.mu.Unlock()
 	if s == nil {
-		return fmt.Errorf("room socket reconnecting")
+		return fmt.Errorf("room socket reconnecting: %w", replica.ErrNotSent)
 	}
 	return s.Submit(env)
 }

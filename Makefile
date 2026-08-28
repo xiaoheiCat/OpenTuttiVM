@@ -17,7 +17,7 @@ check-room-sync:
 
 check-workspace:
 	cd packages/workspace/vm-sync && GOMODCACHE=$(GOMODCACHE) GOCACHE=$(GOCACHE) GOPATH=$(GOPATH) go test .
-	cd packages/workspace/vm-agent && GOMODCACHE=$(GOMODCACHE) GOCACHE=$(GOCACHE) GOPATH=$(GOPATH) go test .
+	cd packages/agent/borrow && GOMODCACHE=$(GOMODCACHE) GOCACHE=$(GOCACHE) GOPATH=$(GOPATH) go test .
 	cd packages/workspace/vm-protocol && GOMODCACHE=$(GOMODCACHE) GOCACHE=$(GOCACHE) GOPATH=$(GOPATH) go test .
 	cd packages/workspace/vm-cas && GOMODCACHE=$(GOMODCACHE) GOCACHE=$(GOCACHE) GOPATH=$(GOPATH) go test .
 	cd packages/workspace/vm-roomfs && GOMODCACHE=$(GOMODCACHE) GOCACHE=$(GOCACHE) GOPATH=$(GOPATH) GOWORK=off go test .

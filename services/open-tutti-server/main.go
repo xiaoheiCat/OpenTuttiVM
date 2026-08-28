@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -79,9 +80,13 @@ func run() error {
 	rooms.SetCASCollector(casCollector{repo: repo, cas: cas, log: log})
 
 	// The server never restores rooms across restarts: end everything still
-	// marked active so CAS references release and objects can be collected.
+	// marked active so CAS references release and objects can be
+	// collected. Fail CLOSED on dissolution errors: a room left active
+	// keeps valid memberships and tokens, but the sequencer restores no
+	// workspace state, so reconnecting clients would authenticate into
+	// a fresh empty engine and could overwrite apparent room state.
 	if err := rooms.DissolveAllActive(context.Background()); err != nil {
-		log.Warn("startup dissolution of stale rooms failed", "err", err)
+		return fmt.Errorf("startup dissolution of stale rooms: %w", err)
 	}
 
 	httpServer := &http.Server{

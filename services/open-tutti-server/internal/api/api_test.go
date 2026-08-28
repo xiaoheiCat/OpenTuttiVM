@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
+	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 
@@ -592,47 +592,47 @@ func TestAgentBorrowingFlow(t *testing.T) {
 	aliceWS, bobWS := dial(created.SessionToken), dial(joinRes.SessionToken)
 
 	// Alice shares her Claude Code instance (BorrowSafe satisfied).
-	share := vmagent.AgentSharedPayload{
+	share := borrowagent.AgentSharedPayload{
 		AgentInstanceID: "agent-claude-1", Provider: "claude-code", Borrowable: true, Shared: true,
-		Capabilities: vmagent.AgentCapabilities{Skills: []string{"repo-walk"}, MCP: []string{"github"}},
+		Capabilities: borrowagent.AgentCapabilities{Skills: []string{"repo-walk"}, MCP: []string{"github"}},
 	}
 	wsWrite(t, ctx, aliceWS, realtime.ClientMessage{Type: "agent_share", AgentShare: &share})
-	var shared vmagent.AgentSharedPayload
-	wsReadUntil(t, ctx, aliceWS, vmagent.TopicAgentShared, &shared)
+	var shared borrowagent.AgentSharedPayload
+	wsReadUntil(t, ctx, aliceWS, borrowagent.TopicAgentShared, &shared)
 	if !shared.Shared || shared.LeaseGeneration != 1 || shared.OwnerDeviceID != "dev_alice" {
 		t.Fatalf("shared payload %+v", shared)
 	}
 
 	// Bob commands the shared agent on the live lease.
-	cmd := vmagent.BorrowCommandPayload{
+	cmd := borrowagent.BorrowCommandPayload{
 		CommandID: "c1", AgentInstanceID: "agent-claude-1",
 		LeaseGeneration: shared.LeaseGeneration, Input: "look at issue 12",
 	}
 	wsWrite(t, ctx, bobWS, realtime.ClientMessage{Type: "borrow_command", BorrowCommand: &cmd})
-	var routed vmagent.BorrowCommandPayload
-	wsReadUntil(t, ctx, aliceWS, vmagent.TopicBorrowCommand, &routed)
+	var routed borrowagent.BorrowCommandPayload
+	wsReadUntil(t, ctx, aliceWS, borrowagent.TopicBorrowCommand, &routed)
 	if routed.BorrowerDeviceID != "dev_bob" || routed.Input != "look at issue 12" {
 		t.Fatalf("routed command %+v", routed)
 	}
 
 	// The agent runtime on Alice's device hits a permission prompt; it
 	// routes to Bob, the session operator — never to Alice.
-	prompt := vmagent.ApprovalRequestPayload{
+	prompt := borrowagent.ApprovalRequestPayload{
 		ApprovalID: "ap1", AgentInstanceID: "agent-claude-1", Provider: "claude-code",
 		Prompt: "Run `gh pr view 12`?", Options: []string{"allow once", "deny"},
 	}
 	wsWrite(t, ctx, aliceWS, realtime.ClientMessage{Type: "approval_request", ApprovalRequest: &prompt})
-	var request vmagent.ApprovalRequestPayload
-	wsReadUntil(t, ctx, bobWS, vmagent.TopicApprovalRequest, &request)
+	var request borrowagent.ApprovalRequestPayload
+	wsReadUntil(t, ctx, bobWS, borrowagent.TopicApprovalRequest, &request)
 	if request.SessionOperatorDeviceID != "dev_bob" || request.ApprovalID != "ap1" {
 		t.Fatalf("approval request %+v", request)
 	}
 
 	// Bob decides; the decision routes back to Alice with Bob as decider.
-	decision := vmagent.ApprovalDecisionPayload{ApprovalID: "ap1", AgentInstanceID: "agent-claude-1", Choice: 0}
+	decision := borrowagent.ApprovalDecisionPayload{ApprovalID: "ap1", AgentInstanceID: "agent-claude-1", Choice: 0}
 	wsWrite(t, ctx, bobWS, realtime.ClientMessage{Type: "approval_decision", ApprovalDecision: &decision})
-	var decided vmagent.ApprovalDecisionPayload
-	wsReadUntil(t, ctx, aliceWS, vmagent.TopicApprovalDecision, &decided)
+	var decided borrowagent.ApprovalDecisionPayload
+	wsReadUntil(t, ctx, aliceWS, borrowagent.TopicApprovalDecision, &decided)
 	if decided.DeciderDeviceID != "dev_bob" || decided.Choice != 0 {
 		t.Fatalf("decision %+v", decided)
 	}
@@ -641,17 +641,17 @@ func TestAgentBorrowingFlow(t *testing.T) {
 	// dies immediately.
 	wsWrite(t, ctx, aliceWS, realtime.ClientMessage{
 		Type:       "agent_share",
-		AgentShare: &vmagent.AgentSharedPayload{AgentInstanceID: "agent-claude-1", Shared: false},
+		AgentShare: &borrowagent.AgentSharedPayload{AgentInstanceID: "agent-claude-1", Shared: false},
 	})
-	var revoked vmagent.BorrowRevokedPayload
-	wsReadUntil(t, ctx, bobWS, vmagent.TopicBorrowRevoked, &revoked)
+	var revoked borrowagent.BorrowRevokedPayload
+	wsReadUntil(t, ctx, bobWS, borrowagent.TopicBorrowRevoked, &revoked)
 	if revoked.FinalGeneration != 2 {
 		t.Fatalf("revoked payload %+v", revoked)
 	}
 	stale := cmd
 	stale.CommandID = "c2"
 	wsWrite(t, ctx, bobWS, realtime.ClientMessage{Type: "borrow_command", BorrowCommand: &stale})
-	wsReadUntil(t, ctx, bobWS, vmagent.TopicBorrowRevoked, &revoked)
+	wsReadUntil(t, ctx, bobWS, borrowagent.TopicBorrowRevoked, &revoked)
 	if revoked.AgentInstanceID != "agent-claude-1" {
 		t.Fatalf("stale command notice %+v", revoked)
 	}

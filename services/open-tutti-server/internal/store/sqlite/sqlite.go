@@ -169,8 +169,11 @@ func (r *Repo) GetRoomByShareID(ctx context.Context, shareID string) (store.Room
 // a full-record room update from a revocation racing a transfer or
 // dissolution would write the stale owner and lifecycle fields back.
 func (r *Repo) UpdateRoomShareRevoked(ctx context.Context, roomID string, revokedAt time.Time) error {
+	// Unix seconds like every other INTEGER timestamp: passing the
+	// time.Time stores a string, which then fails the INTEGER scan on
+	// every later GetRoom.
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE rooms SET share_revoked_at=? WHERE id=?`, revokedAt, roomID)
+		`UPDATE rooms SET share_revoked_at=? WHERE id=?`, revokedAt.Unix(), roomID)
 	return err
 }
 
