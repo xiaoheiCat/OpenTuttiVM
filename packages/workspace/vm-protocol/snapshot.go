@@ -46,13 +46,20 @@ func ValidWorkspacePath(p string) bool {
 
 // validWindowsSegment reports whether one path segment can materialize on
 // NTFS: no reserved characters (a colon can appear anywhere in a POSIX
-// name — "dir/a:b.txt" — not just drive prefixes), no trailing dot/space,
-// and no reserved device names (CON, COM1, …) even with an extension.
-// Paths accepted here must stay creatable by every platform's replica;
-// AGENTS.md makes Windows part of the default compatibility contract.
+// name — "dir/a:b.txt" — not just drive prefixes), no control characters
+// (Windows rejects U+0001–U+001F outright; NUL dies earlier), no trailing
+// dot/space, and no reserved device names (CON, COM1, …) even with an
+// extension. Paths accepted here must stay creatable by every platform's
+// replica; AGENTS.md makes Windows part of the default compatibility
+// contract.
 func validWindowsSegment(seg string) bool {
 	if strings.ContainsAny(seg, "<>:\"|?*") {
 		return false
+	}
+	for i := 0; i < len(seg); i++ {
+		if seg[i] < 0x20 || seg[i] == 0x7f {
+			return false
+		}
 	}
 	if seg == "" || seg[len(seg)-1] == '.' || seg[len(seg)-1] == ' ' {
 		return false

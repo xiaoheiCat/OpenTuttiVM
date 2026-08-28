@@ -557,6 +557,14 @@ func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
 			w.untrackPath(p)
 			w.trackPath(moved)
 			w.rekeyHistory(p, moved)
+			// Conflict barriers fence the FILE, wherever it lives: a
+			// descendant's fence must follow the move or it would keep
+			// guarding the (now nonexistent) old path while the moved
+			// file is freely editable with the conflict unresolved.
+			if b, ok := w.barriers[p]; ok {
+				delete(w.barriers, p)
+				w.barriers[moved] = b
+			}
 		}
 	}
 	return nil

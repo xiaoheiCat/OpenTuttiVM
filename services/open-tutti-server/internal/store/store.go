@@ -90,6 +90,14 @@ type Repository interface {
 	// UpdateRoomPassword changes only the password hash (rotation races
 	// lifecycle transitions; a full-record update would clobber them).
 	UpdateRoomPassword(ctx context.Context, roomID, passwordHash string) error
+	// UpdateRoomShareRevoked stamps only the share-revocation timestamp
+	// (full-record writes race lifecycle transitions).
+	UpdateRoomShareRevoked(ctx context.Context, roomID string, revokedAt time.Time) error
+	// UpdatePresence touches only presence columns; connected_at changes
+	// solely on an offline→online transition so heartbeat pings cannot
+	// reset succession order and disconnects cannot clobber token
+	// refreshes.
+	UpdatePresence(ctx context.Context, roomID, deviceID string, online bool, now time.Time) error
 	ListActiveRooms(ctx context.Context) ([]Room, error)
 
 	// Devices

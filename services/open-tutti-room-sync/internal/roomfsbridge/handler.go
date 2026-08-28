@@ -291,14 +291,34 @@ func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error
 	}
 	// The accepted operation may be this session's conflict fix: lift
 	// the barrier so every other participant can edit the path again.
+	// A rename also MOVES descendant barriers server-side (the fence
+	// follows the file), so tracked duty paths under the renamed tree
+	// rekey with it — otherwise the resolver could never lift a fence
+	// that no longer sits at the recorded path.
 	h.mu.Lock()
 	r := h.resolver
 	duty := h.resolverDuty[op.Path]
 	delete(h.resolverDuty, op.Path)
+	var movedDuties []string
+	if rn := op.Rename; op.Kind == vmprotocol.OpRename && rn != nil {
+		for p := range h.resolverDuty {
+			if p == rn.OldPath || strings.HasPrefix(p, rn.OldPath+"/") {
+				delete(h.resolverDuty, p)
+				newPath := rn.NewPath + p[len(rn.OldPath):]
+				h.resolverDuty[newPath] = true
+				movedDuties = append(movedDuties, newPath)
+			}
+		}
+	}
 	h.mu.Unlock()
 	if duty && r != nil {
 		if err := r.ResolveBarrier(op.Path); err != nil {
 			return fmt.Errorf("lift conflict barrier on %s: %w", op.Path, err)
+		}
+	}
+	for _, p := range movedDuties {
+		if err := r.ResolveBarrier(p); err != nil {
+			return fmt.Errorf("lift moved conflict barrier on %s: %w", p, err)
 		}
 	}
 	return nil

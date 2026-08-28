@@ -259,6 +259,12 @@ type fileNode struct {
 	// clean flush (touch, repeated flush of one handle) must succeed
 	// without submitting a no-op whole-file write the room would reject.
 	dirty bool
+	// writeGen counts buffer mutations: a write landing while a flush
+	// awaits its acknowledgement bumps the generation, so the flush may
+	// only clear dirty when no newer bytes exist (else the next flush
+	// would skip submitting them — silent data loss for a concurrent
+	// editor).
+	writeGen uint64
 	// mode carries a setattr mode change into the next flush.
 	mode uint32
 	// srvMode is the authoritative permission bits from the protocol
@@ -332,6 +338,7 @@ func (f *fileNode) Write(ctx context.Context, fh fs.FileHandle, data []byte, off
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.dirty = true
+	f.writeGen++
 	end := off + int64(len(data))
 	if int64(len(f.buffer)) < end {
 		grown := make([]byte, end)
@@ -346,6 +353,7 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	f.mu.Lock()
 	content := append([]byte(nil), f.buffer...)
 	dirty := f.dirty
+	gen := f.writeGen
 	f.mu.Unlock()
 	// Clean flushes (touch with no write, a second flush of one handle)
 	// are successes: the room rejects same-content whole-file writes by
@@ -359,7 +367,12 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 		return syscall.EAGAIN
 	}
 	f.mu.Lock()
-	f.dirty = false
+	// Clear dirty only when no write landed while we awaited the
+	// acknowledgement; newer bytes keep the node dirty for the next
+	// flush.
+	if f.writeGen == gen {
+		f.dirty = false
+	}
 	f.mu.Unlock()
 	return 0
 }
@@ -404,6 +417,7 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 			f.loaded = true
 		}
 		f.dirty = true
+		f.writeGen++
 		switch {
 		case int64(sz) < int64(len(f.buffer)):
 			f.buffer = append([]byte(nil), f.buffer[:sz]...)

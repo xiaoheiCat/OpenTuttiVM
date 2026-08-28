@@ -147,6 +147,38 @@ func (r *Repo) GetRoomByShareID(ctx context.Context, shareID string) (store.Room
 	return scanRoom(r.db.QueryRowContext(ctx, `SELECT `+roomCols+` FROM rooms WHERE share_id = ? AND dissolved_at IS NULL`, shareID))
 }
 
+// UpdateRoomShareRevoked stamps ONLY the share-revocation timestamp:
+// a full-record room update from a revocation racing a transfer or
+// dissolution would write the stale owner and lifecycle fields back.
+func (r *Repo) UpdateRoomShareRevoked(ctx context.Context, roomID string, revokedAt time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE rooms SET share_revoked_at=? WHERE id=?`, revokedAt, roomID)
+	return err
+}
+
+// UpdatePresence touches ONLY presence columns: full-membership writes
+// from disconnect paths raced token refreshes (resurrecting the old
+// credential) and heartbeat pings reset ConnectedAt (breaking
+// longest-connected succession). connected_at is set only on an
+// offline→online transition.
+func (r *Repo) UpdatePresence(ctx context.Context, roomID, deviceID string, online bool, now time.Time) error {
+	onlineInt := 0
+	if online {
+		onlineInt = 1
+	}
+	// Timestamps are unix seconds, like every other membership write —
+	// binding time.Time directly stores a string the INTEGER columns'
+	// readers cannot scan.
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE memberships SET
+			connected_at = CASE WHEN ? AND online=0 THEN ? ELSE connected_at END,
+			online = ?,
+			last_seen_at = ?
+		WHERE room_id=? AND device_id=?`,
+		onlineInt, now.Unix(), onlineInt, now.Unix(), roomID, deviceID)
+	return err
+}
+
 // UpdateRoomPassword changes ONLY the password hash: a full-record
 // room update from a rotation racing a transfer/dissolution would write
 // the stale owner and lifecycle fields back over the newer state.

@@ -228,8 +228,10 @@ func (s *Service) RevokeShareLink(ctx context.Context, roomID, deviceID string) 
 	}
 	if room.ShareRevokedAt == nil {
 		now := s.clock.Now()
-		room.ShareRevokedAt = &now
-		if err := s.repo.UpdateRoom(ctx, room); err != nil {
+		// Field-specific update: a full-record write would clobber a
+		// transfer/dissolution committed since authorizeOwnerOf read
+		// the room (stale owner restored, dissolved room resurrected).
+		if err := s.repo.UpdateRoomShareRevoked(ctx, room.ID, now); err != nil {
 			return err
 		}
 	}
@@ -549,27 +551,27 @@ func (s *Service) AbortTransfer(ctx context.Context, roomID, ownerDeviceID strin
 // MarkOnline records a realtime connection. The first connection time of
 // the current presence session decides grace-period succession order.
 func (s *Service) MarkOnline(ctx context.Context, roomID, deviceID string) error {
-	now := s.clock.Now()
-	m, err := s.repo.GetMembership(ctx, roomID, deviceID)
-	if err != nil {
+	// Presence columns only: this runs on every heartbeat ping, and a
+	// full-membership write would (a) clobber a token refresh that
+	// committed since the read and (b) reset ConnectedAt, breaking
+	// longest-connected succession. The store sets connected_at only on
+	// the offline→online transition.
+	if _, err := s.repo.GetMembership(ctx, roomID, deviceID); err != nil {
 		return err
 	}
-	m.Online = true
-	m.ConnectedAt = &now
-	m.LastSeenAt = now
-	return s.repo.UpsertMembership(ctx, m)
+	return s.repo.UpdatePresence(ctx, roomID, deviceID, true, s.clock.Now())
 }
 
 // MarkOffline records a disconnect. unexpected=false means an intentional
 // leave handled through Leave.
 func (s *Service) MarkOffline(ctx context.Context, roomID, deviceID string) (ownerLost bool, err error) {
-	m, err := s.repo.GetMembership(ctx, roomID, deviceID)
-	if err != nil {
+	if _, err := s.repo.GetMembership(ctx, roomID, deviceID); err != nil {
 		return false, err
 	}
-	m.Online = false
-	m.LastSeenAt = s.clock.Now()
-	if err := s.repo.UpsertMembership(ctx, m); err != nil {
+	// Presence columns only: a full-membership write from this
+	// disconnect path could clobber a session-token refresh that
+	// committed after the read (resurrecting the old credential).
+	if err := s.repo.UpdatePresence(ctx, roomID, deviceID, false, s.clock.Now()); err != nil {
 		return false, err
 	}
 	room, err := s.repo.GetRoom(ctx, roomID)
