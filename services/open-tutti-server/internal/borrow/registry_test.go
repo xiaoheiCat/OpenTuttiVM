@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
-	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 )
 
 func shareClaude(t *testing.T, r *Registry) vmagent.AgentSharedPayload {
