@@ -744,6 +744,13 @@ func (s *Service) upsertDevice(ctx context.Context, in DeviceInput) error {
 	if in.ID == "" || in.DisplayName == "" || in.PublicKey == "" {
 		return errors.New("device id, display name, and public key are required")
 	}
+	// Session tokens are dot-delimited (room.device.nonce.signature):
+	// a dot inside a device id would mint a token neither the server
+	// nor Client.AdoptToken can ever parse — reject the id BEFORE any
+	// state persists (room creation and join both pass through here).
+	if !validDeviceID(in.ID) {
+		return errors.New("device id must be 1-64 characters of letters, digits, underscores, or hyphens")
+	}
 	if in.Hostname == "" {
 		in.Hostname = "device"
 	}
@@ -794,6 +801,25 @@ type tokenMinter struct {
 func newTokenMinter(secret string) *tokenMinter {
 	sum := sha256.Sum256([]byte("open-tutti-session:" + secret))
 	return &tokenMinter{key: sum[:]}
+}
+
+// validDeviceID gates enrollment: session tokens are dot-delimited, so
+// device ids may not contain dots (or anything else that breaks the
+// four-field format).
+func validDeviceID(id string) bool {
+	if len(id) == 0 || len(id) > 64 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '_' || c == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (t *tokenMinter) mint(roomID, deviceID string) (token, hash string, err error) {

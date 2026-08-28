@@ -171,7 +171,14 @@ func (p *Proxy) Sync(ctx context.Context) error {
 		}
 	}
 	for addr, b := range want {
-		if _, exists := p.listeners[addr]; exists {
+		if cur, exists := p.listeners[addr]; exists {
+			// The listener stays, but its ROUTES may have changed: in
+			// shared mode a session newly advertising this port must
+			// become selectable and removed hosts must stop being.
+			// accept() re-reads the current binding per connection, so
+			// swapping the struct is enough.
+			b.ln = cur.ln
+			p.listeners[addr] = b
 			continue
 		}
 		ln, err := p.listen(addr)
@@ -181,7 +188,7 @@ func (p *Proxy) Sync(ctx context.Context) error {
 		}
 		b.ln = ln
 		p.listeners[addr] = b
-		go p.accept(b)
+		go p.accept(addr, ln)
 		p.log.Info("tutti route live", "addr", addr, "host", b.target.host, "session", b.target.route.SessionID, "port", b.target.route.Port)
 	}
 	return nil
@@ -223,13 +230,25 @@ func (p *Proxy) slugOf(r vmprotocol.LiveRoute) string {
 	return vmprotocol.SlugifyHostname(r.DeviceID)
 }
 
-func (p *Proxy) accept(b *routeBinding) {
+// accept serves one bound address for the binding's lifetime. It looks
+// the CURRENT binding up per connection: Sync swaps bindings in place
+// when shared-mode routes change under a live listener.
+func (p *Proxy) accept(addr string, ln net.Listener) {
 	for {
-		conn, err := b.ln.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		go p.handle(conn, b)
+		go func() {
+			defer conn.Close()
+			p.mu.Lock()
+			b := p.listeners[addr]
+			p.mu.Unlock()
+			if b == nil {
+				return
+			}
+			p.handle(conn, b)
+		}()
 	}
 }
 

@@ -42,6 +42,7 @@ import (
 	"syscall"
 	"time"
 
+	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
@@ -320,31 +321,31 @@ func run() error {
 				if json.Unmarshal(ev.Payload, &cp) == nil {
 					bridge.OnConflictDetected(cp)
 				}
-			case vmprotocol.TopicAgentShared:
-				var p vmprotocol.AgentSharedPayload
+			case vmagent.TopicAgentShared:
+				var p vmagent.AgentSharedPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					borrowHost.Shared(p)
 				}
-			case vmprotocol.TopicBorrowCommand:
+			case vmagent.TopicBorrowCommand:
 				// A borrower's instruction routed to this owning
 				// device: execution belongs to the host's agent
 				// runtime, never to room-sync itself.
-				var p vmprotocol.BorrowCommandPayload
+				var p vmagent.BorrowCommandPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					borrowHost.ExecuteCommand(p)
 				}
-			case vmprotocol.TopicBorrowRevoked:
-				var p vmprotocol.BorrowRevokedPayload
+			case vmagent.TopicBorrowRevoked:
+				var p vmagent.BorrowRevokedPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					borrowHost.Revoked(p)
 				}
-			case vmprotocol.TopicApprovalRequest:
-				var p vmprotocol.ApprovalRequestPayload
+			case vmagent.TopicApprovalRequest:
+				var p vmagent.ApprovalRequestPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					borrowHost.ApprovalRequest(p)
 				}
-			case vmprotocol.TopicApprovalDecision:
-				var p vmprotocol.ApprovalDecisionPayload
+			case vmagent.TopicApprovalDecision:
+				var p vmagent.ApprovalDecisionPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					borrowHost.ApprovalDecision(p)
 				}

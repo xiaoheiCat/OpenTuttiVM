@@ -1,11 +1,35 @@
-package vmprotocol
+// Package vmagent is the Agent Borrowing contract: owners share agent
+// instances into a room, borrowers command them, execution stays on the
+// owner's device (their open-tutti-vm-<roomId>), and streams, terminal
+// output, and file changes flow back through the room so everyone sees
+// them live. The server never holds provider credentials and never runs
+// agent code.
+//
+// The payloads and topics live in their own seam (not vm-protocol) so
+// the workspace synchronization contract stays narrow; the event ENVELOPE
+// itself (vmprotocol.Event) is shared transport.
+package vmagent
 
-// Agent Borrowing: a first-class room capability. An owner shares one of
-// their agent instances into a room; borrowers command it; execution always
-// happens on the owner's device (their open-tutti-vm-<roomId>); streams,
-// terminal output, and file changes flow back through the room so everyone
-// sees them live. The server never holds provider credentials and never
-// runs agent code.
+import vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
+
+// Borrowing topics on the room event bus.
+const (
+	// TopicAgentShared announces an owner enabled or disabled borrowing
+	// for one agent instance.
+	TopicAgentShared vmprotocol.EventTopic = "agent.shared"
+	// TopicBorrowCommand routes a borrower's command to the owning
+	// device.
+	TopicBorrowCommand vmprotocol.EventTopic = "agent.borrow_command"
+	// TopicBorrowRevoked tells holders of an old lease generation that
+	// borrowing ended; they must stop accepting borrower input.
+	TopicBorrowRevoked vmprotocol.EventTopic = "agent.borrow_revoked"
+	// TopicApprovalRequest routes a permission prompt to the current
+	// borrower (the session operator decides, never the owner).
+	TopicApprovalRequest vmprotocol.EventTopic = "agent.approval_request"
+	// TopicApprovalDecision carries the borrower's choice back to the
+	// owning device.
+	TopicApprovalDecision vmprotocol.EventTopic = "agent.approval_decision"
+)
 
 // AgentSharedPayload is the payload of agent.shared. Sharing is scoped to
 // one room and fenced by a lease generation: revocation bumps the

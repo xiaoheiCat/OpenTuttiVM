@@ -4,15 +4,16 @@ import (
 	"errors"
 	"testing"
 
+	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 )
 
-func shareClaude(t *testing.T, r *Registry) vmprotocol.AgentSharedPayload {
+func shareClaude(t *testing.T, r *Registry) vmagent.AgentSharedPayload {
 	t.Helper()
-	p := vmprotocol.AgentSharedPayload{
+	p := vmagent.AgentSharedPayload{
 		AgentInstanceID: "agent-claude-1", OwnerDeviceID: "dev_alice",
 		Provider: "claude-code", Borrowable: true, Shared: true,
-		Capabilities: vmprotocol.AgentCapabilities{
+		Capabilities: vmagent.AgentCapabilities{
 			Skills: []string{"repo-walk"}, MCP: []string{"github"}, Tools: []string{"bash"},
 		},
 	}
@@ -25,7 +26,7 @@ func shareClaude(t *testing.T, r *Registry) vmprotocol.AgentSharedPayload {
 
 func TestShareRejectsUnsafeAdapter(t *testing.T) {
 	r := NewRegistry()
-	p := vmprotocol.AgentSharedPayload{
+	p := vmagent.AgentSharedPayload{
 		AgentInstanceID: "agent-x", OwnerDeviceID: "dev_alice",
 		Provider: "claude-code", Borrowable: false, Shared: true,
 		BorrowSafety: "BorrowSafe isolation unavailable",
@@ -38,7 +39,7 @@ func TestShareRejectsUnsafeAdapter(t *testing.T) {
 func TestOnlyOwnerMayShareOrRevoke(t *testing.T) {
 	r := NewRegistry()
 	shareClaude(t, r)
-	p := vmprotocol.AgentSharedPayload{
+	p := vmagent.AgentSharedPayload{
 		AgentInstanceID: "agent-claude-1", OwnerDeviceID: "dev_mallory",
 		Provider: "claude-code", Borrowable: true, Shared: true,
 	}
@@ -56,7 +57,7 @@ func TestRevocationFencesStaleGenerations(t *testing.T) {
 
 	// Borrower commands against the live lease are accepted and become
 	// the session operator.
-	cmd := vmprotocol.BorrowCommandPayload{
+	cmd := vmagent.BorrowCommandPayload{
 		CommandID: "c1", AgentInstanceID: "agent-claude-1",
 		BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration,
 		Input: "look at issue 12",
@@ -93,7 +94,7 @@ func TestRevocationFencesStaleGenerations(t *testing.T) {
 func TestApprovalsRouteToBorrowerNotOwner(t *testing.T) {
 	r := NewRegistry()
 	shared := shareClaude(t, r)
-	cmd := vmprotocol.BorrowCommandPayload{
+	cmd := vmagent.BorrowCommandPayload{
 		CommandID: "c1", AgentInstanceID: "agent-claude-1",
 		BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration,
 	}
@@ -126,7 +127,7 @@ func TestApprovalsRouteToBorrowerNotOwner(t *testing.T) {
 func TestApprovalRoutesToOriginatingCommandBorrower(t *testing.T) {
 	r := NewRegistry()
 	shared := shareClaude(t, r)
-	bob := vmprotocol.BorrowCommandPayload{
+	bob := vmagent.BorrowCommandPayload{
 		CommandID: "cmd-bob", AgentInstanceID: "agent-claude-1",
 		BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration,
 	}
@@ -135,7 +136,7 @@ func TestApprovalRoutesToOriginatingCommandBorrower(t *testing.T) {
 	}
 	// Carol commands while Bob's execution is still running — she must
 	// not become the operator of Bob's pending prompt.
-	carol := vmprotocol.BorrowCommandPayload{
+	carol := vmagent.BorrowCommandPayload{
 		CommandID: "cmd-carol", AgentInstanceID: "agent-claude-1",
 		BorrowerDeviceID: "dev_carol", LeaseGeneration: shared.LeaseGeneration,
 	}
@@ -159,7 +160,7 @@ func TestApprovalRoutesToOriginatingCommandBorrower(t *testing.T) {
 func TestReShareStartsNewGenerationAndClearsOperator(t *testing.T) {
 	r := NewRegistry()
 	first := shareClaude(t, r)
-	cmd := vmprotocol.BorrowCommandPayload{
+	cmd := vmagent.BorrowCommandPayload{
 		CommandID: "c1", AgentInstanceID: "agent-claude-1",
 		BorrowerDeviceID: "dev_bob", LeaseGeneration: first.LeaseGeneration,
 	}
@@ -182,7 +183,7 @@ func TestReShareStartsNewGenerationAndClearsOperator(t *testing.T) {
 func TestClearRoomDropsAgentsAndApprovals(t *testing.T) {
 	r := NewRegistry()
 	shared := shareClaude(t, r)
-	cmd := vmprotocol.BorrowCommandPayload{
+	cmd := vmagent.BorrowCommandPayload{
 		CommandID: "c1", AgentInstanceID: "agent-claude-1",
 		BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration,
 	}

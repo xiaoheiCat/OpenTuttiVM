@@ -18,8 +18,11 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/coder/websocket"
+	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
@@ -189,6 +192,15 @@ type Session struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// writeMu serializes socket writes: the coder/websocket Conn allows
+	// exactly one concurrent writer, and the heartbeat pings from their
+	// own goroutine would otherwise race operation submissions.
+	writeMu sync.Mutex
+	// lastActivity is the last received-frame time (UnixNano): a
+	// half-open socket (cable pull, NAT drop) keeps Read blocked
+	// forever, so the heartbeat enforces an idle deadline and aborts.
+	lastActivity atomic.Int64
 }
 
 // Dial opens the room WebSocket with the current session token.
@@ -211,7 +223,9 @@ func (c *Client) Dial(ctx context.Context) (*Session, error) {
 	// broadcast and force the whole room to resync.
 	conn.SetReadLimit(int64(vmsync.MaxTextFile) + 64<<10)
 	sctx, cancel := context.WithCancel(ctx)
-	return &Session{conn: conn, client: c, ctx: sctx, cancel: cancel}, nil
+	s := &Session{conn: conn, client: c, ctx: sctx, cancel: cancel}
+	s.lastActivity.Store(time.Now().UnixNano())
+	return s, nil
 }
 
 // OpApplier applies one sequenced envelope to the replica. *vmsync.Replica
@@ -226,11 +240,17 @@ type OpApplier interface {
 // reach OnEvent only after they were applied, so invalidation callbacks
 // observe post-apply state.
 func (s *Session) Run(replica OpApplier) error {
+	// Application-level liveness: the server's MarkOnline (and through
+	// it the owner grace period) only advances when the connection
+	// proves itself, and a half-open socket would otherwise block the
+	// documented transfer/dissolution path indefinitely.
+	go s.heartbeat(25*time.Second, 90*time.Second)
 	for {
 		_, data, err := s.conn.Read(s.ctx)
 		if err != nil {
 			return err
 		}
+		s.lastActivity.Store(time.Now().UnixNano())
 		var msg struct {
 			Type  string           `json:"type"`
 			Event vmprotocol.Event `json:"event"`
@@ -268,6 +288,34 @@ func (s *Session) Run(replica OpApplier) error {
 }
 
 // Submit sends one local operation.
+// heartbeat sends application-level pings while the socket is quiet and
+// enforces an idle deadline: a silent-but-dead socket (cable pull, NAT
+// rebind) leaves Read blocked, the server's MarkOffline never runs, and
+// the owner grace period would stall until platform TCP keepalives
+// notice — or forever. Cancelling the context aborts Read; the caller's
+// reconnect loop takes over.
+func (s *Session) heartbeat(interval, idle time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	ping, _ := json.Marshal(struct {
+		Type string `json:"type"`
+	}{"ping"})
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-t.C:
+			if time.Since(time.Unix(0, s.lastActivity.Load())) > idle {
+				s.cancel()
+				return
+			}
+			if err := s.write(ping); err != nil {
+				return
+			}
+		}
+	}
+}
+
 func (s *Session) Submit(env vmprotocol.Envelope) error {
 	envBytes, err := env.Encode()
 	if err != nil {
@@ -277,7 +325,7 @@ func (s *Session) Submit(env vmprotocol.Envelope) error {
 	if err != nil {
 		return err
 	}
-	return s.conn.Write(s.ctx, websocket.MessageText, msg)
+	return s.write(msg)
 }
 
 // AnnouncePorts publishes a listening port for a local session.
@@ -286,7 +334,7 @@ func (s *Session) AnnouncePorts(p vmprotocol.PortsChangedPayload) error {
 	if err != nil {
 		return err
 	}
-	return s.conn.Write(s.ctx, websocket.MessageText, msg)
+	return s.write(msg)
 }
 
 // ResolveBarrier lifts a conflict barrier this session was assigned to
@@ -304,7 +352,7 @@ func (s *Session) ResolveBarrier(path string) error {
 	if err != nil {
 		return err
 	}
-	return s.conn.Write(s.ctx, websocket.MessageText, msg)
+	return s.write(msg)
 }
 
 // writeTyped marshals one typed client message onto the socket.
@@ -313,30 +361,38 @@ func (s *Session) writeTyped(typ string, payload any) error {
 	if err != nil {
 		return err
 	}
+	return s.write(msg)
+}
+
+// write serializes socket writes: coder/websocket allows exactly one
+// concurrent writer, and heartbeat pings run on their own goroutine.
+func (s *Session) write(msg []byte) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	return s.conn.Write(s.ctx, websocket.MessageText, msg)
 }
 
 // ShareAgent enables or disables borrowing for one local agent instance.
 // The server stamps ownership from the authenticated connection.
-func (s *Session) ShareAgent(p vmprotocol.AgentSharedPayload) error {
+func (s *Session) ShareAgent(p vmagent.AgentSharedPayload) error {
 	return s.writeTyped("agent_share", p)
 }
 
 // BorrowCommand sends one instruction to a shared agent; the server
 // validates the lease generation and routes to the owner's device.
-func (s *Session) BorrowCommand(p vmprotocol.BorrowCommandPayload) error {
+func (s *Session) BorrowCommand(p vmagent.BorrowCommandPayload) error {
 	return s.writeTyped("borrow_command", p)
 }
 
 // RequestApproval is used by the owning device's agent runtime to surface
 // a permission prompt to the current borrower (the session operator).
-func (s *Session) RequestApproval(p vmprotocol.ApprovalRequestPayload) error {
+func (s *Session) RequestApproval(p vmagent.ApprovalRequestPayload) error {
 	return s.writeTyped("approval_request", p)
 }
 
 // DecideApproval answers a pending prompt; only the session operator's
 // decision is accepted.
-func (s *Session) DecideApproval(p vmprotocol.ApprovalDecisionPayload) error {
+func (s *Session) DecideApproval(p vmagent.ApprovalDecisionPayload) error {
 	return s.writeTyped("approval_decision", p)
 }
 

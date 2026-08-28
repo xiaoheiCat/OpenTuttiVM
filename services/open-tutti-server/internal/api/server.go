@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/coder/websocket"
+	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
@@ -279,7 +280,7 @@ func (s *Server) handleKickMember(w http.ResponseWriter, r *http.Request, roomID
 	// keep routing to an absent owner and ghost approvals persist.
 	for _, revoked := range s.borrows.DropDevice(roomID, target) {
 		s.hub.BroadcastRoom(roomID, vmprotocol.Event{
-			Topic: vmprotocol.TopicBorrowRevoked, RoomID: roomID, Payload: mustJSON(revoked),
+			Topic: vmagent.TopicBorrowRevoked, RoomID: roomID, Payload: mustJSON(revoked),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "kicked", "device_id": target})

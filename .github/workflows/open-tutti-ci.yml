@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, "feat/**"]
     paths:
+      - "packages/workspace/vm-agent/**"
       - "packages/workspace/vm-protocol/**"
       - "packages/workspace/vm-cas/**"
       - "packages/workspace/vm-roomfs/**"
@@ -15,6 +16,7 @@ on:
       - ".github/workflows/open-tutti-ci.yml"
   pull_request:
     paths:
+      - "packages/workspace/vm-agent/**"
       - "packages/workspace/vm-protocol/**"
       - "packages/workspace/vm-cas/**"
       - "packages/workspace/vm-roomfs/**"
@@ -43,11 +45,11 @@ jobs:
           go-version: "1.24.5"
           cache: false
       - name: Build
-        run: go build github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
+        run: go build github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
       - name: Vet
-        run: go vet github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
+        run: go vet github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
       - name: Test
-        run: go test github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
+        run: go test github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
 
   gofmt:
     name: gofmt
@@ -60,7 +62,7 @@ jobs:
           cache: false
       - name: Check formatting
         run: |
-          unformatted=$(gofmt -l packages/workspace/vm-protocol packages/workspace/vm-roomfs packages/workspace/vm-cas packages/workspace/vm-sync services/open-tutti-server services/open-tutti-room-sync services/open-tutti-fs)
+          unformatted=$(gofmt -l packages/workspace/vm-agent packages/workspace/vm-protocol packages/workspace/vm-roomfs packages/workspace/vm-cas packages/workspace/vm-sync services/open-tutti-server services/open-tutti-room-sync services/open-tutti-fs)
           if [ -n "$unformatted" ]; then
             echo "gofmt needed on:"; echo "$unformatted"; exit 1
           fi

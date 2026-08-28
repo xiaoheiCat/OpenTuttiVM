@@ -46,6 +46,7 @@ use (
 	./packages/agent/store-sqlite/canonical
 	./packages/appcli/core
 	./packages/workspace/vm-cas
+	./packages/workspace/vm-agent
 	./packages/workspace/vm-protocol
 	./packages/workspace/vm-roomfs
 	./packages/workspace/vm-sync

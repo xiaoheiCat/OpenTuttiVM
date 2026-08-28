@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
+	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/borrow"
@@ -23,13 +25,13 @@ type ClientMessage struct {
 	Type     string          `json:"type"` // "op" | "ports" | "ping" | "conflict_resolved" | "agent_share" | "borrow_command" | "approval_request" | "approval_decision"
 	Envelope json.RawMessage `json:"envelope,omitempty"`
 
-	Ports            *vmprotocol.PortsChangedPayload     `json:"ports,omitempty"`
-	Path             string                              `json:"path,omitempty"`
-	AgentSession     string                              `json:"agent_session,omitempty"`
-	AgentShare       *vmprotocol.AgentSharedPayload      `json:"agent_share,omitempty"`
-	BorrowCommand    *vmprotocol.BorrowCommandPayload    `json:"borrow_command,omitempty"`
-	ApprovalRequest  *vmprotocol.ApprovalRequestPayload  `json:"approval_request,omitempty"`
-	ApprovalDecision *vmprotocol.ApprovalDecisionPayload `json:"approval_decision,omitempty"`
+	Ports            *vmprotocol.PortsChangedPayload  `json:"ports,omitempty"`
+	Path             string                           `json:"path,omitempty"`
+	AgentSession     string                           `json:"agent_session,omitempty"`
+	AgentShare       *vmagent.AgentSharedPayload      `json:"agent_share,omitempty"`
+	BorrowCommand    *vmagent.BorrowCommandPayload    `json:"borrow_command,omitempty"`
+	ApprovalRequest  *vmagent.ApprovalRequestPayload  `json:"approval_request,omitempty"`
+	ApprovalDecision *vmagent.ApprovalDecisionPayload `json:"approval_decision,omitempty"`
 }
 
 // ServerMessage is anything the server sends.
@@ -45,6 +47,10 @@ type Conn struct {
 	DeviceSlug string
 	Ctx        context.Context
 	send       chan ServerMessage
+	// lastSeen is the last inbound-frame time (UnixNano): the idle
+	// reaper force-closes silent sockets so MarkOffline runs and the
+	// owner grace period cannot stall behind a half-open connection.
+	lastSeen atomic.Int64
 	// close terminates the socket (kick/membership revocation); assigned
 	// by Handle before Attach.
 	close func()
@@ -52,10 +58,13 @@ type Conn struct {
 
 // NewConn builds a connection handle.
 func NewConn(ctx context.Context, roomID, deviceID, deviceSlug string) *Conn {
-	return &Conn{
+	c := &Conn{
 		RoomID: roomID, DeviceID: deviceID, DeviceSlug: deviceSlug, Ctx: ctx,
 		send: make(chan ServerMessage, 64),
 	}
+	// Zero would read as "silent since the epoch" to the idle reaper.
+	c.lastSeen.Store(time.Now().UnixNano())
+	return c
 }
 
 // Hub tracks room connections and fans messages.
@@ -78,9 +87,42 @@ type Hub struct {
 // NewHub wires the hub. Attach the sequencer after construction to break
 // the hub/sequencer cycle.
 func NewHub(seq *sequencer.Manager, rooms *room.Service, previews *preview.Registry, borrows *borrow.Registry, log *slog.Logger) *Hub {
-	return &Hub{
+	h := &Hub{
 		seq: seq, rooms: rooms, previews: previews, borrows: borrows,
 		log: log, conns: map[string]map[string]*Conn{},
+	}
+	go h.reapIdle()
+	return h
+}
+
+// Client heartbeat policy: clients ping every 25s; a connection silent
+// for three minutes is dead (or hostile) — platform TCP keepalives
+// alone can take far longer, leaving MarkOffline unrun and the owner
+// grace period stalled behind a half-open socket.
+const idleReapAfter = 3 * time.Minute
+
+// reapIdle force-closes silent sockets so their detach sequence runs.
+func (h *Hub) reapIdle() {
+	t := time.NewTicker(30 * time.Second)
+	defer t.Stop()
+	for range t.C {
+		cutoff := time.Now().Add(-idleReapAfter).UnixNano()
+		h.mu.RLock()
+		var stale []*Conn
+		for _, room := range h.conns {
+			for _, c := range room {
+				if c.lastSeen.Load() < cutoff {
+					stale = append(stale, c)
+				}
+			}
+		}
+		h.mu.RUnlock()
+		for _, c := range stale {
+			h.log.Warn("closing idle room socket", "room", c.RoomID, "device", c.DeviceID)
+			if c.close != nil {
+				c.close()
+			}
+		}
 	}
 }
 
@@ -255,6 +297,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 		if err != nil {
 			return
 		}
+		c.lastSeen.Store(time.Now().UnixNano())
 		var msg ClientMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			continue
@@ -310,7 +353,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 					continue
 				}
 				h.BroadcastRoom(c.RoomID, vmprotocol.Event{
-					Topic: vmprotocol.TopicAgentShared, RoomID: c.RoomID, Payload: mustJSON(out),
+					Topic: vmagent.TopicAgentShared, RoomID: c.RoomID, Payload: mustJSON(out),
 				})
 			} else {
 				shared, revoked, err := h.borrows.Revoke(c.RoomID, c.DeviceID, p.AgentInstanceID)
@@ -319,10 +362,10 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 					continue
 				}
 				h.BroadcastRoom(c.RoomID, vmprotocol.Event{
-					Topic: vmprotocol.TopicAgentShared, RoomID: c.RoomID, Payload: mustJSON(shared),
+					Topic: vmagent.TopicAgentShared, RoomID: c.RoomID, Payload: mustJSON(shared),
 				})
 				h.BroadcastRoom(c.RoomID, vmprotocol.Event{
-					Topic: vmprotocol.TopicBorrowRevoked, RoomID: c.RoomID, Payload: mustJSON(revoked),
+					Topic: vmagent.TopicBorrowRevoked, RoomID: c.RoomID, Payload: mustJSON(revoked),
 				})
 			}
 		case "borrow_command":
@@ -337,8 +380,8 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 				// Stale or unknown lease: the borrower learns immediately
 				// that their generation is dead.
 				h.SendTo(c.RoomID, c.DeviceID, vmprotocol.Event{
-					Topic: vmprotocol.TopicBorrowRevoked, RoomID: c.RoomID,
-					Payload: mustJSON(vmprotocol.BorrowRevokedPayload{
+					Topic: vmagent.TopicBorrowRevoked, RoomID: c.RoomID,
+					Payload: mustJSON(vmagent.BorrowRevokedPayload{
 						AgentInstanceID: p.AgentInstanceID,
 						Reason:          err.Error(),
 					}),
@@ -350,7 +393,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 				continue
 			}
 			h.SendTo(c.RoomID, owner.OwnerDeviceID, vmprotocol.Event{
-				Topic: vmprotocol.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out),
+				Topic: vmagent.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out),
 			})
 		case "approval_request":
 			if msg.ApprovalRequest == nil {
@@ -374,7 +417,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 			}
 			p.SessionOperatorDeviceID = operator
 			h.SendTo(c.RoomID, operator, vmprotocol.Event{
-				Topic: vmprotocol.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p),
+				Topic: vmagent.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p),
 			})
 		case "approval_decision":
 			if msg.ApprovalDecision == nil {
@@ -388,7 +431,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn) {
 				continue
 			}
 			h.SendTo(c.RoomID, owner, vmprotocol.Event{
-				Topic: vmprotocol.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p),
+				Topic: vmagent.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p),
 			})
 		case "ping":
 			_ = h.rooms.MarkOnline(c.Ctx, c.RoomID, c.DeviceID)

@@ -32,20 +32,11 @@ const (
 	// Devices surface "Environment changed — Rebuild" independently; the
 	// server never rebuilds local runtimes.
 	TopicEnvironmentChanged EventTopic = "room.environment.changed"
-	// TopicAgentShared announces an owner enabled or disabled borrowing for
-	// one of their agent instances.
-	TopicAgentShared EventTopic = "agent.shared"
-	// TopicBorrowCommand routes a borrower's command to the owning device.
-	TopicBorrowCommand EventTopic = "agent.borrow_command"
-	// TopicBorrowRevoked tells holders of an old lease generation that
-	// borrowing ended; their in-flight commands are invalid immediately.
-	TopicBorrowRevoked EventTopic = "agent.borrow_revoked"
-	// TopicApprovalRequest routes a permission prompt to the current
-	// borrower, who is the session operator.
-	TopicApprovalRequest EventTopic = "agent.approval_request"
-	// TopicApprovalDecision routes the borrower's decision back to the
-	// owning device.
-	TopicApprovalDecision EventTopic = "agent.approval_decision"
+	// Agent Borrowing topics (agent.shared, agent.borrow_command,
+	// agent.borrow_revoked, agent.approval_request,
+	// agent.approval_decision) live in packages/workspace/vm-agent: the
+	// borrowing contract is its own seam, not workspace synchronization.
+
 	// TopicPortsChanged announces TCP ports observed listening in an agent or
 	// terminal session, feeding the room preview registry.
 	TopicPortsChanged EventTopic = "room.ports_changed"

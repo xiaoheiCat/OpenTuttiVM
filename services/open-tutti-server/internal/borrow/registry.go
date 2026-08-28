@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
+	vmagent "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-agent"
 )
 
 // Errors surfaced to API/WS callers.
@@ -30,7 +30,7 @@ type AgentInstance struct {
 	Provider        string
 	Borrowable      bool
 	BorrowSafety    string
-	Capabilities    vmprotocol.AgentCapabilities
+	Capabilities    vmagent.AgentCapabilities
 	LeaseGeneration uint64
 	Shared          bool
 	// LastBorrower is the current session operator: the device whose
@@ -75,7 +75,7 @@ func NewRegistry() *Registry {
 // Share enables or disables borrowing for one agent instance. Only the
 // owner may share; every share start bumps the lease generation so old
 // commands cannot ride a re-share.
-func (r *Registry) Share(roomID string, p vmprotocol.AgentSharedPayload) (vmprotocol.AgentSharedPayload, error) {
+func (r *Registry) Share(roomID string, p vmagent.AgentSharedPayload) (vmagent.AgentSharedPayload, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if p.OwnerDeviceID == "" || p.AgentInstanceID == "" {
@@ -115,27 +115,27 @@ func (r *Registry) Share(roomID string, p vmprotocol.AgentSharedPayload) (vmprot
 // Revoke ends borrowing: the generation bumps, and every in-flight command
 // against the old generation becomes invalid. Returns the broadcast
 // payloads (agent.shared with shared=false plus revocation details).
-func (r *Registry) Revoke(roomID, ownerDeviceID, agentInstanceID string) (vmprotocol.AgentSharedPayload, vmprotocol.BorrowRevokedPayload, error) {
+func (r *Registry) Revoke(roomID, ownerDeviceID, agentInstanceID string) (vmagent.AgentSharedPayload, vmagent.BorrowRevokedPayload, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	room := r.agents[roomID]
 	inst := room[agentInstanceID]
 	if inst == nil {
-		return vmprotocol.AgentSharedPayload{}, vmprotocol.BorrowRevokedPayload{}, ErrUnknownAgent
+		return vmagent.AgentSharedPayload{}, vmagent.BorrowRevokedPayload{}, ErrUnknownAgent
 	}
 	if inst.OwnerDeviceID != ownerDeviceID {
-		return vmprotocol.AgentSharedPayload{}, vmprotocol.BorrowRevokedPayload{}, ErrNotOwner
+		return vmagent.AgentSharedPayload{}, vmagent.BorrowRevokedPayload{}, ErrNotOwner
 	}
 	inst.LeaseGeneration++
 	inst.Shared = false
 	inst.LastBorrower = ""
-	shared := vmprotocol.AgentSharedPayload{
+	shared := vmagent.AgentSharedPayload{
 		AgentInstanceID: inst.ID, OwnerDeviceID: inst.OwnerDeviceID,
 		Provider: inst.Provider, Borrowable: inst.Borrowable,
 		BorrowSafety: inst.BorrowSafety, Capabilities: inst.Capabilities,
 		LeaseGeneration: inst.LeaseGeneration, Shared: false,
 	}
-	revoked := vmprotocol.BorrowRevokedPayload{
+	revoked := vmagent.BorrowRevokedPayload{
 		AgentInstanceID: inst.ID, Reason: "owner_revoked", FinalGeneration: inst.LeaseGeneration,
 	}
 	return shared, revoked, nil
@@ -144,7 +144,7 @@ func (r *Registry) Revoke(roomID, ownerDeviceID, agentInstanceID string) (vmprot
 // Command validates a borrower's command against the current lease and
 // stamps the borrower identity. The caller routes the returned payload to
 // the owning device.
-func (r *Registry) Command(roomID string, p vmprotocol.BorrowCommandPayload) (vmprotocol.BorrowCommandPayload, error) {
+func (r *Registry) Command(roomID string, p vmagent.BorrowCommandPayload) (vmagent.BorrowCommandPayload, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	room := r.agents[roomID]
@@ -290,10 +290,10 @@ func (r *Registry) ClearRoom(roomID string) {
 // caller can broadcast them. Without this, remaining members could keep
 // commanding agents whose owner is gone, and ghost approvals/operators
 // would persist until the whole room dissolved.
-func (r *Registry) DropDevice(roomID, ownerDeviceID string) []vmprotocol.BorrowRevokedPayload {
+func (r *Registry) DropDevice(roomID, ownerDeviceID string) []vmagent.BorrowRevokedPayload {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var revoked []vmprotocol.BorrowRevokedPayload
+	var revoked []vmagent.BorrowRevokedPayload
 	for id, inst := range r.agents[roomID] {
 		if inst.OwnerDeviceID != ownerDeviceID {
 			continue
@@ -301,7 +301,7 @@ func (r *Registry) DropDevice(roomID, ownerDeviceID string) []vmprotocol.BorrowR
 		inst.LeaseGeneration++
 		inst.Shared = false
 		inst.LastBorrower = ""
-		revoked = append(revoked, vmprotocol.BorrowRevokedPayload{
+		revoked = append(revoked, vmagent.BorrowRevokedPayload{
 			AgentInstanceID: inst.ID, Reason: "owner_left", FinalGeneration: inst.LeaseGeneration,
 		})
 		delete(r.agents[roomID], id)
