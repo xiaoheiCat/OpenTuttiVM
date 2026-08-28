@@ -72,8 +72,8 @@ func TestProxySharedModeDemultiplexesByHostHeader(t *testing.T) {
 	vips := NewVIPAllocator()
 	vips.mode.Store(int32(modeShared))
 	routes := &staticRoutes{routes: []vmprotocol.LiveRoute{
-		{RouteKey: vmprotocol.RouteKey{DeviceID: "dev_a", SessionID: "sess-claude-a", Port: 3000}, DeviceSlug: "a"},
-		{RouteKey: vmprotocol.RouteKey{DeviceID: "dev_b", SessionID: "sess-codex-b", Port: 3000}, DeviceSlug: "b"},
+		{RouteKey: vmprotocol.RouteKey{DeviceID: "dev_a", SessionID: "sess-claude-a", Port: 53087}, DeviceSlug: "a"},
+		{RouteKey: vmprotocol.RouteKey{DeviceID: "dev_b", SessionID: "sess-codex-b", Port: 53087}, DeviceSlug: "b"},
 	}}
 	p := NewProxy(vips, dialer, routes, nil, nil, "room1", "dev_me", nil)
 	defer p.Close()
@@ -100,10 +100,10 @@ func TestProxySharedModeDemultiplexesByHostHeader(t *testing.T) {
 		}
 		return string(line)
 	}
-	if got := ask("claude-a.a.tutti:3000"); got != "sess-claude-a/3000" {
+	if got := ask("claude-a.a.tutti:53087"); got != "sess-claude-a/53087" {
 		t.Fatalf("host a routed to %s", got)
 	}
-	if got := ask("codex-b.b.tutti:3000"); got != "sess-codex-b/3000" {
+	if got := ask("codex-b.b.tutti:53087"); got != "sess-codex-b/53087" {
 		t.Fatalf("host b routed to %s", got)
 	}
 
