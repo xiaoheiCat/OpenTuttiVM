@@ -262,6 +262,7 @@ func run() error {
 		sessionLabel = "main"
 	}
 	bridge := roomfsbridge.New(mgr, sessionRef, c, deviceID, "sess-"+sessionLabel, roomfsSrv.BroadcastInvalidate)
+	bridge.SetRenamePush(roomfsSrv.BroadcastRename)
 	bridge.SetResolver(sessionRef)
 	roomfsSrv.SetHandler(bridge)
 	ln, err := listenRoomFS(roomfsAddr)
@@ -350,6 +351,9 @@ func run() error {
 	// Session loop: transient socket failures reconnect with backoff and
 	// re-bootstrap the replica instead of taking the mount offline.
 	backoff := time.Second
+	// subscribed marks the one-time post-registration resync (see the
+	// first loop iteration).
+	subscribed := false
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -393,6 +397,11 @@ func run() error {
 					// negative lookup there would keep hiding it), and
 					// a moved directory takes its descendants along.
 					if r := env.Operation.Rename; env.Operation.Kind == vmprotocol.OpRename && r != nil {
+						// Rename-aware push FIRST: open inodes rekey to
+						// the new pathname (their handles survive),
+						// then the destination invalidation drops the
+						// stale caches.
+						bridge.RenameRemote(r.OldPath, r.NewPath)
 						bridge.InvalidateRemote(r.NewPath)
 						var moved []string
 						mgr.WithState(func(state *vmsync.WorkspaceState) {
@@ -492,6 +501,21 @@ func run() error {
 			}
 		}
 		sessionRef.set(sess)
+		// Close the subscribe/snapshot race ONCE, right after the FIRST
+		// registration: the startup HTTP bootstrap ran BEFORE this
+		// WebSocket existed, and an operation landing in that interval
+		// was broadcast to nobody. Without a later operation there is
+		// no sequence gap to trigger a resync — the mount would serve
+		// stale state indefinitely. Re-snapshot NOW (subscription is
+		// live; sess.Run has not started, so the socket buffers events
+		// and replays them after the snapshot — seq-idempotent apply
+		// absorbs the overlap).
+		if !subscribed {
+			if err := resyncFromServer(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "room-sync: post-subscribe resync: %v\n", err)
+			}
+			subscribed = true
+		}
 		// Announce this device's session ports so the preview registry
 		// (and through it /routes, the selector, and relay
 		// authorization) knows what the session serves. The room

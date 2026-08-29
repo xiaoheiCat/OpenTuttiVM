@@ -55,6 +55,7 @@ type Handler struct {
 	// without applying the requested mutation.
 	bootID string
 	inval  func(path string)
+	rename func(oldPath, newPath string)
 	// resolverDuty marks paths whose conflict barrier assigned THIS
 	// session to resolve; the next accepted operation on the path lifts
 	// the fence (without an explicit resolve, the first conflict fences
@@ -83,6 +84,12 @@ func New(mgr *replica.Manager, submitter Submitter, uploader ChunkUploader, devi
 	}
 }
 
+// SetRenamePush attaches the rename-aware mount notification (the
+// roomfs server's BroadcastRename).
+func (h *Handler) SetRenamePush(f func(oldPath, newPath string)) {
+	h.rename = f
+}
+
 // SetResolver attaches the barrier lifter (the live WS session).
 func (h *Handler) SetResolver(r BarrierResolver) {
 	h.mu.Lock()
@@ -106,6 +113,16 @@ func (h *Handler) OnConflictDetected(p vmprotocol.ConflictPayload) {
 func (h *Handler) InvalidateRemote(path string) {
 	if h.inval != nil {
 		h.inval(path)
+	}
+}
+
+// RenameRemote tells the mount another participant renamed a path:
+// open inodes must REKEY (handles survive under the new name) instead
+// of only dropping caches — a surviving handle would keep flushing
+// through the obsolete pathname.
+func (h *Handler) RenameRemote(oldPath, newPath string) {
+	if h.rename != nil {
+		h.rename(oldPath, newPath)
 	}
 }
 

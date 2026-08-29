@@ -43,11 +43,12 @@ type Response struct {
 	Stat    *Stat      `json:"stat,omitempty"`
 	Seq     uint64     `json:"seq,omitempty"`
 	// Hash reports the read path's content hash (flush baselines).
-	Hash  string          `json:"hash,omitempty"`
-	Extra json.RawMessage `json:"extra,omitempty"`
-	Push  bool            `json:"push,omitempty"`
-	Type  string          `json:"type,omitempty"`
-	Path  string          `json:"path,omitempty"`
+	Hash    string          `json:"hash,omitempty"`
+	Extra   json.RawMessage `json:"extra,omitempty"`
+	Push    bool            `json:"push,omitempty"`
+	Type    string          `json:"type,omitempty"`
+	Path    string          `json:"path,omitempty"`
+	NewPath string          `json:"new_path,omitempty"`
 }
 
 // DirEntry is one child of a directory listing.
@@ -70,9 +71,21 @@ type Stat struct {
 // ServerPush notifies the mount of remote changes (correlated responses
 // arrive as ordinary Responses by id).
 type ServerPush struct {
-	Type string `json:"type"` // "invalidate"
+	Type string `json:"type"` // "invalidate" or "rename"
 	Path string `json:"path"`
+	// NewPath carries the rename destination (Type "rename"): open
+	// inodes must REKEY their stored path, not just drop caches — a
+	// surviving handle would otherwise flush through the old pathname
+	// (EIO, or onto an unrelated later replacement).
+	NewPath string `json:"new_path,omitempty"`
 }
+
+// PushInvalidates is the cache-drop push type.
+const PushInvalidates = "invalidate"
+
+// PushRename is the rename-aware push type: rekey open inodes from
+// Path to NewPath before invalidating both directory entries.
+const PushRename = "rename"
 
 // Request types.
 const (

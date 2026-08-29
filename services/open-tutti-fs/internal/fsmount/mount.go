@@ -27,6 +27,14 @@ func Mount(ctx context.Context, dir string, client *roomfs.Client) error {
 	client.OnInvalidate = func(path string) {
 		root.invalidatePath(path)
 	}
+	// Remote RENAMES rekey open inodes instead of only dropping
+	// caches: a surviving handle would keep its old stored path and
+	// later reload or flush through it (EIO, or onto an unrelated
+	// replacement later created at the old name). This mirrors the
+	// local FUSE rename path's rekey semantics.
+	client.OnRename = func(oldPath, newPath string) {
+		root.rekeyRemote(oldPath, newPath)
+	}
 	server, err := fs.Mount(dir, root, &fs.Options{
 		MountOptions: fuse.MountOptions{FsName: "open-tutti"},
 	})
@@ -317,6 +325,46 @@ func (n *roomNode) Rename(ctx context.Context, name string, newParent fs.InodeEm
 	return 0
 }
 
+// rekeyRemote handles a REMOTE rename push: rekey every cached inode
+// whose stored path sits under oldPath (the FUSE inode survives, only
+// its pathname moved), then invalidate both directory entries so both
+// names re-lookup against the resynchronized authority.
+func (n *roomNode) rekeyRemote(oldPath, newPath string) {
+	oldPrefix := strings.Trim(oldPath, "/")
+	if oldPrefix == "" {
+		// Whole-tree resync equivalent: nothing sensible to rekey.
+		return
+	}
+	segs := strings.Split(oldPrefix, "/")
+	parent := &n.Inode
+	for i := 0; i < len(segs)-1; i++ {
+		if next := parent.GetChild(segs[i]); next != nil {
+			parent = next
+		} else {
+			parent = nil
+			break
+		}
+	}
+	name := segs[len(segs)-1]
+	if parent != nil {
+		if child := parent.GetChild(name); child != nil {
+			if fn, ok := child.Operations().(*fileNode); ok {
+				fn.mu.Lock()
+				if strings.Trim(fn.path, "/") == oldPrefix {
+					fn.path = newPath
+				}
+				fn.mu.Unlock()
+			} else {
+				rekeyTree(child, oldPath, newPath)
+			}
+		}
+	}
+	// Both entries re-lookup (source disappears, destination appears;
+	// a cached negative lookup there would keep hiding it).
+	n.invalidatePath(oldPath)
+	n.invalidatePath(newPath)
+}
+
 // rekeyTree rewrites every descendant fileNode's stored path after a
 // directory rename (children keyed by name under the moved inode).
 func rekeyTree(ino *fs.Inode, oldPrefix, newPrefix string) {
@@ -394,6 +442,11 @@ func (f *fileNode) invalidate() {
 	f.buffer = nil
 	f.loaded = false
 	f.dirty = false
+	// Retire the LOCAL mode cache too: a chmod cached before the
+	// invalidation would keep outranking the remote change in
+	// Getattr's preference order even after the re-stat refreshed the
+	// authoritative bits.
+	f.modeSet = false
 	// Drop the cached authoritative size too: InodeNotify forces a
 	// Getattr before any reload, and the stale pre-edit size would keep
 	// answering stat/fstat with the old length after the accepted edit.
@@ -521,10 +574,13 @@ func (f *fileNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 		// never a stale length on an accepted edit).
 		if st, err := f.client.Stat(f.path); err == nil && st != nil && st.Exists {
 			f.srvSize = int64(st.Size)
-			if st.Mode != 0 {
-				f.srvMode = st.Mode & 0o7777
-				f.srvModeSet = true
-			}
+			// Zero IS authoritative here: the bridge resolves unset
+			// modes to readable defaults before the wire (an explicit
+			// remote chmod 0000 is the only way Mode arrives 0), so
+			// guarding on != 0 kept serving the pre-chmod permissions
+			// forever after the invalidation.
+			f.srvMode = st.Mode & 0o7777
+			f.srvModeSet = true
 			out.Attr.Size = uint64(f.srvSize)
 		}
 	}

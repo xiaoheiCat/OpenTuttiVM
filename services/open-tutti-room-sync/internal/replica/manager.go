@@ -599,19 +599,14 @@ func atomicWrite(dst string, content []byte) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	// Windows rename does NOT replace an existing destination (POSIX
-	// rename(2) semantics): the mirror updates preexisting files in
-	// place, so a plain os.Rename fails on the first modified file.
-	// Removing the destination first closes the gap; the content is
-	// already durable in the temp file, and a crash mid-swap leaves
-	// either version — never a partial write.
-	if err := os.Rename(tmp.Name(), dst); err != nil {
-		if rmErr := os.Remove(dst); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
-			return fmt.Errorf("replace %s: %v (remove: %v)", dst, err, rmErr)
-		}
-		return os.Rename(tmp.Name(), dst)
-	}
-	return nil
+	// replaceFile keeps the swap atomic on BOTH platforms: Windows
+	// os.Rename refuses to replace an existing destination, and the old
+	// remove-then-rename fallback deleted the ONLY installed copy
+	// before attempting the second rename — a crash or second failure
+	// left the workspace with NEITHER version. The Windows adapter
+	// uses MoveFileEx(REPLACE_EXISTING); POSIX rename(2) already
+	// replaces atomically.
+	return replaceFile(tmp.Name(), dst)
 }
 
 func pruneRemoved(root string, roomPaths map[string]bool) error {

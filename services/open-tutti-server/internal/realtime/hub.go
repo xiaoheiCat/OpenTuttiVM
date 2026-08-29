@@ -441,7 +441,11 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			// messages, and an unbounded Input would park gigabytes in
 			// the owner's 64-slot send queue before overflow closed it,
 			// while the registry separately retained giant command ids.
-			if len(p.CommandID) > 128 || len(p.Input) > 1<<20 {
+			// AgentInstanceID is bounded TOO: the rejection path below
+			// echoes it back to the same connection, and a slow-reading
+			// sender could retain 64 near-frame-sized responses before
+			// overflow — several GiB from one socket.
+			if len(p.CommandID) > 128 || len(p.AgentInstanceID) > 128 || len(p.Input) > 1<<20 {
 				h.log.Warn("borrow command over limit", "room", c.RoomID, "device", c.DeviceID)
 				continue
 			}

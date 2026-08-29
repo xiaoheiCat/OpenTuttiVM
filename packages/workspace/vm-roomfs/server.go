@@ -187,8 +187,22 @@ func (s *Server) dispatch(req Request, body []byte) Response {
 }
 
 // BroadcastInvalidate pushes a path invalidation to every connected mount
-// so their kernel caches drop remote-updated entries.
+// BroadcastRename tells every connected mount that a REMOTE rename
+// moved path to newPath: open inodes rekey (their handles stay
+// valid), both directory entries invalidate. Same bounded-write and
+// drop-on-failure policy as BroadcastInvalidate.
+func (s *Server) BroadcastRename(path, newPath string) {
+	s.pushAll(Response{Push: true, Type: PushRename, Path: path, NewPath: newPath})
+}
+
 func (s *Server) BroadcastInvalidate(path string) {
+	s.pushAll(Response{Push: true, Type: "invalidate", Path: path})
+}
+
+// pushAll writes one push frame to every connected mount with the
+// bounded-write policy the direct broadcasts use (5s deadline, drop
+// the mount on failure so the event pump never blocks).
+func (s *Server) pushAll(r Response) {
 	s.mu.Lock()
 	conns := make([]*serverConn, 0, len(s.conns))
 	for sc := range s.conns {
@@ -207,7 +221,7 @@ func (s *Server) BroadcastInvalidate(path string) {
 		if dl, ok := sc.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
 			_ = dl.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		}
-		err := WriteFrame(sc.writer, Response{Push: true, Type: "invalidate", Path: path}, nil)
+		err := WriteFrame(sc.writer, r, nil)
 		if err == nil {
 			err = sc.writer.Flush()
 		}
@@ -216,7 +230,7 @@ func (s *Server) BroadcastInvalidate(path string) {
 		}
 		sc.mu.Unlock()
 		if err != nil {
-			s.log.Warn("roomfs push failed; dropping mount", "path", path, "err", err)
+			s.log.Warn("roomfs push failed; dropping mount", "path", r.Path, "err", err)
 			_ = sc.conn.Close()
 		}
 	}

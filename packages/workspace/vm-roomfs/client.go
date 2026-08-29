@@ -24,6 +24,8 @@ type Client struct {
 
 	// OnInvalidate receives remote-change notifications (path-level).
 	OnInvalidate func(path string)
+	// OnRename handles the rename-aware push: rekey open inodes.
+	OnRename func(oldPath, newPath string)
 }
 
 // NewClient builds the protocol client over an established connection:
@@ -97,12 +99,15 @@ func (c *Client) pump() {
 			return
 		}
 		if res.Push {
+			// Dispatch OFF the pump: the callbacks take inode locks,
+			// and a pending read can hold the same lock while it waits
+			// for a response only this loop can deliver — a synchronous
+			// call would deadlock the connection.
 			if res.Type == "invalidate" && c.OnInvalidate != nil {
-				// Dispatch OFF the pump: the callback takes inode locks,
-				// and a pending read can hold the same lock while it
-				// waits for a response only this loop can deliver — a
-				// synchronous call would deadlock the connection.
 				go c.OnInvalidate(res.Path)
+			}
+			if res.Type == PushRename && c.OnRename != nil && res.Path != "" && res.NewPath != "" {
+				go c.OnRename(res.Path, res.NewPath)
 			}
 			continue
 		}

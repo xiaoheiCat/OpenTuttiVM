@@ -28,6 +28,10 @@ const (
 	RejectBaseMismatch RejectionReason = "base_mismatch"
 	// RejectInvalid: the operation does not apply to the current tree.
 	RejectInvalid RejectionReason = "invalid"
+	// RejectTooComplex: the operation's transform complexity exceeds the
+	// admission cap (see MaxSplicesPerPatch); the author must split it
+	// or use a blob replace.
+	RejectTooComplex RejectionReason = "too_complex"
 )
 
 // RejectionError carries the reason plus the state the author needs to
@@ -447,7 +451,34 @@ func (w *WorkspaceState) applyTextPatch(env *vmprotocol.Envelope) error {
 		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
 	}
 
+	// Complexity fence BEFORE TransformPatch: the transform compares
+	// every incoming splice with every retained splice (O(n*m)), and a
+	// near-limit patch of ~10^6 empty splices met with a second patch
+	// produced ~10^12 iterations while Submit held the process-global
+	// mutex — sequencing and bootstrap stalled for EVERY room. Empty
+	// no-op splices are rejected outright and the splice count capped
+	// (editors batch far fewer; larger edits travel as blob replaces).
+	if len(patch.Splices) > MaxSplicesPerPatch {
+		return &RejectionError{Reason: RejectTooComplex}
+	}
+	for i := range patch.Splices {
+		s := &patch.Splices[i]
+		if s.DeleteLen == 0 && s.Insert == "" {
+			return &RejectionError{Reason: RejectInvalid}
+		}
+	}
+
 	concurrent := w.concurrentPatches(op.Path, env.BaseSeq)
+	retained := 0
+	for i := range concurrent {
+		retained += len(concurrent[i].Patch.Splices)
+	}
+	// Aggregate fence: the per-patch cap alone still allows
+	// 2048 × (128 window × 2048) ≈ 5×10^8 comparisons. Bound the
+	// incoming × retained product so a transform stays milliseconds.
+	if int64(len(patch.Splices))*int64(retained) > MaxTransformProduct {
+		return &RejectionError{Reason: RejectTooComplex}
+	}
 	if res := TransformPatch(&patch, concurrent); res.Conflict {
 		return w.openBarrier(op.Path, env, res.ConflictWith)
 	}
@@ -820,6 +851,16 @@ func (w *WorkspaceState) recordHistory(env *vmprotocol.Envelope) {
 // transformed (earlier edits would be missing from its offsets), so it is
 // rejected instead of mis-applied.
 const transformHistoryWindow = 128
+
+// MaxSplicesPerPatch caps one text patch's splice count. The transform
+// cost is incoming × retained splices; the cap keeps a worst case far
+// from quadratic-stall territory while exceeding any realistic editor
+// batch (huge rewrites travel as blob replaces).
+const MaxSplicesPerPatch = 2048
+
+// MaxTransformProduct caps incoming × retained splices for one
+// transform admission (~4×10^6 comparisons, single-digit milliseconds).
+const MaxTransformProduct = 4 << 20
 
 // materializeViaHook pulls CAS-referenced content for one path through the
 // configured Materializer hook; without a hook the caller must resync.
