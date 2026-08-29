@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 )
 
 // Handler bridges the protocol onto the local replica. open-tutti-room-sync
@@ -46,6 +47,7 @@ type Server struct {
 }
 
 type serverConn struct {
+	conn   net.Conn
 	writer *bufio.Writer
 	mu     sync.Mutex
 }
@@ -77,7 +79,7 @@ func (s *Server) Serve(ln net.Listener) error {
 		// Register synchronously with accept: a client that connected
 		// earlier must be visible to any later broadcast, instead of
 		// racing the serve goroutine's registration.
-		sc := &serverConn{writer: bufio.NewWriter(conn)}
+		sc := &serverConn{conn: conn, writer: bufio.NewWriter(conn)}
 		s.mu.Lock()
 		s.conns[sc] = struct{}{}
 		s.mu.Unlock()
@@ -195,13 +197,27 @@ func (s *Server) BroadcastInvalidate(path string) {
 	s.mu.Unlock()
 	for _, sc := range conns {
 		sc.mu.Lock()
+		// Bounded push writes with a deadline: this broadcast runs
+		// directly from the room WebSocket's OnEvent callback, and one
+		// mount that stops reading while holding its socket open would
+		// block the flush indefinitely — stalling the event pump for
+		// EVERY room participant. A timed-out or failing push DROPS the
+		// connection (its serve loop notices the closed socket and
+		// unregisters; the mount reconnects and re-reads).
+		if dl, ok := sc.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
+			_ = dl.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		}
 		err := WriteFrame(sc.writer, Response{Push: true, Type: "invalidate", Path: path}, nil)
 		if err == nil {
 			err = sc.writer.Flush()
 		}
+		if dl, ok := sc.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
+			_ = dl.SetWriteDeadline(time.Time{})
+		}
 		sc.mu.Unlock()
 		if err != nil {
-			s.log.Warn("roomfs push failed", "path", path, "err", err)
+			s.log.Warn("roomfs push failed; dropping mount", "path", path, "err", err)
+			_ = sc.conn.Close()
 		}
 	}
 }

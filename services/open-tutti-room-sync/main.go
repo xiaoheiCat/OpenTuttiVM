@@ -672,8 +672,23 @@ func serveTunnel(ctx context.Context, tun *tunneldial.Tunnel, roomID, deviceID s
 				return
 			}
 			defer local.Close()
-			go io.Copy(local, stream)
-			io.Copy(stream, local)
+			// BOTH legs close when EITHER copy finishes (same shape as
+			// the gateway pipe): the initiating device disconnecting
+			// while the local target stays open and quiet used to
+			// leave the foreground copy blocked on local forever — the
+			// goroutine, local connection, and yamux stream all leaked.
+			done := make(chan struct{}, 2)
+			go func() {
+				io.Copy(local, stream)
+				done <- struct{}{}
+			}()
+			go func() {
+				io.Copy(stream, local)
+				done <- struct{}{}
+			}()
+			<-done
+			stream.Close()
+			local.Close()
 		}(stream, header)
 	}
 }

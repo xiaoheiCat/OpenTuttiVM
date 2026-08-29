@@ -377,6 +377,21 @@ func (r *Registry) ClearRoom(roomID string) {
 			delete(r.approvals, id)
 		}
 	}
+	// Command routing dies with the room too: room ids are never
+	// reused and nothing else sweeps these maps, so dissolved rooms
+	// permanently retained their per-agent command history on a
+	// long-running server under normal room churn.
+	prefix := roomID + "\x00"
+	for key := range r.commandBorrowers {
+		if strings.HasPrefix(key, prefix) {
+			delete(r.commandBorrowers, key)
+		}
+	}
+	for key := range r.commandOrder {
+		if strings.HasPrefix(key, prefix) {
+			delete(r.commandOrder, key)
+		}
+	}
 }
 
 // DropDevice removes every agent a departing device owns — kick or
@@ -390,6 +405,13 @@ func (r *Registry) DropDevice(roomID, ownerDeviceID string) []borrowagent.Borrow
 	var revoked []borrowagent.BorrowRevokedPayload
 	for id, inst := range r.agents[roomID] {
 		if inst.OwnerDeviceID != ownerDeviceID {
+			// The departing device may be the BORROWER operating this
+			// agent: stale LastBorrower/command mappings kept routing
+			// later prompts to an offline non-member connection, and a
+			// running command stayed blocked with nobody to decide.
+			if inst.LastBorrower == ownerDeviceID {
+				inst.LastBorrower = ""
+			}
 			continue
 		}
 		inst.LeaseGeneration++
@@ -408,6 +430,12 @@ func (r *Registry) DropDevice(roomID, ownerDeviceID string) []borrowagent.Borrow
 		// the agent owner after membership is gone.
 		if ap.roomID == roomID && (ap.agentOwner == ownerDeviceID || ap.operator == ownerDeviceID) {
 			delete(r.approvals, key)
+		}
+	}
+	prefix := roomID + "\x00"
+	for key, borrower := range r.commandBorrowers {
+		if strings.HasPrefix(key, prefix) && borrower == ownerDeviceID {
+			delete(r.commandBorrowers, key)
 		}
 	}
 	for key := range r.commandBorrowers {

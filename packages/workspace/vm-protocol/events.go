@@ -5,6 +5,16 @@ import "encoding/json"
 // EventTopic identifies a room realtime event carried on the business
 // WebSocket. Topics are the schema-first contract between the server and all
 // room clients.
+//
+// Boundary note: packages/events owns the repository's cross-product
+// BUSINESS event catalog (account/agent/workspace…, versioned directions,
+// TS-generated validators). These room topics are the ORDERED TRANSPORT
+// protocol of a live collaboration room — sequenced, deduplicated, and
+// resynchronized with the workspace snapshot stream — and are owned here
+// deliberately: folding them into the business catalog requires a new
+// "room" scope and a wire rename across every server and client in the
+// same cutover. Payload types below are the schema contract for this
+// transport; do not add topics outside this file.
 type EventTopic string
 
 const (

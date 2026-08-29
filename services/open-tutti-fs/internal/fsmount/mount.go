@@ -453,8 +453,11 @@ func (f *fileNode) Write(ctx context.Context, fh fs.FileHandle, data []byte, off
 	// Preflight BEFORE any allocation: the roomfs protocol caps a body
 	// at MaxBodyBytes, and growing the buffer past it would OOM the
 	// mount (taking the whole workspace offline) before the write path
-	// could ever return EFBIG.
-	if off < 0 || off+int64(len(data)) > int64(roomfs.MaxBodyBytes) {
+	// could ever return EFBIG. The OFFSET is compared against the cap
+	// first and the end derived by SUBTRACTION: near MaxInt64 the
+	// addition wraps negative, slips past the check, and the later
+	// buffer slice with the wrapped offset panics the FUSE process.
+	if off < 0 || off > int64(roomfs.MaxBodyBytes) || int64(roomfs.MaxBodyBytes)-off < int64(len(data)) {
 		return 0, syscall.EFBIG
 	}
 	f.mu.Lock()
