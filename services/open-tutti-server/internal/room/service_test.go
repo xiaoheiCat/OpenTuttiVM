@@ -231,32 +231,36 @@ func TestOwnerGracePeriodAutoTransfer(t *testing.T) {
 		t.Fatalf("owner changed inside grace window: %s", room.OwnerDeviceID)
 	}
 
-	// After the grace period NO successor is promoted yet: succession
-	// requires a FULL replica (owner-survival), and every online member
-	// still reports the default lazy policy. The room waits.
+	// After the grace period a lazy-only room still promotes its
+	// longest-connected online member: waiting is an unrecoverable
+	// limbo because prepare/transfer is owner-gated and the absent
+	// owner can never authorize one. The successor is recorded with
+	// the full policy; its room-sync materializes on the IsOwner
+	// event.
 	clock.Advance(6 * time.Minute)
 	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
 		t.Fatal(err)
 	}
 	room, _ = svc.repo.GetRoom(ctx, created.RoomID)
-	if room.OwnerDeviceID != "dev_owner" {
-		t.Fatalf("lazy-only room promoted a successor: %s", room.OwnerDeviceID)
+	if room.OwnerDeviceID != "dev_bob" {
+		t.Fatalf("lazy-only room left leaderless or promoted %s, want dev_bob", room.OwnerDeviceID)
 	}
-
-	// The longest-connected FULL participant (bob) inherits — not the
-	// earliest joiner, and never a lazy replica.
-	if err := svc.ReportReplicaPolicy(ctx, created.RoomID, "dev_bob", "full"); err != nil {
+	bob, err := svc.repo.GetMembership(ctx, created.RoomID, "dev_bob")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.ReportReplicaPolicy(ctx, created.RoomID, "dev_carol", "full"); err != nil {
-		t.Fatal(err)
+	if bob.ReplicaPolicy != "full" {
+		t.Fatalf("successor policy = %s, want full", bob.ReplicaPolicy)
 	}
+	// The promoted owner stays owner while it remains online: a later
+	// full-replica report by another member does not depose a live
+	// successor mid-meeting.
 	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
 		t.Fatal(err)
 	}
 	room, _ = svc.repo.GetRoom(ctx, created.RoomID)
 	if room.OwnerDeviceID != "dev_bob" {
-		t.Fatalf("owner = %s want dev_bob", room.OwnerDeviceID)
+		t.Fatalf("live successor deposed: owner = %s want dev_bob", room.OwnerDeviceID)
 	}
 }
 

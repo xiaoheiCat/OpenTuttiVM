@@ -305,20 +305,40 @@ func (h *Handler) Remove(path string) error {
 	op := vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: path, Kind: vmprotocol.OpRemove,
 	}
-	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
+	return h.submitObserved(op, func(state *vmsync.WorkspaceState) {
 		if info, ok := state.EntryInfo(path); ok && info.IsDir {
 			op.IsDir = true
 		}
 	})
-	return h.submit(op)
 }
 
 // Rename implements roomfs.Handler.
 func (h *Handler) Rename(from, to string, noReplace bool) error {
-	return h.submit(vmprotocol.FileOperation{
+	op := vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: from, Kind: vmprotocol.OpRename,
 		Rename: &vmprotocol.Rename{OldPath: from, NewPath: to, NoReplace: noReplace},
+	}
+	return h.submitObserved(op, func(state *vmsync.WorkspaceState) {
+		if info, ok := state.EntryInfo(from); ok && info.IsDir {
+			op.IsDir = true
+		}
 	})
+}
+
+// submitObserved binds the operation's base sequence to its state
+// observation: the callback and the AppliedSeq read run in ONE manager
+// critical section (the server-op apply path holds the same mutex), so
+// a remote remove+recreate landing after the observation always
+// sequences ABOVE the stamped base — the server-side generation fence
+// then rejects the stale removal/rename instead of deleting the
+// replacement generation it never saw.
+func (h *Handler) submitObserved(op vmprotocol.FileOperation, observe func(state *vmsync.WorkspaceState)) error {
+	var baseSeq uint64
+	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
+		observe(state)
+		baseSeq = h.mgr.Replica.AppliedSeq
+	})
+	return h.submitAtSeq(op, baseSeq)
 }
 
 // Chmod submits a permission-bit change to the authoritative workspace:

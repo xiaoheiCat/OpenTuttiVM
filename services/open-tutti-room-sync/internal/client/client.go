@@ -44,9 +44,19 @@ type Client struct {
 	roomID string
 }
 
-// New creates a client.
+// New creates a client. Every request carries a finite bound: several
+// filesystem-critical paths deliberately use context.Background() (lazy
+// CAS reads/uploads, route lookups), so a server that accepts the
+// connection but never answers would otherwise hang a FUSE read or
+// flush forever — a zero-timeout client has no such backstop.
 func New(server Server, deviceID string) *Client {
-	return &Client{server: server, http: &http.Client{}, deviceID: deviceID}
+	return &Client{server: server, http: &http.Client{
+		Timeout: 60 * time.Second,
+		Transport: &http.Transport{
+			ResponseHeaderTimeout: 30 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+		},
+	}, deviceID: deviceID}
 }
 
 // AdoptToken installs a session token minted by an earlier join (the

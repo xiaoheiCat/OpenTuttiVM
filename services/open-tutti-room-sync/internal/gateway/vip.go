@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"net"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -73,19 +74,24 @@ func probeSharedAddr() net.IP {
 		if runtime.GOOS != "linux" {
 			return
 		}
+		// INSIDE a container the shared address must be this
+		// namespace's own eth0 (sibling agent/session containers reach
+		// it; loopback would point at each container itself). On a
+		// NATIVE host, only an identified docker*/br-* bridge qualifies
+		// — the first private address there is routinely Wi-Fi/Ethernet,
+		// and binding unauthenticated session listeners to it would
+		// expose them to the whole LAN.
+		inContainer := runningInContainer()
 		ifaces, err := net.Interfaces()
 		if err != nil {
 			return
 		}
 		for _, ifc := range ifaces {
-			// Only an IDENTIFIED container bridge qualifies: the first
-			// private address on a native or multi-homed host is
-			// routinely Wi-Fi/Ethernet, and binding room routes there
-			// publishes unauthenticated session listeners to the whole
-			// LAN. Native hosts (no docker*/br-* interface) fall back
-			// to loopback — in-room proxying keeps working, and only
-			// cross-machine exposure shrinks.
-			if !strings.HasPrefix(ifc.Name, "docker") && !strings.HasPrefix(ifc.Name, "br-") {
+			if inContainer {
+				if ifc.Name != "eth0" {
+					continue
+				}
+			} else if !strings.HasPrefix(ifc.Name, "docker") && !strings.HasPrefix(ifc.Name, "br-") {
 				continue
 			}
 			addrs, err := ifc.Addrs()
@@ -138,6 +144,23 @@ func (a *VIPAllocator) Probe() {
 		ln.Close()
 		a.freebindOK = true
 	})
+}
+
+// runningInContainer reports whether this process shares a container
+// namespace (the standard no-NET_ADMIN deployment): /.dockerenv or a
+// container runtime marker in PID 1's cgroup.
+func runningInContainer() bool {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	if data, err := os.ReadFile("/proc/1/cgroup"); err == nil {
+		for _, marker := range []string{"docker", "containerd", "kubepods"} {
+			if strings.Contains(string(data), marker) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // dialable reports whether the listener's freebound address actually

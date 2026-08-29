@@ -916,17 +916,19 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 			full = append(full, m)
 		}
 	}
-	if len(full) == 0 {
-		// Members learn the room is leaderless: an explicit transfer
-		// (with its readiness phase) is the way out until someone
-		// reports a full replica.
-		s.broadcast(roomID, vmprotocol.Event{
-			Topic: vmprotocol.TopicOwnerLost, RoomID: roomID,
-			Payload: []byte(`{"reason":"owner lost; full-replica successor required"}`),
-		})
-		return false, nil
+	if len(full) > 0 {
+		online = full
 	}
-	online = full
+	// With NO full replica online, waiting is NOT safe: prepare is
+	// owner-gated (the absent owner can never authorize a transfer),
+	// so a lazy-only room would sit leaderless forever — nobody could
+	// transfer, disband, or administer it. Promote the longest
+	// connected ONLINE member and persist its policy as full in the
+	// same succession step: the promoted member's room-sync watches
+	// for its IsOwner presence event and materializes every blob
+	// (PromoteToFull) before reporting readiness. Until that finishes
+	// the authoritative copy lives in server CAS — the same state any
+	// lazy member already runs in, and strictly better than limbo.
 	// Longest continuous presence wins: earliest ConnectedAt of the current
 	// presence session, not the earliest join.
 	sort.Slice(online, func(i, j int) bool {
@@ -939,10 +941,20 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 		}
 		return a.Before(*b)
 	})
-	room.OwnerDeviceID = online[0].DeviceID
+	successor := online[0].DeviceID
+	room.OwnerDeviceID = successor
 	room.PendingTransferToDevice = ""
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
 		return false, err
+	}
+	if online[0].ReplicaPolicy != "full" {
+		// The promoted successor may be policy-lazy: record full so
+		// restarts and later successions treat it as the owner
+		// contract requires (its own room-sync reports full again
+		// after materializing).
+		if err := s.repo.UpdateMembershipPolicy(ctx, roomID, successor, "full"); err != nil {
+			return false, err
+		}
 	}
 	s.broadcast(roomID, vmprotocol.Event{
 		Topic: vmprotocol.TopicPresence, RoomID: roomID,
