@@ -475,10 +475,23 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 				continue
 			}
 			p := *msg.ApprovalRequest
-			// Bounded identifiers: the socket accepts ~49 MiB frames,
-			// and unbounded unique approval ids would accumulate in the
-			// registry with no expiry sweep (DeadlineMS was decorative).
-			if len(p.ApprovalID) > 128 || len(p.AgentInstanceID) > 128 {
+			// Bounded identifiers AND payloads: the socket accepts
+			// ~49 MiB frames, unbounded unique approval ids accumulate
+			// in the registry with no expiry sweep, and giant
+			// prompt/provider/option text is marshaled and queued IN
+			// FULL to a slow operator (gigabytes parked in the 64-slot
+			// send queue before overflow closes it).
+			if len(p.ApprovalID) > 128 || len(p.AgentInstanceID) > 128 || len(p.CommandID) > 128 || len(p.Provider) > 64 {
+				continue
+			}
+			oversizedOpt := false
+			for _, opt := range p.Options {
+				if len(opt) > 256 {
+					oversizedOpt = true
+					break
+				}
+			}
+			if len(p.Prompt) > 64<<10 || len(p.Options) > 16 || oversizedOpt {
 				continue
 			}
 			// Only the agent's OWNER may open an approval: any

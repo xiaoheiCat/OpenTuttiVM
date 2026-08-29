@@ -136,6 +136,12 @@ func (r *Replica) Bootstrap(snap vmprotocol.WorkspaceSnapshot, ops []vmprotocol.
 // Submit records a locally authored operation as pending acknowledgement.
 func (r *Replica) Submit(operationID string) { r.pending[operationID] = true }
 
+// Reject removes a DEFINITIVELY dead operation from the pending set: a
+// server rejection (base conflict, barrier) never produces the
+// acknowledgement that is otherwise the only clearer, so conflict-heavy
+// processes accumulated operation IDs for their whole lifetime.
+func (r *Replica) Reject(operationID string) { delete(r.pending, operationID) }
+
 // PendingAcks lists operation IDs still awaiting acknowledgement.
 func (r *Replica) PendingAcks() []string {
 	out := make([]string, 0, len(r.pending))

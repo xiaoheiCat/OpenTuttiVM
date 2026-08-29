@@ -106,16 +106,28 @@ func (m *Manager) SubmitAndWait(ctx context.Context, env vmprotocol.Envelope, su
 		delete(m.waiters, env.OperationID)
 		if !keepPending {
 			delete(m.pendingEnvs, env.OperationID)
+			// Definite failure: the pending-ack ID dies with it (no
+			// acknowledgement is ever coming for a never-sent or
+			// rejected operation).
+			m.Replica.Reject(env.OperationID)
 		}
 		// keepPending: a timeout or ambiguous write means unknown fate,
 		// not rejection — the reconnect path may still reconcile it.
 		m.mu.Unlock()
 	}
 	if err := submit(); err != nil {
-		// Definite PRE-SEND failures (ErrNotSent) wrote nothing: keep
-		// pendingEnvs in that state and a caller retry would double-
-		// apply when resubmitPending replays the original ID.
-		drop(!errors.Is(err, ErrNotSent))
+		if errors.Is(err, ErrNotSent) {
+			// Definite PRE-SEND failure: nothing was written, no ack
+			// will ever arrive for this id, and replaying it from
+			// pendingEnvs would double-submit — drop all its pending
+			// state (including the replica's pending-ack entry).
+			drop(false)
+		} else {
+			// AMBIGUOUS transport failure: the envelope may have
+			// reached the server (resubmitPending reconciles with the
+			// server-side dedup), so pending state stays.
+			drop(true)
+		}
 		return err
 	}
 	timer := time.NewTimer(ackWaitTimeout)
@@ -141,6 +153,9 @@ func (m *Manager) NotifyRejected(operationID, reason string) {
 		delete(m.waiters, operationID)
 	}
 	delete(m.pendingEnvs, operationID)
+	// The operation's fate is known (rejected): clear the pending-ack
+	// ID too, or it lingered until process exit — an ack never comes.
+	m.Replica.Reject(operationID)
 }
 
 // PendingEnvelopes snapshots the operations still awaiting acknowledgement

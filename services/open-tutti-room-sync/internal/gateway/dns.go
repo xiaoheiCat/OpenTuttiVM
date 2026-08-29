@@ -17,12 +17,25 @@ import (
 // host OS resolver is untouched.
 type DNSServer struct {
 	vips *VIPAllocator
+	// known (optional) gates Assign to REGISTERED routes: without it
+	// every syntactically valid .tutti name permanently consumed a VIP
+	// allocation (the listener binds :1053 for every room session), so
+	// a flood of unique names grew the heap without bound and, in VIP
+	// mode, exhausted the ~40k address combinations — later LEGITIMATE
+	// routes then collided and failed to bind.
+	known func(host string) bool
 }
 
 // NewDNSServer wires the responder onto the process-wide VIP allocator so
 // DNS answers and listener bindings always agree.
 func NewDNSServer(vips *VIPAllocator) *DNSServer {
 	return &DNSServer{vips: vips}
+}
+
+// SetKnownHosts installs the registered-route gate (the proxy's live
+// bindings).
+func (s *DNSServer) SetKnownHosts(known func(host string) bool) {
+	s.known = known
 }
 
 // ListenAndServe binds the UDP socket and answers queries until it closes.
@@ -82,6 +95,10 @@ func (s *DNSServer) answer(msg []byte) []byte {
 	qType := binary.BigEndian.Uint16(msg[qEnd-4:])
 	host, err := vmprotocol.ParseTuttiHost(strings.ToLower(name))
 	if err != nil || qType != 1 {
+		return buildHeader(msg, qEnd, 0)
+	}
+	if s.known != nil && !s.known(host.String()) {
+		// Unregistered name: NODATA, no allocation retained.
 		return buildHeader(msg, qEnd, 0)
 	}
 	ip := s.vips.Assign(host)

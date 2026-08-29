@@ -257,6 +257,24 @@ func (p *Proxy) accept(addr string, ln net.Listener) {
 	}
 }
 
+// KnownHosts reports the .tutti hostnames with a live listener binding:
+// the DNS responder answers ONLY these (plus their shared-mode aliases)
+// so an unregistered name cannot permanently consume a VIP allocation.
+func (p *Proxy) KnownHosts() map[string]bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make(map[string]bool, len(p.listeners))
+	for _, b := range p.listeners {
+		if b.target != nil {
+			out[b.target.host] = true
+		}
+		for host := range b.shared {
+			out[host] = true
+		}
+	}
+	return out
+}
+
 // handle serves one virtual-address connection: optional TLS termination,
 // connect-time device-address resolution with the H5 selector on
 // ambiguity, then a tunnel pipe to the owning session. Shared-mode

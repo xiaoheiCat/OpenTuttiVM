@@ -3,7 +3,10 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
+	"encoding/pem"
 	"io"
 	"log/slog"
 	"net/http"
@@ -31,6 +34,16 @@ import (
 type testStack struct {
 	srv    *httptest.Server
 	client *http.Client
+}
+
+// testKeyPEM returns a real Ed25519 public-key PEM (device input
+// validation rejects unparseable keys).
+func testKeyPEM() string {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub}))
 }
 
 func newTestStack(t *testing.T) *testStack {
@@ -79,7 +92,7 @@ func (s *testStack) createRoom(t *testing.T, deviceID string) creatorResponse {
 	t.Helper()
 	body := map[string]any{
 		"device": map[string]string{
-			"id": deviceID, "display_name": "Anna", "hostname": "Annas-MacBook-Pro", "public_key": "pk1",
+			"id": deviceID, "display_name": "Anna", "hostname": "Annas-MacBook-Pro", "public_key": testKeyPEM(),
 		},
 	}
 	data, _ := json.Marshal(body)
@@ -159,7 +172,7 @@ func TestShareToJoinJourney(t *testing.T) {
 	res = stack.post(t, "/api/rooms/"+created.RoomID+"/join", map[string]any{
 		"ticket": ticketRes.Ticket,
 		"device": map[string]string{
-			"id": "dev_leo", "display_name": "Leo", "hostname": "Leos-PC", "public_key": "pk2",
+			"id": "dev_leo", "display_name": "Leo", "hostname": "Leos-PC", "public_key": testKeyPEM(),
 		},
 	}, &joinRes)
 	if res.StatusCode != http.StatusOK {
@@ -172,7 +185,7 @@ func TestShareToJoinJourney(t *testing.T) {
 	// Ticket reuse is refused.
 	res = stack.post(t, "/api/rooms/"+created.RoomID+"/join", map[string]any{
 		"ticket": ticketRes.Ticket,
-		"device": map[string]string{"id": "dev_x", "display_name": "X", "hostname": "x", "public_key": "pk3"},
+		"device": map[string]string{"id": "dev_x", "display_name": "X", "hostname": "x", "public_key": testKeyPEM()},
 	}, nil)
 	if res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("ticket reuse status %d", res.StatusCode)
@@ -390,7 +403,7 @@ func TestTransferEndpointsEnforceOwner(t *testing.T) {
 	var joinRes struct{ SessionToken string }
 	res := stack.post(t, "/api/rooms/"+created.RoomID+"/join", map[string]any{
 		"ticket": ticketRes.Ticket,
-		"device": map[string]string{"id": "dev_leo", "display_name": "Leo", "hostname": "Leos-PC", "public_key": "pk"},
+		"device": map[string]string{"id": "dev_leo", "display_name": "Leo", "hostname": "Leos-PC", "public_key": testKeyPEM()},
 	}, &joinRes)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("join %d", res.StatusCode)
@@ -454,7 +467,7 @@ func TestOwnerPrivilegesRevokeShareAndKick(t *testing.T) {
 	}
 	res := stack.post(t, "/api/rooms/"+created.RoomID+"/join", map[string]any{
 		"ticket": ticketRes.Ticket,
-		"device": map[string]string{"id": "dev_bob", "display_name": "Bob", "hostname": "bobs-pc", "public_key": "pk7"},
+		"device": map[string]string{"id": "dev_bob", "display_name": "Bob", "hostname": "bobs-pc", "public_key": testKeyPEM()},
 	}, &joinRes)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("bob join status %d", res.StatusCode)
@@ -577,7 +590,7 @@ func TestAgentBorrowingFlow(t *testing.T) {
 	}
 	res := stack.post(t, "/api/rooms/"+created.RoomID+"/join", map[string]any{
 		"ticket": ticketRes.Ticket,
-		"device": map[string]string{"id": "dev_bob", "display_name": "Bob", "hostname": "bobs-pc", "public_key": "pk9"},
+		"device": map[string]string{"id": "dev_bob", "display_name": "Bob", "hostname": "bobs-pc", "public_key": testKeyPEM()},
 	}, &joinRes)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("bob join status %d", res.StatusCode)

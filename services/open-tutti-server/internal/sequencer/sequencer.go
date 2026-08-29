@@ -212,28 +212,55 @@ func (m *Manager) validateBlobGraph(roomID, manifestHash string) error {
 	if len(manifest.Chunks) == 0 && manifest.Size != 0 {
 		return fmt.Errorf("manifest %s declares %d bytes but has no chunks", manifestHash, manifest.Size)
 	}
-	var total int64
-	for i, chunk := range manifest.Chunks {
+	// Expansion caps BEFORE any I/O: a hostile manifest repeating one
+	// referenced chunk tens of thousands of times would drive a CAS
+	// read per occurrence while Submit holds the process-global mutex
+	// (hundreds of GiB of I/O stalling every room), and an accepted
+	// over-sized logical file would OOM full replicas at materialize.
+	if manifest.Size < 0 || manifest.Size > vmcas.MaxBlobFileSize {
+		return fmt.Errorf("manifest %s declares %d bytes, over the %d-byte cap", manifestHash, manifest.Size, vmcas.MaxBlobFileSize)
+	}
+	if len(manifest.Chunks) > vmcas.MaxManifestChunks {
+		return fmt.Errorf("manifest %s references %d chunks, over the %d cap", manifestHash, len(manifest.Chunks), vmcas.MaxManifestChunks)
+	}
+	// Each UNIQUE chunk is validated once: a chunk hash fixes the
+	// bytes (content-addressed), so repeated references reuse the
+	// cached length — duplicate-heavy manifests cost list-length work,
+	// not per-occurrence CAS reads.
+	lengths := make(map[string]int, len(manifest.Chunks))
+	chunkLen := func(chunk string) (int, error) {
+		if n, ok := lengths[chunk]; ok {
+			return n, nil
+		}
 		if ok, err := m.repo.HasCASRef(context.Background(), roomID, chunk); err != nil {
-			return err
+			return 0, err
 		} else if !ok {
-			return fmt.Errorf("chunk %s of %s not referenced by this room", chunk, manifestHash)
+			return 0, fmt.Errorf("chunk %s of %s not referenced by this room", chunk, manifestHash)
 		}
 		body, err := m.cas.Get(chunk)
 		if err != nil {
-			return fmt.Errorf("chunk %s of %s not in CAS: %w", chunk, manifestHash, err)
+			return 0, fmt.Errorf("chunk %s of %s not in CAS: %w", chunk, manifestHash, err)
+		}
+		lengths[chunk] = len(body)
+		return len(body), nil
+	}
+	var total int64
+	for i, chunk := range manifest.Chunks {
+		n, err := chunkLen(chunk)
+		if err != nil {
+			return err
 		}
 		// Fixed-chunk invariant: every chunk but the last is exactly
 		// ChunkSize; a shorter interior chunk means Materialize would
 		// yield bytes that never match the declared size.
-		if i < len(manifest.Chunks)-1 && len(body) != vmcas.ChunkSize {
+		if i < len(manifest.Chunks)-1 && n != vmcas.ChunkSize {
 			return fmt.Errorf("interior chunk %d of %s is %d bytes, want %d",
-				i, manifestHash, len(body), vmcas.ChunkSize)
+				i, manifestHash, n, vmcas.ChunkSize)
 		}
-		if len(body) > vmcas.ChunkSize {
-			return fmt.Errorf("chunk %d of %s exceeds %d bytes", i, manifestHash, vmcas.ChunkSize)
+		if n > vmcas.ChunkSize {
+			return fmt.Errorf("chunk %d of %s is %d bytes, over %d", i, manifestHash, n, vmcas.ChunkSize)
 		}
-		total += int64(len(body))
+		total += int64(n)
 	}
 	if total != manifest.Size {
 		return fmt.Errorf("manifest %s declares %d bytes but chunks total %d",

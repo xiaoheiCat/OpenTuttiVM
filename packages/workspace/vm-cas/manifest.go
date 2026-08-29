@@ -20,6 +20,17 @@ import (
 // file may be shorter.
 const ChunkSize = 4 * 1024 * 1024
 
+// MaxManifestChunks bounds one manifest's chunk references. Framed
+// write bodies are capped at 256 MiB (= 64 chunks), so a longer chunk
+// list is hostile graph expansion — the same 4 MiB chunk repeated tens
+// of thousands of times would otherwise drive unbounded validation
+// I/O under the sequencer lock and an unmaterializable logical file.
+const MaxManifestChunks = 64
+
+// MaxBlobFileSize is the largest file a manifest may declare
+// (ChunkSize × MaxManifestChunks).
+const MaxBlobFileSize = ChunkSize * MaxManifestChunks
+
 // Manifest describes one file's content as an ordered list of chunk hashes.
 // The manifest's own identity is Hash = SHA-256 of the canonical JSON body
 // with Hash omitted.

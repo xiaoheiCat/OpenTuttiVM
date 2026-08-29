@@ -2,6 +2,9 @@ package room
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"errors"
 	"strings"
 	"sync"
@@ -50,11 +53,21 @@ func newTestService(t *testing.T, invite string) (*Service, *manualClock) {
 }
 
 func ownerDevice(id string) DeviceInput {
-	return DeviceInput{ID: id, DisplayName: "Anna", Hostname: "Annas-MacBook-Pro", PublicKey: "pk-" + id}
+	return DeviceInput{ID: id, DisplayName: "Anna", Hostname: "Annas-MacBook-Pro", PublicKey: testKeyPEM()}
+}
+
+// testKeyPEM returns a real Ed25519 public-key PEM: device input
+// validation rejects anything unparseable (fail closed).
+func testKeyPEM() string {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub}))
 }
 
 func memberDevice(id string) DeviceInput {
-	return DeviceInput{ID: id, DisplayName: id, Hostname: id + "-host", PublicKey: "pk-" + id}
+	return DeviceInput{ID: id, DisplayName: id, Hostname: id + "-host", PublicKey: testKeyPEM()}
 }
 
 func createRoom(t *testing.T, svc *Service, invite string) CreatedRoom {
@@ -142,17 +155,17 @@ func TestOwnerLeaveRules(t *testing.T) {
 	ctx := context.Background()
 
 	// Owner cannot leave before applying the final workspace state.
-	err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner", WorkspaceApplied: false})
+	_, _, err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner", WorkspaceApplied: false})
 	if !errors.Is(err, ErrOwnerMustApply) {
 		t.Fatalf("expected ErrOwnerMustApply, got %v", err)
 	}
 	// Applied but neither disband nor transfer.
-	err = svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner", WorkspaceApplied: true})
+	_, _, err = svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner", WorkspaceApplied: true})
 	if !errors.Is(err, ErrOwnerMustDisbandOrTransfer) {
 		t.Fatalf("expected ErrOwnerMustDisbandOrTransfer, got %v", err)
 	}
 	// Disband after apply works and ends the room.
-	if err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner", WorkspaceApplied: true, Disband: true}); err != nil {
+	if _, _, err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner", WorkspaceApplied: true, Disband: true}); err != nil {
 		t.Fatalf("disband: %v", err)
 	}
 	room, err := svc.repo.GetRoom(ctx, created.RoomID)
@@ -175,7 +188,7 @@ func TestLastParticipantLeaveDissolvesRoom(t *testing.T) {
 	ctx := context.Background()
 
 	// Participant leaves first — room continues for the owner.
-	if err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_bob"}); err != nil {
+	if _, _, err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_bob"}); err != nil {
 		t.Fatalf("participant leave: %v", err)
 	}
 	room, _ := svc.repo.GetRoom(ctx, created.RoomID)
@@ -183,7 +196,7 @@ func TestLastParticipantLeaveDissolvesRoom(t *testing.T) {
 		t.Fatal("room dissolved too early")
 	}
 	// Owner applies, disbands: last member out ends the meeting.
-	if err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner", WorkspaceApplied: true, Disband: true}); err != nil {
+	if _, _, err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner", WorkspaceApplied: true, Disband: true}); err != nil {
 		t.Fatal(err)
 	}
 	room, _ = svc.repo.GetRoom(ctx, created.RoomID)
@@ -318,7 +331,7 @@ func TestOwnershipTransferThreePhases(t *testing.T) {
 		t.Fatalf("owner = %s pending = %s", room.OwnerDeviceID, room.PendingTransferToDevice)
 	}
 	// The old owner is now a plain participant and can leave freely.
-	if err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner"}); err != nil {
+	if _, _, err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner"}); err != nil {
 		t.Fatalf("old owner leave after transfer: %v", err)
 	}
 	// Non-owners cannot drive transfer endpoints.
@@ -344,7 +357,7 @@ func TestSessionTokenValidation(t *testing.T) {
 		t.Fatal("garbage token accepted")
 	}
 	// Leaving invalidates the session token.
-	if err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_bob"}); err != nil {
+	if _, _, err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_bob"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := svc.ValidateSessionToken(ctx, token); err == nil {

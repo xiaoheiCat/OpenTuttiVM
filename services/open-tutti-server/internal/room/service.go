@@ -5,6 +5,7 @@ package room
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -12,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"sort"
@@ -640,19 +642,24 @@ type LeaveInput struct {
 	WorkspaceBaseSeq uint64 `json:"workspace_base_seq"`
 }
 
-// Leave removes a participant, or ends/transfers ownership for the owner.
-func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
+// Leave removes a participant, or ends/transfers ownership for the
+// owner. The returned `left` reports that the membership deletion (or
+// the whole-room dissolution) COMMITTED: transport teardown must run
+// for a committed leave even when a follow-up step failed on a canceled
+// context, or the departed device keeps its tunnel and socket after
+// revocation. `dissolved` reports the room itself ended.
+func (s *Service) Leave(ctx context.Context, in LeaveInput) (dissolved, left bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	room, _, err := s.authorizeMember(ctx, in.RoomID, in.DeviceID)
 	if err != nil {
-		return err
+		return false, false, err
 	}
 
 	if room.OwnerDeviceID == in.DeviceID {
 		if !in.WorkspaceApplied {
-			return ErrOwnerMustApply
+			return false, false, ErrOwnerMustApply
 		}
 		if in.Disband {
 			// Apply-and-Leave fence (atomic with sequencing), ONLY on
@@ -663,7 +670,7 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 			// or the room stays sequencer-dead while active.
 			if s.leaveFence != nil {
 				if err := s.leaveFence(in.RoomID, in.WorkspaceBaseSeq); err != nil {
-					return ErrWorkspaceStale
+					return false, false, ErrWorkspaceStale
 				}
 			}
 			// Dissolve FIRST, membership deletion second: if dissolution
@@ -683,7 +690,7 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 				if s.leaveUnfence != nil {
 					s.leaveUnfence(in.RoomID)
 				}
-				return err
+				return false, false, err
 			}
 			// DissolveRoomFenced already deleted EVERY membership of
 			// the room inside its fence; a guarded delete here would
@@ -691,21 +698,21 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 			// committed dissolution into a 409 — skipping the terminal
 			// teardown (sequencer, sockets, tunnels, routes, borrows)
 			// of an already-terminal room.
-			return nil
+			return true, true, nil
 		}
 		// Without disband, the owner may only leave after a completed
 		// transfer moved ownership away.
 		fresh, err := s.repo.GetRoom(ctx, in.RoomID)
 		if err != nil {
-			return err
+			return false, false, err
 		}
 		if fresh.OwnerDeviceID == in.DeviceID {
-			return ErrOwnerMustDisbandOrTransfer
+			return false, false, ErrOwnerMustDisbandOrTransfer
 		}
 	}
 
 	if err := s.deleteMembershipGuarded(ctx, in.RoomID, in.DeviceID); err != nil {
-		return err
+		return false, false, err
 	}
 	// Same barrier cleanup as kick: a leaving participant's barriers
 	// must not keep fencing their paths after the resolver can no
@@ -722,12 +729,19 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 	// The meeting ends when the last member leaves.
 	members, err := s.repo.ListMemberships(ctx, in.RoomID)
 	if err != nil {
-		return err
+		// The deletion COMMITTED: report left=true so the transport
+		// teardown runs even though this follow-up read failed (a
+		// canceled context used to skip DropDevice and leave the
+		// departed device's tunnel and socket alive).
+		return false, true, err
 	}
 	if len(members) == 0 {
-		return s.dissolveLocked(ctx, in.RoomID)
+		if dErr := s.dissolveLocked(ctx, in.RoomID); dErr != nil {
+			return false, true, dErr
+		}
+		return true, true, nil
 	}
-	return nil
+	return false, true, nil
 }
 
 // PrepareTransfer opens phase 1 of the ownership transfer: the room records
@@ -1076,6 +1090,19 @@ func validateDevice(in *DeviceInput) error {
 	// a dot inside a device id would mint a token neither the server
 	// nor Client.AdoptToken can ever parse — reject the id BEFORE any
 	// state persists (room creation and join both pass through here).
+	// Bounded persisted metadata: on the default deployment (no invite
+	// code configured) room creation is unauthenticated, and the API
+	// accepts requests up to 4 MiB — unbounded display names, hostnames,
+	// and public keys would persist multi-megabyte values into SQLite
+	// with every hostile room. The public key must also be a parseable
+	// Ed25519 PEM: proof verification would reject it later anyway, and
+	// rejecting here avoids persisting junk at all.
+	if len(in.DisplayName) > 128 || len(in.Hostname) > 64 || len(in.PublicKey) > 512 {
+		return errors.New("device display name, hostname, or public key over limit")
+	}
+	if block, _ := pem.Decode([]byte(in.PublicKey)); block == nil || len(block.Bytes) != ed25519.PublicKeySize {
+		return errors.New("device public key must be an Ed25519 PEM block")
+	}
 	if !validDeviceID(in.ID) {
 		return errors.New("device id must be 1-64 characters of letters, digits, underscores, or hyphens")
 	}

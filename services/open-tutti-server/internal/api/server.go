@@ -4,7 +4,6 @@
 package api
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/coder/websocket"
 	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
@@ -205,11 +203,25 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	err := s.rooms.Leave(r.Context(), room.LeaveInput{
+	dissolved, left, err := s.rooms.Leave(r.Context(), room.LeaveInput{
 		RoomID: roomID, DeviceID: deviceID,
 		WorkspaceApplied: req.WorkspaceApplied, Disband: req.Disband,
 		WorkspaceBaseSeq: req.WorkspaceBaseSeq,
 	})
+	// A COMMITTED leave tears down the leaver's transports even when a
+	// follow-up step failed (canceled context, transient I/O): the
+	// membership is gone, so an already-authenticated socket or
+	// registered tunnel must not survive revocation.
+	if left {
+		s.hub.DropDevice(roomID, deviceID)
+		s.relay.DropDevice(roomID, deviceID)
+		s.previews.DropDevice(roomID, deviceID)
+		for _, revoked := range s.borrows.DropDevice(roomID, deviceID) {
+			s.hub.BroadcastRoom(roomID, vmprotocol.Event{
+				Topic: borrowagent.TopicBorrowRevoked, RoomID: roomID, Payload: mustJSON(revoked),
+			})
+		}
+	}
 	if err != nil {
 		status := http.StatusConflict
 		if errors.Is(err, store.ErrNotFound) {
@@ -219,26 +231,13 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 		return
 	}
 	// Only a dissolved room tears down engine state; a participant
-	// leaving while the room lives must not reset the workspace — but
-	// the LEAVER's own live transports must die either way, or an
-	// already-authenticated business socket keeps submitting operations
-	// with no remaining membership and its tunnel/routes stay usable.
-	//
-	// The disband decision comes from the REQUEST, not a post-hoc
-	// GetRoom on the (possibly canceled) request context: a client
-	// disconnect right after the dissolution commits previously sent
-	// this branch into the participant-only path, and the terminal
-	// room's sockets, routes, and tunnels survived indefinitely.
-	// Authoritative lookup on a NON-CANCELED context (a client
-	// disconnect must not steer teardown): the request's own disband
-	// flag is untrusted — a non-owner's Leave ignores it, and treating
-	// the flag as terminal would close the sequencer and drop every
-	// transport for a room that is still active.
-	roomCtx, roomCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
-	room, roomErr := s.rooms.GetRoom(roomCtx, roomID)
-	roomCancel()
-	roomDissolved := roomErr == nil && room.DissolvedAt != nil
-	if roomDissolved {
+	// leaving while the room lives must not reset the workspace. The
+	// terminal outcome comes from the lifecycle operation ITSELF (a
+	// committed dissolution is returned directly) — the old post-hoc
+	// GetRoom inference failed on a canceled context or transient read,
+	// and the grace loop never revisits a dissolved room, so its
+	// sockets, tunnels, registries, and sequencer leaked indefinitely.
+	if dissolved {
 		s.seq.CloseRoom(roomID)
 		s.previews.ClearRoom(roomID)
 		s.borrows.ClearRoom(roomID)
@@ -246,19 +245,6 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 		// tunnel so nothing sequences past the room's end.
 		s.hub.DropRoom(roomID)
 		s.relay.DropRoom(roomID)
-	} else {
-		s.hub.DropDevice(roomID, deviceID)
-		s.relay.DropDevice(roomID, deviceID)
-		s.previews.DropDevice(roomID, deviceID)
-		// Same borrow teardown as the kick path: the leaver's shared
-		// agents die with their owner and remaining members learn via
-		// revocations — leases and approvals must not outlive the owner
-		// while the room continues.
-		for _, revoked := range s.borrows.DropDevice(roomID, deviceID) {
-			s.hub.BroadcastRoom(roomID, vmprotocol.Event{
-				Topic: borrowagent.TopicBorrowRevoked, RoomID: roomID, Payload: mustJSON(revoked),
-			})
-		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "left"})
 }

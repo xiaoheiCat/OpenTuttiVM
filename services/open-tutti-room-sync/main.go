@@ -200,7 +200,15 @@ func run() error {
 	if dnsAddr == "" {
 		dnsAddr = ":1053"
 	}
+	var proxy *gateway.Proxy
 	dns := gateway.NewDNSServer(vips)
+	// DNS answers only names with a live route binding (see
+	// DNSServer.SetKnownHosts): unregistered queries get NODATA
+	// instead of permanently consuming a VIP allocation. The closure
+	// captures the proxy variable, assigned below before Serve starts.
+	dns.SetKnownHosts(func(host string) bool {
+		return proxy != nil && proxy.KnownHosts()[host]
+	})
 	// Bind SYNCHRONOUSLY: session containers resolve .tutti names
 	// through this socket, and a background bind failure previously
 	// left "room-sync ready" printed with every virtual-network lookup
@@ -223,7 +231,7 @@ func run() error {
 	// Cross-device streams ride the yamux tunnel; the .tutti proxy binds a
 	// synthetic-VIP listener per live room route, TLS-terminates with the
 	// room CA, and pipes through the relay.
-	proxy := gateway.NewProxy(vips, tunnelRef, c, c, ca, c.RoomID(), deviceID,
+	proxy = gateway.NewProxy(vips, tunnelRef, c, c, ca, c.RoomID(), deviceID,
 		slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	defer proxy.Close()
 
