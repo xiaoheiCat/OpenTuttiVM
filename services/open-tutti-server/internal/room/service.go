@@ -497,6 +497,12 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 		if !VerifyDeviceProof(existing.PublicKeyPEM, ticket, device.Proof) {
 			return "", "", errors.New("device identity proof failed")
 		}
+		// Collision admission must check the HOSTNAME THE SERVER KEEPS:
+		// enrollment preserves the enrolled hostname, and WS routing
+		// derives from that persisted value — checking the request's
+		// hostname would let a conflicting identity pass and later
+		// advertise duplicate canonical .tutti hosts.
+		device.Hostname = existing.Hostname
 		// The claimed key must be the enrolled key; a new key cannot ride
 		// an existing device id.
 		device.PublicKey = existing.PublicKeyPEM

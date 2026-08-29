@@ -160,9 +160,34 @@ func (s *LocalStore) Put(hash string, content []byte) error {
 		return err
 	}
 	if err := os.Rename(tmp.Name(), p); err != nil {
+		// Windows cannot rename over an existing destination: two
+		// callers storing the same hash can both pass the initial Has
+		// check, and the loser's rename now fails on the winner's
+		// commit. The Store contract makes repeated identical writes a
+		// no-op — if the destination appeared (identical content by
+		// construction), verify and succeed.
+		if verifyChunk(p, hash) {
+			os.Remove(tmp.Name()) // best-effort cleanup of our temp
+			return nil
+		}
 		return fmt.Errorf("commit chunk: %w", err)
 	}
 	return nil
+}
+
+// verifyChunk reports whether an existing chunk file holds exactly the
+// expected bytes.
+func verifyChunk(path, hash string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return false
+	}
+	return "sha256:"+hex.EncodeToString(h.Sum(nil)) == hash
 }
 
 func (s *LocalStore) Get(hash string) ([]byte, error) {

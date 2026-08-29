@@ -26,11 +26,18 @@ func NewDNSServer(vips *VIPAllocator) *DNSServer {
 }
 
 // ListenAndServe binds the UDP socket and answers queries until it closes.
-func (s *DNSServer) ListenAndServe(addr string) error {
+// Bind opens the UDP socket so callers FAIL STARTUP on an occupied or
+// forbidden address instead of logging from a goroutine and reporting
+// readiness with a broken resolver.
+func (s *DNSServer) Bind(addr string) (net.PacketConn, error) {
 	pc, err := net.ListenPacket("udp", addr)
 	if err != nil {
-		return fmt.Errorf("tutti dns listen %s: %w", addr, err)
+		return nil, fmt.Errorf("tutti dns listen %s: %w", addr, err)
 	}
+	return pc, nil
+}
+
+func (s *DNSServer) Serve(pc net.PacketConn) error {
 	defer pc.Close()
 	buf := make([]byte, 1500)
 	for {
@@ -42,6 +49,16 @@ func (s *DNSServer) ListenAndServe(addr string) error {
 		copy(msg, buf[:n])
 		go s.respond(pc, from, msg)
 	}
+}
+
+// ListenAndServe binds and serves (kept for callers that manage their
+// own failure handling).
+func (s *DNSServer) ListenAndServe(addr string) error {
+	pc, err := s.Bind(addr)
+	if err != nil {
+		return err
+	}
+	return s.Serve(pc)
 }
 
 func (s *DNSServer) respond(pc net.PacketConn, from net.Addr, msg []byte) {

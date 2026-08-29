@@ -144,11 +144,18 @@ func (c *Client) Stat(path string) (*Stat, error) {
 
 // Read returns one file's content.
 func (c *Client) Read(path string) ([]byte, error) {
+	content, _, err := c.ReadWithHash(path)
+	return content, err
+}
+
+// ReadWithHash also returns the content hash the read observed (flush
+// baselines for optimistic-concurrency writes).
+func (c *Client) ReadWithHash(path string) ([]byte, string, error) {
 	res, err := c.call(Request{Type: TypeRead, Path: path}, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return res.Body, nil
+	return res.Body, res.Hash, nil
 }
 
 // List returns one directory's children.
@@ -162,7 +169,7 @@ func (c *Client) List(path string) ([]DirEntry, error) {
 
 // Write submits a whole-file write; room-sync converts it into an
 // operation against its local replica.
-func (c *Client) Write(path string, content []byte) error {
+func (c *Client) Write(path string, content []byte, baseHash string) error {
 	// Preflight the protocol bound: sending an oversized frame would
 	// have the server reject the body length and close the stream,
 	// poisoning the mount's single shared connection for every later
@@ -170,7 +177,7 @@ func (c *Client) Write(path string, content []byte) error {
 	if uint64(len(content)) > MaxBodyBytes {
 		return fmt.Errorf("roomfs: write of %s exceeds protocol body limit (%d bytes)", path, MaxBodyBytes)
 	}
-	_, err := c.call(Request{Type: TypeWrite, Path: path}, content)
+	_, err := c.call(Request{Type: TypeWrite, Path: path, BaseHash: baseHash}, content)
 	return err
 }
 

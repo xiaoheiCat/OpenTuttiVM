@@ -349,6 +349,10 @@ func (w *WorkspaceState) record(env *vmprotocol.Envelope) {
 	}
 }
 
+// CurrentHash exposes a path's current content hash (exported for the
+// roomfs bridge's flush-baseline reporting).
+func (w *WorkspaceState) CurrentHash(path string) string { return w.currentHash(path) }
+
 func (w *WorkspaceState) currentHash(path string) string {
 	f := w.files[path]
 	if f == nil || f.IsDir {

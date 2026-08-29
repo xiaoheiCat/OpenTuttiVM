@@ -201,9 +201,17 @@ func run() error {
 		dnsAddr = ":1053"
 	}
 	dns := gateway.NewDNSServer(vips)
+	// Bind SYNCHRONOUSLY: session containers resolve .tutti names
+	// through this socket, and a background bind failure previously
+	// left "room-sync ready" printed with every virtual-network lookup
+	// broken.
+	dnsConn, err := dns.Bind(dnsAddr)
+	if err != nil {
+		return fmt.Errorf("dns: %w", err)
+	}
 	go func() {
-		if err := dns.ListenAndServe(dnsAddr); err != nil {
-			fmt.Fprintf(os.Stderr, "room-sync: dns %s: %v\n", dnsAddr, err)
+		if err := dns.Serve(dnsConn); err != nil {
+			fmt.Fprintf(os.Stderr, "room-sync: dns serve: %v\n", err)
 		}
 	}()
 
@@ -374,6 +382,14 @@ func run() error {
 						})
 						for _, p := range moved {
 							bridge.InvalidateRemote(p)
+						}
+						// Resolver duties follow the MOVED barriers: the
+						// authoritative fence now lives at the new prefix,
+						// and reconnect retries must not keep targeting
+						// the obsolete old path.
+						bridge.RekeyDuty(r.OldPath, r.NewPath)
+						for _, p := range moved {
+							bridge.RekeyDuty(r.OldPath+"/"+strings.TrimPrefix(p, r.NewPath+"/"), p)
 						}
 					}
 				}

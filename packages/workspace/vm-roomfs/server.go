@@ -132,6 +132,9 @@ func (s *Server) dispatch(req Request, body []byte) Response {
 			return errorResponse(req.ID, fmt.Errorf("roomfs: read of %s exceeds protocol body limit (%d bytes)", req.Path, MaxBodyBytes))
 		}
 		res.Body = content
+		if st, err := s.handler.Stat(req.Path); err == nil && st != nil {
+			res.Hash = st.Hash
+		}
 	case TypeList:
 		entries, err := s.handler.List(req.Path)
 		if err != nil {
@@ -139,6 +142,19 @@ func (s *Server) dispatch(req Request, body []byte) Response {
 		}
 		res.Entries = entries
 	case TypeWrite:
+		// Optimistic-concurrency guard: a flush carrying the hash of a
+		// superseded revision must fail HERE (EAGAIN upstream) instead
+		// of diffing stale bytes against current content and silently
+		// overwriting the other participant's accepted edit.
+		if req.BaseHash != "" {
+			st, err := s.handler.Stat(req.Path)
+			if err != nil {
+				return errorResponse(req.ID, err)
+			}
+			if st == nil || st.Hash != req.BaseHash {
+				return errorResponse(req.ID, fmt.Errorf("roomfs: stale base for %s; re-read and retry", req.Path))
+			}
+		}
 		if err := s.handler.Write(req.Path, body); err != nil {
 			return errorResponse(req.ID, err)
 		}

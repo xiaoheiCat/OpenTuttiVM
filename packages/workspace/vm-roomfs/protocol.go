@@ -24,22 +24,28 @@ type Request struct {
 	// To for renames; Mode for create/mkdir.
 	To   string `json:"to,omitempty"`
 	Mode uint32 `json:"mode,omitempty"`
+	// BaseHash guards "write": when set, the write is rejected unless
+	// the path's content hash still matches (a flush whose buffer was
+	// based on a superseded revision must EAGAIN, not overwrite).
+	BaseHash string `json:"base_hash,omitempty"`
 }
 
 // Response answers a request by id. Push responses (Push=true) carry
 // server notifications instead: Type "invalidate" with Path set.
 type Response struct {
-	ID      uint64          `json:"id"`
-	OK      bool            `json:"ok"`
-	Error   string          `json:"error,omitempty"`
-	Body    []byte          `json:"-"`
-	Entries []DirEntry      `json:"entries,omitempty"`
-	Stat    *Stat           `json:"stat,omitempty"`
-	Seq     uint64          `json:"seq,omitempty"`
-	Extra   json.RawMessage `json:"extra,omitempty"`
-	Push    bool            `json:"push,omitempty"`
-	Type    string          `json:"type,omitempty"`
-	Path    string          `json:"path,omitempty"`
+	ID      uint64     `json:"id"`
+	OK      bool       `json:"ok"`
+	Error   string     `json:"error,omitempty"`
+	Body    []byte     `json:"-"`
+	Entries []DirEntry `json:"entries,omitempty"`
+	Stat    *Stat      `json:"stat,omitempty"`
+	Seq     uint64     `json:"seq,omitempty"`
+	// Hash reports the read path's content hash (flush baselines).
+	Hash  string          `json:"hash,omitempty"`
+	Extra json.RawMessage `json:"extra,omitempty"`
+	Push  bool            `json:"push,omitempty"`
+	Type  string          `json:"type,omitempty"`
+	Path  string          `json:"path,omitempty"`
 }
 
 // DirEntry is one child of a directory listing.
@@ -54,6 +60,9 @@ type Stat struct {
 	Size   int64  `json:"size"`
 	Mode   uint32 `json:"mode"`
 	Exists bool   `json:"exists"`
+	// Hash is the file's current content hash (flush baselines and
+	// optimistic-concurrency writes).
+	Hash string `json:"hash,omitempty"`
 }
 
 // ServerPush notifies the mount of remote changes (correlated responses

@@ -371,6 +371,11 @@ type fileNode struct {
 	// unread file has no buffer, and Getattr must not report an empty
 	// file to tools that only stat it.
 	srvSize int64
+	// bufBase is the content hash the CURRENT buffer was loaded from
+	// (flush baselines): Flush submits it as the optimistic-concurrency
+	// guard so a buffer invalidated mid-edit by a remote change fails
+	// with EAGAIN instead of silently overwriting the newer revision.
+	bufBase string
 }
 
 // invalidate drops the cached content so the next read reloads the
@@ -405,11 +410,12 @@ func (f *fileNode) load() syscall.Errno {
 	if f.loaded {
 		return 0
 	}
-	content, err := f.client.Read(f.path)
+	content, base, err := f.client.ReadWithHash(f.path)
 	if err != nil {
 		return syscall.EIO
 	}
 	f.buffer = content
+	f.bufBase = base
 	f.loaded = true
 	return 0
 }
@@ -479,7 +485,7 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	if !dirty {
 		return 0
 	}
-	if err := f.client.Write(f.path, content); err != nil {
+	if err := f.client.Write(f.path, content, f.bufBase); err != nil {
 		// Room-level rejections (base mismatch, barrier fencing) map to
 		// EAGAIN so editors retry against the fresh revision.
 		return syscall.EAGAIN
@@ -547,12 +553,13 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 			// Standalone truncate(2) on an unopened node: load the
 			// authoritative content first — resizing an empty buffer
 			// would fabricate zeros or drop real bytes.
-			content, err := f.client.Read(f.path)
+			content, base, err := f.client.ReadWithHash(f.path)
 			if err != nil {
 				f.mu.Unlock()
 				return syscall.EIO
 			}
 			f.buffer = content
+			f.bufBase = base
 			f.loaded = true
 		}
 		if sz < 0 || uint64(sz) > roomfs.MaxBodyBytes {
@@ -577,7 +584,7 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		// submit the resize now or truncate(2) "succeeds" while the
 		// authoritative content never changes.
 		if fh == nil {
-			if err := f.client.Write(f.path, content); err != nil {
+			if err := f.client.Write(f.path, content, f.bufBase); err != nil {
 				return syscall.EAGAIN
 			}
 			f.mu.Lock()

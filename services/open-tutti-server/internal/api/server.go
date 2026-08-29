@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/coder/websocket"
 	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
@@ -221,7 +223,22 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 	// the LEAVER's own live transports must die either way, or an
 	// already-authenticated business socket keeps submitting operations
 	// with no remaining membership and its tunnel/routes stay usable.
-	if room, err := s.rooms.GetRoom(r.Context(), roomID); err == nil && room.DissolvedAt != nil {
+	//
+	// The disband decision comes from the REQUEST, not a post-hoc
+	// GetRoom on the (possibly canceled) request context: a client
+	// disconnect right after the dissolution commits previously sent
+	// this branch into the participant-only path, and the terminal
+	// room's sockets, routes, and tunnels survived indefinitely.
+	roomDissolved := false
+	if req.Disband {
+		roomDissolved = true
+	} else {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+		room, err := s.rooms.GetRoom(ctx, roomID)
+		cancel()
+		roomDissolved = err == nil && room.DissolvedAt != nil
+	}
+	if roomDissolved {
 		s.seq.CloseRoom(roomID)
 		s.previews.ClearRoom(roomID)
 		s.borrows.ClearRoom(roomID)

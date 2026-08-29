@@ -15,6 +15,8 @@ type EntryInfo struct {
 	Manifest string
 	// Materialized reports whether blob content is locally available.
 	Materialized bool
+	// Size is the authoritative content length (text or blob).
+	Size int64
 }
 
 // EntryInfo returns the live state of one path.
@@ -31,6 +33,7 @@ func (w *WorkspaceState) EntryInfo(path string) (EntryInfo, bool) {
 		Content:      f.Content,
 		Manifest:     f.Manifest,
 		Materialized: f.Materialized,
+		Size:         f.Size,
 	}, true
 }
 

@@ -221,7 +221,7 @@ func TestProtocolRoundTrip(t *testing.T) {
 	if err := c.Create("notes/todo.txt", 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Write("notes/todo.txt", []byte("buy milk")); err != nil {
+	if err := c.Write("notes/todo.txt", []byte("buy milk"), ""); err != nil {
 		t.Fatal(err)
 	}
 	back, _ := c.Read("notes/todo.txt")
@@ -253,7 +253,7 @@ func TestBinaryBodiesSurviveFraming(t *testing.T) {
 
 	// Bytes with zeros, high bytes, and invalid UTF-8.
 	blob := []byte{0x00, 0xff, 0xfe, 0x89, 'a', 0x00, 0x80}
-	if err := c.Write("bin/logo.png", blob); err != nil {
+	if err := c.Write("bin/logo.png", blob, ""); err != nil {
 		t.Fatal(err)
 	}
 	back, err := c.Read("bin/logo.png")
@@ -277,7 +277,7 @@ func TestRejectionSurfacesAsErrRejected(t *testing.T) {
 	}
 	defer c.Close()
 
-	if err := c.Write("guarded.txt", []byte("x")); err == nil || err.Error() == "" {
+	if err := c.Write("guarded.txt", []byte("x"), ""); err == nil || err.Error() == "" {
 		t.Fatalf("expected rejection error, got %v", err)
 	}
 }
@@ -301,7 +301,7 @@ func TestInvalidationPush(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer writer.Close()
-	if err := writer.Write("shared/plan.md", []byte("v2")); err != nil {
+	if err := writer.Write("shared/plan.md", []byte("v2"), ""); err != nil {
 		t.Fatal(err)
 	}
 	select {

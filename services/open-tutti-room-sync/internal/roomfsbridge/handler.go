@@ -133,7 +133,7 @@ func (h *Handler) Stat(path string) (*roomfs.Stat, error) {
 				mode = 0o644
 			}
 		}
-		stat = roomfs.Stat{Dir: info.IsDir, Mode: mode, Exists: true}
+		stat = roomfs.Stat{Dir: info.IsDir, Mode: mode, Exists: true, Size: info.Size, Hash: state.CurrentHash(path)}
 	})
 	if !stat.Exists {
 		return &roomfs.Stat{}, nil
@@ -338,6 +338,21 @@ func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error
 		}
 	}
 	return nil
+}
+
+// RekeyDuty moves a resolver duty across a REMOTE rename (another
+// participant renamed a directory containing the fenced path): the
+// authoritative barrier moved to the new prefix, so a fix at the new
+// path must send its resolve there — and reconnect retries must not
+// keep targeting the obsolete old path.
+func (h *Handler) RekeyDuty(oldPath, newPath string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.resolverDuty[oldPath] {
+		return
+	}
+	delete(h.resolverDuty, oldPath)
+	h.resolverDuty[newPath] = true
 }
 
 // OnConflictResolved drops the resolver duty once the SERVER confirmed
