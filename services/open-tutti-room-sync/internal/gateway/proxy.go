@@ -415,7 +415,18 @@ func hostLine(head string) (string, bool) {
 // serveSelector renders the localized H5 picker for an ambiguous device
 // address; the visitor's language comes from the request headers.
 func (p *Proxy) serveSelector(client *bufferedConn, candidates []vmprotocol.SessionCandidate) {
-	body := SessionSelectorPage(httpAcceptLanguage(client.r), candidates)
+	// Terminated or direct TLS: candidate links must keep the caller's
+	// scheme — forcing http:// sends plaintext to TLS backends and
+	// breaks HTTPS-only sessions. Read the request head ONCE (streaming
+	// past it twice would miss headers preceding the other scan).
+	headers := readRequestHead(client.r)
+	scheme := "http"
+	if _, isTLS := client.Conn.(*tls.Conn); isTLS {
+		scheme = "https"
+	} else if headers["x-forwarded-proto"] == "https" {
+		scheme = "https"
+	}
+	body := SessionSelectorPage(headers["accept-language"], scheme, candidates)
 	page := "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n" +
 		fmt.Sprintf("Content-Length: %d\r\nConnection: close\r\n\r\n%s", len(body), body)
 	client.SetWriteDeadline(time.Now().Add(10 * time.Second))
@@ -425,6 +436,27 @@ func (p *Proxy) serveSelector(client *bufferedConn, candidates []vmprotocol.Sess
 // httpAcceptLanguage drains the buffered HTTP request head (the selector
 // answers instead of proxying, so consuming it is safe) and returns the
 // Accept-Language value, if any.
+// readRequestHead consumes the request line and headers (bounded; the
+// raw pipe never materializes an http.Request) and returns lower-cased
+// header values.
+func readRequestHead(r *bufio.Reader) map[string]string {
+	out := map[string]string{}
+	for i := 0; i < 128; i++ {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return out
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			return out
+		}
+		if k, v, ok := strings.Cut(line, ":"); ok {
+			out[strings.ToLower(strings.TrimSpace(k))] = strings.TrimSpace(v)
+		}
+	}
+	return out
+}
+
 func httpAcceptLanguage(r *bufio.Reader) string {
 	for i := 0; i < 128; i++ { // bounded: never spin on a hostile head
 		line, err := r.ReadString('\n')

@@ -19,7 +19,7 @@ func (w *WorkspaceState) ApplySequenced(env vmprotocol.Envelope) error {
 			w.applyCreate(op)
 		}
 	case vmprotocol.OpRemove:
-		w.applyRemove(op)
+		w.applyRemove(&env)
 	case vmprotocol.OpMkdir:
 		w.applyMkdir(op)
 	case vmprotocol.OpRmdir:

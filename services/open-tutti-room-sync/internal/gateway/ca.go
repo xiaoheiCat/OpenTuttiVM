@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -33,15 +34,42 @@ type LocalCA struct {
 // certificate, so after a room-sync restart all consumers still
 // trusting the old bundle would reject the new certificates until each
 // of them reloads. The key file stays device-private (0600).
+// keyMatchesCert reports whether the private key actually corresponds
+// to the certificate's public key (a torn write can persist a new
+// certificate with the previous key).
+func keyMatchesCert(ca *LocalCA) bool {
+	if ca.caKey == nil || ca.caCert == nil {
+		return false
+	}
+	want, err := x509.MarshalECPrivateKey(ca.caKey)
+	if err != nil {
+		return false
+	}
+	k, err := x509.ParseECPrivateKey(want)
+	if err != nil {
+		return false
+	}
+	return publicKeysEqual(&k.PublicKey, ca.caCert.PublicKey)
+}
+
+func publicKeysEqual(a, b any) bool {
+	ab, aerr := x509.MarshalPKIXPublicKey(a)
+	bb, berr := x509.MarshalPKIXPublicKey(b)
+	return aerr == nil && berr == nil && bytes.Equal(ab, bb)
+}
+
 func LoadOrCreateLocalCA(dir string) (*LocalCA, error) {
 	certPEM, certErr := os.ReadFile(filepath.Join(dir, "room-ca.pem"))
 	keyPEM, keyErr := os.ReadFile(filepath.Join(dir, "room-ca-key.pem"))
 	if certErr == nil && keyErr == nil {
-		if ca, err := parseCAPair(certPEM, keyPEM); err == nil {
+		if ca, err := parseCAPair(certPEM, keyPEM); err == nil && keyMatchesCert(ca) {
 			return ca, nil
 		}
-		// Unreadable pair: fall through and regenerate (a broken
-		// bundle cannot issue anything either way).
+		// Unreadable or MISMATCHED pair: a host interrupted between
+		// the two writes leaves a new certificate beside an old key;
+		// parsing each independently would accept a pair whose every
+		// later issuance and handshake fails. Fall through and
+		// regenerate atomically.
 	}
 	ca, err := NewLocalCA()
 	if err != nil {

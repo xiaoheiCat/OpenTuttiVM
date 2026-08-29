@@ -278,7 +278,7 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 	case vmprotocol.OpCreate:
 		err = w.applyCreate(env.Operation)
 	case vmprotocol.OpRemove:
-		err = w.applyRemove(env.Operation)
+		err = w.applyRemove(&next)
 	case vmprotocol.OpMkdir:
 		err = w.applyMkdir(env.Operation)
 	case vmprotocol.OpRmdir:
@@ -513,7 +513,16 @@ func (w *WorkspaceState) applyCreate(op vmprotocol.FileOperation) error {
 	return nil
 }
 
-func (w *WorkspaceState) applyRemove(op vmprotocol.FileOperation) error {
+func (w *WorkspaceState) applyRemove(env *vmprotocol.Envelope) error {
+	op := env.Operation
+	// Generation fence (same as patches/blobs/renames): a remove whose
+	// path was removed AND recreated after its base must not delete the
+	// replacement generation.
+	for _, seqMark := range w.structSeqs[op.Path] {
+		if seqMark > env.BaseSeq {
+			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
+		}
+	}
 	f, exists := w.files[op.Path]
 	if !exists {
 		return &RejectionError{Reason: RejectInvalid}

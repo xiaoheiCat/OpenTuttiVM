@@ -80,8 +80,9 @@ func run() error {
 	rooms.SetCASCollector(casCollector{repo: repo, cas: cas, log: log})
 	// Token refresh (rejoin recovery) tears the device's live
 	// transports down, matching kick and leave semantics.
-	rooms.SetLeaveFence(seq.FreezeAt)
+	rooms.SetLeaveFence(seq.FreezeAt, seq.UnfreezeAt)
 	rooms.SetBarrierClean(seq.ClearBarriersOf)
+	rooms.SetMembershipGuard(seq.MembershipMutation)
 	rooms.SetConnectionDropper(func(roomID, deviceID string) {
 		hub.DropDevice(roomID, deviceID)
 		relay.DropDevice(roomID, deviceID)

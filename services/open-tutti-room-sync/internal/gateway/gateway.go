@@ -120,20 +120,21 @@ func negotiateSelectorLocale(acceptLanguage string) selectorCopy {
 // before the origin responds. CanonicalHost embeds the participant-controlled
 // session label, so every interpolation goes through html/template escaping
 // — never raw string building.
-func SessionSelectorPage(acceptLanguage string, candidates []vmprotocol.SessionCandidate) string {
+func SessionSelectorPage(acceptLanguage, scheme string, candidates []vmprotocol.SessionCandidate) string {
 	c := negotiateSelectorLocale(acceptLanguage)
 	tpl := template.Must(template.New("selector").Parse(`<!doctype html><html lang="{{.Lang}}"><head><meta charset="utf-8"><title>{{.Title}}</title>
 <style>body{font-family:system-ui,sans-serif;background:#0f1115;color:#e7eaf0;display:flex;justify-content:center;padding-top:10vh}
 .card{background:#171a21;border:1px solid #2a2f3a;border-radius:12px;padding:24px;width:min(420px,90vw)}
 a.btn{display:block;margin:8px 0;padding:12px;border-radius:8px;background:#4c7dff;color:#fff;text-decoration:none;text-align:center}</style></head>
 <body><main class="card"><h1>{{.Heading}}</h1>
-{{range .Candidates}}<a class="btn" href="http://{{.CanonicalHost}}">{{.CanonicalHost}}</a>{{end}}
+{{range .Candidates}}<a class="btn" href="{{$.Scheme}}://{{.CanonicalHost}}">{{.CanonicalHost}}</a>{{end}}
 </main></body></html>`))
 	var b strings.Builder
 	if err := tpl.Execute(&b, struct {
 		selectorCopy
+		Scheme     string
 		Candidates []vmprotocol.SessionCandidate
-	}{selectorCopy: c, Candidates: candidates}); err != nil {
+	}{selectorCopy: c, Scheme: scheme, Candidates: candidates}); err != nil {
 		return "<!doctype html><html lang=\"" + c.Lang + "\"><body><p>" + c.Fallback + "</p></body></html>"
 	}
 	return b.String()

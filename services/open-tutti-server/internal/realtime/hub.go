@@ -386,7 +386,15 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			// Only the connection's own agents can be shared.
 			p.OwnerDeviceID = c.DeviceID
 			if p.Shared {
-				out, err := h.borrows.Share(c.RoomID, p)
+				// Guarded by the admission fence: a paused share frame
+				// resuming after kick's DropDevice must not resurrect
+				// the evicted owner's agent as a permanent ghost.
+				var out borrowagent.AgentSharedPayload
+				err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
+					var e error
+					out, e = h.borrows.Share(c.RoomID, p)
+					return e
+				})
 				if err != nil {
 					h.log.Warn("agent share", "room", c.RoomID, "err", err)
 					continue
@@ -414,7 +422,12 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			p := *msg.BorrowCommand
 			// Borrower identity comes from the authenticated connection.
 			p.BorrowerDeviceID = c.DeviceID
-			out, err := h.borrows.Command(c.RoomID, p)
+			var out borrowagent.BorrowCommandPayload
+			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
+				var e error
+				out, e = h.borrows.Command(c.RoomID, p)
+				return e
+			})
 			if err != nil {
 				// Stale or unknown lease: the borrower learns immediately
 				// that their generation is dead.

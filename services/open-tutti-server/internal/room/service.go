@@ -66,6 +66,8 @@ type Service struct {
 	cas          CASCollector
 	dropConn     func(roomID, deviceID string)
 	leaveFence   func(roomID string, baseSeq uint64) error
+	leaveUnfence func(roomID string)
+	memberMutate func(roomID, deviceID string, fn func() error) error
 	barrierClean func(roomID, deviceID string)
 	tokens       *tokenMinter
 
@@ -120,8 +122,25 @@ func (s *Service) SetCASCollector(c CASCollector) { s.cas = c }
 // section — a mismatching sequence means an edit landed after the
 // mirror, and asserting it applied would discard that edit's only copy
 // at disband.
-func (s *Service) SetLeaveFence(fence func(roomID string, baseSeq uint64) error) {
-	s.leaveFence = fence
+func (s *Service) SetLeaveFence(fence func(roomID string, baseSeq uint64) error, unfence func(roomID string)) {
+	s.leaveFence, s.leaveUnfence = fence, unfence
+}
+
+// SetMembershipGuard attaches the admission-atomic mutation wrapper:
+// membership deletions (kick, leave) run under the sequencer's
+// admission lock so no in-flight Submit can sequence past a revocation.
+func (s *Service) SetMembershipGuard(g func(roomID, deviceID string, fn func() error) error) {
+	s.memberMutate = g
+}
+
+// MembershipMutation runs fn under the admission fence (see
+// SetMembershipGuard); borrow registry mutations use it so a paused
+// frame cannot dispatch an action after revocation.
+func (s *Service) MembershipMutation(roomID, deviceID string, fn func() error) error {
+	if s.memberMutate != nil {
+		return s.memberMutate(roomID, deviceID, fn)
+	}
+	return fn()
 }
 
 // MembershipOf reports whether a device is an active member of a room
@@ -332,6 +351,18 @@ func (s *Service) RevokeShareLink(ctx context.Context, roomID, deviceID string) 
 // KickMember removes one member from the room: their membership and
 // session token die immediately. Owners cannot kick themselves (leave or
 // transfer instead). Owner only.
+// deleteMembershipGuarded deletes a membership under the admission
+// fence (when wired): the deletion and any concurrent Submit serialize
+// on the sequencer mutex, so a revocation cannot lose to an in-flight
+// operation admission.
+func (s *Service) deleteMembershipGuarded(ctx context.Context, roomID, deviceID string) error {
+	del := func() error { return s.repo.DeleteMembership(ctx, roomID, deviceID) }
+	if s.memberMutate != nil {
+		return s.memberMutate(roomID, deviceID, del)
+	}
+	return del()
+}
+
 func (s *Service) KickMember(ctx context.Context, roomID, ownerDeviceID, targetDeviceID string) error {
 	if _, _, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID); err != nil {
 		return err
@@ -354,7 +385,7 @@ func (s *Service) KickMember(ctx context.Context, roomID, ownerDeviceID, targetD
 	if _, _, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID); err != nil {
 		return err
 	}
-	if err := s.repo.DeleteMembership(ctx, roomID, targetDeviceID); err != nil {
+	if err := s.deleteMembershipGuarded(ctx, roomID, targetDeviceID); err != nil {
 		return err
 	}
 	// Lift conflict barriers the evicted member still owns (same
@@ -623,15 +654,18 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 		if !in.WorkspaceApplied {
 			return ErrOwnerMustApply
 		}
-		// Apply-and-Leave fence (atomic with sequencing): edits
-		// sequenced after the owner's captured mirror must not be
-		// silently discarded by the disband that follows.
-		if s.leaveFence != nil {
-			if err := s.leaveFence(in.RoomID, in.WorkspaceBaseSeq); err != nil {
-				return ErrWorkspaceStale
-			}
-		}
 		if in.Disband {
+			// Apply-and-Leave fence (atomic with sequencing), ONLY on
+			// the actual disband path: freezing before the
+			// disband/transfer validation permanently rejected every
+			// later edit of a room whose owner merely asserted an apply
+			// without leaving; and a failed dissolution must unfreeze
+			// or the room stays sequencer-dead while active.
+			if s.leaveFence != nil {
+				if err := s.leaveFence(in.RoomID, in.WorkspaceBaseSeq); err != nil {
+					return ErrWorkspaceStale
+				}
+			}
 			// Dissolve FIRST, membership deletion second: if dissolution
 			// fails (cancellation, I/O, transaction error) after the
 			// deletion committed, the room stays active with
@@ -646,9 +680,12 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 				Payload: mustJSON(vmprotocol.PresenceDevice{DeviceID: in.DeviceID, Online: false}),
 			})
 			if err := s.dissolveLocked(ctx, in.RoomID); err != nil {
+				if s.leaveUnfence != nil {
+					s.leaveUnfence(in.RoomID)
+				}
 				return err
 			}
-			return s.repo.DeleteMembership(ctx, in.RoomID, in.DeviceID)
+			return s.deleteMembershipGuarded(ctx, in.RoomID, in.DeviceID)
 		}
 		// Without disband, the owner may only leave after a completed
 		// transfer moved ownership away.
@@ -661,7 +698,7 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 		}
 	}
 
-	if err := s.repo.DeleteMembership(ctx, in.RoomID, in.DeviceID); err != nil {
+	if err := s.deleteMembershipGuarded(ctx, in.RoomID, in.DeviceID); err != nil {
 		return err
 	}
 	// Same barrier cleanup as kick: a leaving participant's barriers

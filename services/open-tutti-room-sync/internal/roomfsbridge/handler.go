@@ -213,10 +213,20 @@ func (h *Handler) ReadWithHash(path string) ([]byte, string, error) {
 		hash = state.CurrentHash(path)
 	})
 	if content == nil {
-		// Blob or unknown path: fall back to the replica reader.
+		// Blob or lazily-unmaterialized text: the snapshot hash above
+		// was computed over EMPTY bytes — materialize and re-read the
+		// hash in a second snapshot so the pair is consistent (the
+		// first flush of an untouched lazy-restored file otherwise
+		// fails EAGAIN against its own baseline).
 		c, err := h.Read(path)
 		if err != nil {
 			return nil, "", err
+		}
+		h.mgr.WithState(func(state *vmsync.WorkspaceState) {
+			hash = state.CurrentHash(path)
+		})
+		if hash == "" {
+			hash = vmsync.ContentHash(c)
 		}
 		return c, hash, nil
 	}

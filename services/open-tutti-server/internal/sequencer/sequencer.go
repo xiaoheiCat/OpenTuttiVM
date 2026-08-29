@@ -226,6 +226,30 @@ func (m *Manager) validateBlobGraph(roomID, manifestHash string) error {
 	return nil
 }
 
+// MembershipMutation runs fn while holding the SAME mutex that guards
+// operation admission: revocation (kick/leave) and Submit previously
+// raced on different locks, letting a socket's already-read frame
+// sequence an edit after the membership deletion committed.
+func (m *Manager) MembershipMutation(roomID, deviceID string, fn func() error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, err := m.repo.GetMembership(context.Background(), roomID, deviceID); err != nil {
+		return fmt.Errorf("device %s is not a member of room %s", deviceID, roomID)
+	}
+	return fn()
+}
+
+// UnfreezeAt restores sequencing after a disband that FAILED before
+// committing: the room stays active, and a terminal engine would have
+// rejected every later edit.
+func (m *Manager) UnfreezeAt(roomID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if eng, ok := m.engines[roomID]; ok {
+		eng.terminal = false
+	}
+}
+
 // ClearBarriersOf lifts barriers still assigned to an evicted member
 // (kick/leave): the barrier would otherwise block the path for every
 // remaining participant until room dissolution, with its resolver
@@ -330,25 +354,19 @@ func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason
 	if err != nil {
 		return vmprotocol.WorkspaceSnapshot{}, err
 	}
-	snap, err := eng.state.Snapshot(roomID, reason, m.cas)
-	if err != nil {
-		return snap, err
-	}
-	eng.opsSinceSnap = 0
-	entries, err := json.Marshal(snap.Entries)
-	if err != nil {
-		return snap, err
-	}
-	if err := m.repo.SaveSnapshot(context.Background(), store.SnapshotRecord{
-		RoomID: roomID, ServerSeq: snap.ServerSeq, RootTreeHash: snap.RootTreeHash,
-		EntriesJSON: entries, Reason: string(reason),
-	}); err != nil {
-		return snap, err
-	}
-	// Snapshot ref insertion serializes with dissolution collection
-	// (same publication protocol as object upload): an unlocked insert
-	// could race a collector that already observed zero references.
+	// The ENTIRE publication — CAS object writes, snapshot record,
+	// liveness validation, and reference insertion — shares the
+	// publication fence: another room's collector can delete an
+	// identical content hash it observes unreferenced, so writing the
+	// objects before taking the fence could persist a snapshot whose
+	// objects are deleted before its references exist.
+	var snap vmprotocol.WorkspaceSnapshot
 	if err := m.repo.CASPublication(func() error {
+		var err error
+		snap, err = eng.state.Snapshot(roomID, reason, m.cas)
+		if err != nil {
+			return err
+		}
 		// Dissolution fence, INSIDE the publication lock: the engine()
 		// liveness read earlier can race a dissolve that deletes all
 		// room references; publishing snapshot refs for an already
@@ -357,10 +375,21 @@ func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason
 		if room, err := m.repo.GetRoom(context.Background(), roomID); err != nil || room.DissolvedAt != nil {
 			return fmt.Errorf("room dissolved before snapshot publication")
 		}
+		entries, err := json.Marshal(snap.Entries)
+		if err != nil {
+			return err
+		}
+		if err := m.repo.SaveSnapshot(context.Background(), store.SnapshotRecord{
+			RoomID: roomID, ServerSeq: snap.ServerSeq, RootTreeHash: snap.RootTreeHash,
+			EntriesJSON: entries, Reason: string(reason),
+		}); err != nil {
+			return err
+		}
 		return m.repo.AddCASRefs(context.Background(), roomID, m.snapshotRefs(snap))
 	}); err != nil {
 		return snap, err
 	}
+	eng.opsSinceSnap = 0
 	m.send.BroadcastRoom(roomID, vmprotocol.Event{
 		Topic:   vmprotocol.TopicSnapshotAnnounce,
 		RoomID:  roomID,

@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/hashicorp/yamux"
@@ -210,6 +211,14 @@ func pipe(a, b net.Conn) {
 
 // readHeader reads one length-prefixed JSON header frame.
 func readHeader(conn net.Conn) (*vmprotocol.TunnelHeader, error) {
+	// Bound the initial framed header: yamux streams carry no deadline,
+	// and a member opening streams and sending nothing would otherwise
+	// pin a goroutine and stream EACH until the long-lived tunnel
+	// closes — a cheap resource-exhaustion vector.
+	if dl, ok := conn.(interface{ SetReadDeadline(time.Time) error }); ok {
+		_ = dl.SetReadDeadline(time.Now().Add(15 * time.Second))
+		defer func() { _ = dl.SetReadDeadline(time.Time{}) }()
+	}
 	var lenBuf [4]byte
 	if _, err := io.ReadFull(conn, lenBuf[:]); err != nil {
 		return nil, err

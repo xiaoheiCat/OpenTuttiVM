@@ -465,8 +465,12 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		}
 		// Executability and other synchronized permission bits survive
 		// the mirror; CreateTemp's 0600 must not be the final mode.
-		if err := applyMode(dst, info.Mode); err != nil {
-			return fmt.Errorf("chmod %s: %w", dst, err)
+		// ModeSet (not the numeric value): an explicit 0000 must chmod
+		// DOWN from 0600, not skip.
+		if info.ModeSet {
+			if err := applyMode(dst, info.Mode); err != nil {
+				return fmt.Errorf("chmod %s: %w", dst, err)
+			}
 		}
 	}
 	// Mirror: remove host files the room no longer has. This runs
