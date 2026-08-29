@@ -493,6 +493,7 @@ func (w *WorkspaceState) applyTextPatch(env *vmprotocol.Envelope) error {
 		return &RejectionError{Reason: RejectInvalid}
 	}
 	f.Content = next
+	f.Size = int64(len(next))
 	env.Operation.Patch = &patch
 	return nil
 }
@@ -560,7 +561,7 @@ func (w *WorkspaceState) applyCreate(op vmprotocol.FileOperation) error {
 	if op.Mode != nil {
 		mode = op.Mode.Mode
 	}
-	w.files[op.Path] = &fileState{Mode: mode, ModeSet: true, Kind: kindText, Content: []byte{}}
+	w.files[op.Path] = &fileState{Mode: mode, ModeSet: true, Kind: kindText, Content: []byte{}, Size: 0}
 	w.trackPath(op.Path)
 	return nil
 }

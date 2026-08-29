@@ -540,6 +540,20 @@ func (f *fileNode) Write(ctx context.Context, fh fs.FileHandle, data []byte, off
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// A partial write on an invalidated (unloaded) handle must RELOAD
+	// first, exactly like Read: growing the nil buffer fabricates zero
+	// padding, and the flush would then submit NUL bytes plus the
+	// written span as the whole file — silent data loss accepted by
+	// the base-hash guard (invalidations often keep the hash).
+	if !f.loaded {
+		content, base, err := f.client.ReadWithHash(f.path)
+		if err != nil {
+			return 0, syscall.EIO
+		}
+		f.buffer = content
+		f.bufBase = base
+		f.loaded = true
+	}
 	f.dirty = true
 	f.writeGen++
 	end := off + int64(len(data))

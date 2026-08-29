@@ -512,7 +512,17 @@ func run() error {
 		// absorbs the overlap).
 		if !subscribed {
 			if err := resyncFromServer(ctx); err != nil {
+				// A failed post-subscribe snapshot leaves the
+				// subscribe/snapshot window open; log and DROP the
+				// session so the reconnect loop retries the whole
+				// handshake instead of proceeding on stale state.
 				fmt.Fprintf(os.Stderr, "room-sync: post-subscribe resync: %v\n", err)
+				sess.Close()
+				if !sleepCtx(ctx, backoff) {
+					return ctx.Err()
+				}
+				backoff = minDuration(backoff*2, 30*time.Second)
+				continue
 			}
 			subscribed = true
 		}
@@ -568,16 +578,14 @@ func run() error {
 			return ctx.Err()
 		}
 		fmt.Fprintf(os.Stderr, "room-sync: session lost (%v); reconnecting\n", runErr)
-		// Reconnect path: resync the replica from a fresh bootstrap.
-		for {
-			if err := resyncFromServer(ctx); err == nil {
-				break
-			}
-			if !sleepCtx(ctx, backoff) {
-				return ctx.Err()
-			}
-			backoff = minDuration(backoff*2, 30*time.Second)
-		}
+		// The post-registration resync (top of the loop) owns the
+		// subscribe/snapshot ordering on EVERY reconnect too: running
+		// it here, before the next Dial, re-opened the race the guard
+		// exists for — operations sequenced between this bootstrap
+		// read and the new socket's server-side attach were broadcast
+		// to nobody, no later op means no gap, and the replica stayed
+		// stale forever (wedging apply-and-leave's base-seq fence).
+		subscribed = false
 		backoff = time.Second
 	}
 }

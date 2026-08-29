@@ -135,9 +135,11 @@ func (h *Handler) nextOpID() string {
 
 // Stat implements roomfs.Handler.
 func (h *Handler) Stat(path string) (*roomfs.Stat, error) {
+	var info vmsync.EntryInfo
 	var stat roomfs.Stat
 	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
-		info, ok := state.EntryInfo(path)
+		var ok bool
+		info, ok = state.EntryInfo(path)
 		if !ok {
 			return
 		}
@@ -156,11 +158,13 @@ func (h *Handler) Stat(path string) (*roomfs.Stat, error) {
 	if !stat.Exists {
 		return &roomfs.Stat{}, nil
 	}
-	if !stat.Dir {
-		// Cheap for materialized text; lazy blobs read on demand.
-		if content, err := h.mgr.Read(context.Background(), path); err == nil {
-			stat.Size = int64(len(content))
-		}
+	if !stat.Dir && info.IsText {
+		// Text content is in-memory on every replica policy: the exact
+		// length costs nothing. Blobs report info.Size WITHOUT
+		// materializing: mgr.Read pulled the full blob (up to 256 MiB)
+		// from server CAS on FIRST METADATA TOUCH, so a lazy replica's
+		// first `ls -l`/tree scan downloaded every binary in the room.
+		stat.Size = int64(len(info.Content))
 	}
 	return &stat, nil
 }
@@ -431,8 +435,13 @@ func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error
 		for p := range h.resolverDuty {
 			if p == rn.OldPath || strings.HasPrefix(p, rn.OldPath+"/") {
 				newPath := rn.NewPath + p[len(rn.OldPath):]
+				// Delete the old key for EVERY moved entry (matching
+				// RekeyDuty): a surviving stale duty fired
+				// conflict_resolved at the obsolete path on every
+				// reconnect, and could later lift a NEW barrier opened
+				// at that path before any fix was submitted.
+				delete(h.resolverDuty, p)
 				if p == op.Path {
-					delete(h.resolverDuty, p)
 					// The RENAMED file's own duty resolves at its NEW
 					// path (the server moved the barrier with the
 					// file): resolving the pre-rename path is always
