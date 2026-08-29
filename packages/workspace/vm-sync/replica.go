@@ -27,7 +27,7 @@ func (w *WorkspaceState) ApplySequenced(env vmprotocol.Envelope) error {
 	case vmprotocol.OpRename:
 		w.applyRename(&env)
 	case vmprotocol.OpMetadataChange:
-		w.applyMetadata(op)
+		w.applyMetadata(&env)
 	case vmprotocol.OpTextPatch:
 		f := w.files[op.Path]
 		if f == nil || f.IsDir {

@@ -307,7 +307,7 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 	case vmprotocol.OpRename:
 		err = w.applyRename(&next)
 	case vmprotocol.OpMetadataChange:
-		err = w.applyMetadata(env.Operation)
+		err = w.applyMetadata(&next)
 	case vmprotocol.OpTextPatch:
 		err = w.applyTextPatch(&next)
 	case vmprotocol.OpBlobReplace:
@@ -766,7 +766,14 @@ func (w *WorkspaceState) rekeyHistory(oldPath, newPath string) {
 	}
 }
 
-func (w *WorkspaceState) applyMetadata(op vmprotocol.FileOperation) error {
+func (w *WorkspaceState) applyMetadata(env *vmprotocol.Envelope) error {
+	op := env.Operation
+	// Same generation fence as writes/removals/renames: a chmod
+	// prepared before another participant's remove+recreate must not
+	// land its permission change on the unrelated replacement file.
+	if w.structSeqs[op.Path] > env.BaseSeq {
+		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
+	}
 	f, exists := w.files[op.Path]
 	if !exists || op.Mode == nil {
 		return &RejectionError{Reason: RejectInvalid}
