@@ -497,11 +497,18 @@ func run() error {
 		// rest of the workspace. Seed asynchronously; Run blocks below.
 		runErrCh := make(chan error, 1)
 		go func() { runErrCh <- sess.Run(mgr) }()
-		if seedDir != "" && !seeded && isOwner && mgr.Replica.AppliedSeq == 0 {
+		if seedDir != "" && !seeded && isOwner {
 			if err := seedWorkspace(ctx, bridge, seedDir); err != nil {
-				fmt.Fprintf(os.Stderr, "room-sync: seed: %v\n", err)
+				// A PARTIAL seed (some entries accepted, then failure)
+				// must not be marked complete: the room would sit as a
+				// silent partial workspace forever (AppliedSeq is
+				// already > 0, so nothing re-triggers). Leave the flag
+				// unset — the next session retries, and per-entry Stat
+				// preflight skips what already landed.
+				fmt.Fprintf(os.Stderr, "room-sync: seed (will retry): %v\n", err)
+			} else {
+				seeded = true
 			}
-			seeded = true
 		}
 		runErr := <-runErrCh
 		sess.Close()
@@ -812,7 +819,15 @@ func seedWorkspace(ctx context.Context, bridge *roomfsbridge.Handler, root strin
 			return err
 		}
 		if d.IsDir() {
+			// Preflight makes the seed IDEMPOTENT (resumable after a
+			// partial failure): already-landed entries skip.
+			if st, err := bridge.Stat(rel); err == nil && st != nil && st.Exists && st.Dir {
+				return nil
+			}
 			return bridge.Mkdir(rel, uint32(info.Mode().Perm()))
+		}
+		if st, err := bridge.Stat(rel); err == nil && st != nil && st.Exists && !st.Dir && st.Size == info.Size() {
+			return nil
 		}
 		if err := bridge.Create(rel, uint32(info.Mode().Perm())); err != nil {
 			return err

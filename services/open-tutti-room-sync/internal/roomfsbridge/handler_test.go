@@ -136,7 +136,7 @@ func TestBridgeCreateRemoveRename(t *testing.T) {
 	if err := h.Mkdir("docs", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.Rename("notes.md", "docs/notes.md"); err != nil {
+	if err := h.Rename("notes.md", "docs/notes.md", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.Remove("docs/notes.md"); err != nil {

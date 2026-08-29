@@ -72,6 +72,10 @@ type BlobReplace struct {
 type Rename struct {
 	OldPath string `json:"old_path"`
 	NewPath string `json:"new_path"`
+	// NoReplace is renameat2 RENAME_NOREPLACE: the authoritative
+	// rename must reject an existing destination ATOMICALLY (server
+	// state check) instead of a racy client-side preflight.
+	NoReplace bool `json:"no_replace,omitempty"`
 }
 
 // MetadataChange updates POSIX metadata, currently file mode.

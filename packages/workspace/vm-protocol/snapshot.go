@@ -53,6 +53,12 @@ func ValidWorkspacePath(p string) bool {
 // replica; AGENTS.md makes Windows part of the default compatibility
 // contract.
 func validWindowsSegment(seg string) bool {
+	// Per-component bound: NTFS and most POSIX filesystems cap one name
+	// at 255 bytes; a longer segment could enter authoritative state that
+	// no replica can materialize (apply-and-leave could never complete).
+	if len(seg) > 255 {
+		return false
+	}
 	if strings.ContainsAny(seg, "<>:\"|?*") {
 		return false
 	}

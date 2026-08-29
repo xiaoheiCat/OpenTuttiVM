@@ -29,7 +29,7 @@ type Handler interface {
 	Create(path string, mode uint32) error
 	Mkdir(path string, mode uint32) error
 	Remove(path string) error
-	Rename(from, to string) error
+	Rename(from, to string, noReplace bool) error
 	// Chmod submits a permission-bit change as a metadata operation so
 	// it reaches the authoritative workspace and every participant.
 	Chmod(path string, mode uint32) error
@@ -171,7 +171,7 @@ func (s *Server) dispatch(req Request, body []byte) Response {
 			return errorResponse(req.ID, err)
 		}
 	case TypeRename:
-		if err := s.handler.Rename(req.Path, req.To); err != nil {
+		if err := s.handler.Rename(req.Path, req.To, req.RenameNoReplace); err != nil {
 			return errorResponse(req.ID, err)
 		}
 	case TypeChmod:

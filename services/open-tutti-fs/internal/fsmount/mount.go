@@ -292,15 +292,12 @@ func (n *roomNode) Rename(ctx context.Context, name string, newParent fs.InodeEm
 		return syscall.EIO
 	}
 	to := np.path(newName)
-	if flags&renameNoreplace != 0 {
-		// RoomFS answers a MISS with a non-nil Stat{Exists:false}; only
-		// an explicit Exists is a collision. Treating the miss as
-		// EEXIST blocked every valid no-replace rename.
-		if st, err := n.client.Stat(to); err == nil && st != nil && st.Exists {
-			return syscall.EEXIST
-		}
-	}
-	if err := n.client.Rename(from, to); err != nil {
+	// The no-replace condition travels to the AUTHORITATIVE rename
+	// (flag in the protocol): a local Stat preflight raced a concurrent
+	// create at the destination between the check and the submit, and a
+	// plain rename would then replace content the caller forbade
+	// replacing.
+	if err := n.client.Rename(from, to, flags&renameNoreplace != 0); err != nil {
 		return syscall.EIO
 	}
 	// The FUSE inode survives its rename, but fileNode captured its

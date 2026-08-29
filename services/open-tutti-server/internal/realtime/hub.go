@@ -349,26 +349,29 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			}
 			p := *msg.Ports
 			p.DeviceID = c.DeviceID
-			// Membership recheck at the registry mutation point: the
-			// pump may have read this frame before a kick/leave
-			// deleted the membership and dropped the socket — an
-			// Upsert racing DropDevice would resurrect the evicted
-			// device's route (and gateways would keep binding an
-			// unreachable endpoint until the room ends).
-			if err := h.rooms.MembershipOf(c.Ctx, c.RoomID, c.DeviceID); err != nil {
-				continue
-			}
+			// Registration runs under the ADMISSION FENCE (not a bare
+			// recheck): a ports frame that passed a check can pause
+			// while kick/leave deletes the membership and calls
+			// DropDevice, then resume and resurrect the departed
+			// device's route. Fence-check-mutate in one critical
+			// section.
 			key := vmprotocol.RouteKey{RoomID: c.RoomID, DeviceID: c.DeviceID, SessionID: p.SessionID, Port: p.Port}
-			if p.Listening {
-				h.previews.Upsert(preview.Entry{
-					RouteKey:     key,
-					SessionLabel: p.SessionLabel,
-					Agent:        labelAgent(p.SessionLabel),
-					Protocol:     p.Protocol,
-					DeviceSlug:   c.DeviceSlug,
-				})
-			} else {
-				h.previews.Remove(key)
+			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
+				if p.Listening {
+					h.previews.Upsert(preview.Entry{
+						RouteKey:     key,
+						SessionLabel: p.SessionLabel,
+						Agent:        labelAgent(p.SessionLabel),
+						Protocol:     p.Protocol,
+						DeviceSlug:   c.DeviceSlug,
+					})
+				} else {
+					h.previews.Remove(key)
+				}
+				return nil
+			})
+			if err != nil {
+				continue
 			}
 			h.BroadcastRoom(c.RoomID, vmprotocol.Event{
 				Topic: vmprotocol.TopicPortsChanged, RoomID: c.RoomID, Payload: mustJSON(p),

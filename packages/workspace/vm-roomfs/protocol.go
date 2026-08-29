@@ -21,9 +21,11 @@ type Request struct {
 	Path string `json:"path,omitempty"`
 	// Body carries write content for "write".
 	Body []byte `json:"-"`
-	// To for renames; Mode for create/mkdir.
-	To   string `json:"to,omitempty"`
-	Mode uint32 `json:"mode,omitempty"`
+	// To for renames; Mode for create/mkdir; RenameNoReplace carries
+	// renameat2 RENAME_NOREPLACE for an atomic server-side check.
+	To              string `json:"to,omitempty"`
+	Mode            uint32 `json:"mode,omitempty"`
+	RenameNoReplace bool   `json:"rename_noreplace,omitempty"`
 	// BaseHash guards "write": when set, the write is rejected unless
 	// the path's content hash still matches (a flush whose buffer was
 	// based on a superseded revision must EAGAIN, not overwrite).

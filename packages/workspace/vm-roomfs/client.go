@@ -203,8 +203,8 @@ func (c *Client) Remove(path string) error {
 }
 
 // Rename moves a path within the workspace.
-func (c *Client) Rename(from, to string) error {
-	_, err := c.call(Request{Type: TypeRename, Path: from, To: to}, nil)
+func (c *Client) Rename(from, to string, noReplace bool) error {
+	_, err := c.call(Request{Type: TypeRename, Path: from, To: to, RenameNoReplace: noReplace}, nil)
 	return err
 }
 

@@ -314,10 +314,10 @@ func (h *Handler) Remove(path string) error {
 }
 
 // Rename implements roomfs.Handler.
-func (h *Handler) Rename(from, to string) error {
+func (h *Handler) Rename(from, to string, noReplace bool) error {
 	return h.submit(vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: from, Kind: vmprotocol.OpRename,
-		Rename: &vmprotocol.Rename{OldPath: from, NewPath: to},
+		Rename: &vmprotocol.Rename{OldPath: from, NewPath: to, NoReplace: noReplace},
 	})
 }
 

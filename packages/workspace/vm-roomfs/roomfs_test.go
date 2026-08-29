@@ -175,10 +175,15 @@ func (m *memHandler) Remove(path string) error {
 	return nil
 }
 
-func (m *memHandler) Rename(from, to string) error {
+func (m *memHandler) Rename(from, to string, noReplace bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if content, ok := m.files[from]; ok {
+		if noReplace {
+			if _, exists := m.files[to]; exists {
+				return fmt.Errorf("EEXIST: %s", to)
+			}
+		}
 		delete(m.files, from)
 		m.files[to] = content
 		return nil
@@ -258,7 +263,7 @@ func TestProtocolRoundTrip(t *testing.T) {
 	if string(back) != "buy milk" {
 		t.Fatalf("write round-trip: %q", back)
 	}
-	if err := c.Rename("notes/todo.txt", "notes/done.txt"); err != nil {
+	if err := c.Rename("notes/todo.txt", "notes/done.txt", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.Stat("notes/todo.txt"); err != nil {

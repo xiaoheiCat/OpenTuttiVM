@@ -605,6 +605,14 @@ func (w *WorkspaceState) applyRename(env *vmprotocol.Envelope) error {
 	if !exists {
 		return &RejectionError{Reason: RejectInvalid}
 	}
+	// renameat2 RENAME_NOREPLACE is enforced ATOMICALLY here (the
+	// authoritative Apply is single-threaded): an existing destination
+	// rejects instead of being replaced.
+	if r.NoReplace {
+		if _, occupied := w.files[r.NewPath]; occupied {
+			return &RejectionError{Reason: RejectInvalid, CurrentHash: "EEXIST"}
+		}
+	}
 	// Identical paths are a NO-OP BEFORE any mutation: with the
 	// replacement branch below running first, the occupied destination
 	// IS the source entry, and deleting it before the later equality

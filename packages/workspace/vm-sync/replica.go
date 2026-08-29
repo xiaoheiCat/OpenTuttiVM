@@ -221,6 +221,13 @@ func (r *Replica) MaterializePath(path string, store vmcas.Store) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
+	// A zero-byte blob materializes to nil, which the replica treats
+	// as "not materialized" — normalize to an empty slice so a valid
+	// zero-chunk manifest (truncated-to-zero file) counts as full and
+	// does not refetch forever.
+	if content == nil {
+		content = []byte{}
+	}
 	f.Content = content
 	f.Materialized = true
 	return content, nil

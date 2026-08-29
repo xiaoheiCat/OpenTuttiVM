@@ -811,6 +811,13 @@ func (s *Service) MarkOnline(ctx context.Context, roomID, deviceID string) error
 	// committed since the read and (b) reset ConnectedAt, breaking
 	// longest-connected succession. The store sets connected_at only on
 	// the offline→online transition.
+	//
+	// The read-then-write pair runs under s.mu: CheckGracePeriods holds
+	// the same lock across its all-offline read and the dissolve/transfer
+	// decision, and an unfenced MarkOnline committing between them could
+	// delete a just-reconnected membership (and its workspace).
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, err := s.repo.GetMembership(ctx, roomID, deviceID); err != nil {
 		return err
 	}
@@ -820,6 +827,10 @@ func (s *Service) MarkOnline(ctx context.Context, roomID, deviceID string) error
 // MarkOffline records a disconnect. unexpected=false means an intentional
 // leave handled through Leave.
 func (s *Service) MarkOffline(ctx context.Context, roomID, deviceID string) (ownerLost bool, err error) {
+	// Same lifecycle serialization as MarkOnline: presence transitions
+	// and grace-period decisions share one lock.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, err := s.repo.GetMembership(ctx, roomID, deviceID); err != nil {
 		return false, err
 	}
@@ -972,7 +983,12 @@ func (s *Service) dissolveLocked(ctx context.Context, roomID string) error {
 	// collector re-checks global refcounts so objects other rooms
 	// still share survive.
 	if s.cas != nil && len(refs) > 0 {
-		s.cas.Collect(ctx, refs)
+		// Bounded LIVE context: the request context may cancel right
+		// after the dissolution committed, and the refs are already
+		// gone — a canceled collection would leak the objects forever.
+		collectCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		s.cas.Collect(collectCtx, refs)
 	}
 	return nil
 }

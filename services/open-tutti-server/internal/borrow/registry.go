@@ -49,8 +49,12 @@ type Registry struct {
 	// approval prompts route to the borrower that originated the
 	// execution even after other borrowers send their own commands.
 	// Bounded FIFO: only recent commands can still be executing.
-	commandBorrowers   map[string]string
-	commandBorrowerOrd []string
+	commandBorrowers map[string]string
+	// commandOrder bounds the tracked commands PER ROOM+AGENT: a global
+	// FIFO let 65 unrelated commands evict a still-executing command's
+	// mapping, so its later approval prompt failed closed and the
+	// operator never saw it.
+	commandOrder map[string][]string
 }
 
 type openApproval struct {
@@ -59,9 +63,9 @@ type openApproval struct {
 	operator   string
 }
 
-// maxTrackedCommands bounds commandBorrowers: prompts only arrive for
-// commands still executing, so a short recent window suffices.
-const maxTrackedCommands = 64
+// maxTrackedCommandsPerAgent bounds one room+agent's tracked commands:
+// prompts only arrive for commands still executing on that agent.
+const maxTrackedCommandsPerAgent = 16
 
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
@@ -69,6 +73,7 @@ func NewRegistry() *Registry {
 		agents:           map[string]map[string]*AgentInstance{},
 		approvals:        map[string]openApproval{},
 		commandBorrowers: map[string]string{},
+		commandOrder:     map[string][]string{},
 	}
 }
 
@@ -201,13 +206,15 @@ func (r *Registry) Command(roomID string, p borrowagent.BorrowCommandPayload) (b
 	// to THIS borrower, not to whoever commanded most recently. Bounded
 	// FIFO: only recent commands can still be executing.
 	if p.CommandID != "" {
-		key := roomID + "\x00" + p.AgentInstanceID + "\x00" + p.CommandID
+		agentKey := roomID + "\x00" + p.AgentInstanceID
+		key := agentKey + "\x00" + p.CommandID
 		if _, exists := r.commandBorrowers[key]; !exists {
-			r.commandBorrowerOrd = append(r.commandBorrowerOrd, key)
-			if len(r.commandBorrowerOrd) > maxTrackedCommands {
-				delete(r.commandBorrowers, r.commandBorrowerOrd[0])
-				r.commandBorrowerOrd = r.commandBorrowerOrd[1:]
+			order := append(r.commandOrder[agentKey], key)
+			if len(order) > maxTrackedCommandsPerAgent {
+				delete(r.commandBorrowers, order[0])
+				order = order[1:]
 			}
+			r.commandOrder[agentKey] = order
 		}
 		r.commandBorrowers[key] = p.BorrowerDeviceID
 	}
