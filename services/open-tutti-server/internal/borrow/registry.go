@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
 )
@@ -60,12 +61,22 @@ type Registry struct {
 type openApproval struct {
 	roomID     string
 	agentOwner string
+	agentID    string
 	operator   string
+	openedAt   time.Time
 }
 
 // maxTrackedCommandsPerAgent bounds one room+agent's tracked commands:
 // prompts only arrive for commands still executing on that agent.
 const maxTrackedCommandsPerAgent = 16
+
+// maxOutstandingApprovals bounds one agent's pending approvals, and
+// approvalTTL expires them even without a resolution (interactive
+// prompts are short-lived; nothing else sweeps them).
+const (
+	maxOutstandingApprovals = 32
+	approvalTTL             = 10 * time.Minute
+)
 
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
@@ -271,8 +282,46 @@ func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID s
 	// agent runtimes, and a process-global key would let one room's
 	// prompt overwrite another's (decisions then rejected, or worse,
 	// consumed by the wrong room's approval).
+	// Bound the outstanding set: approvals expire a fixed window after
+	// they open (the advertised deadline has no cross-goroutine sweep,
+	// so expiry piggybacks here and on resolution), and one agent never
+	// holds more than maxOutstandingApprovals pending ids — an
+	// authenticated owner could otherwise pin unbounded ids in the heap
+	// (the socket accepts ~49 MiB frames).
+	now := time.Now()
+	for key, ap := range r.approvals {
+		if now.Sub(ap.openedAt) > approvalTTL {
+			delete(r.approvals, key)
+		}
+	}
+	if _, exists := r.approvals[approvalScope(roomID, agentInstanceID, approvalID)]; !exists {
+		open := 0
+		for _, ap := range r.approvals {
+			if ap.roomID == roomID && ap.agentOwner == inst.OwnerDeviceID && ap.agentID == agentInstanceID {
+				open++
+			}
+		}
+		if open >= maxOutstandingApprovals {
+			// Evict the OLDEST pending approval of this agent: prompts
+			// are interactive and short-lived; a flood must not wedge
+			// the registry.
+			var oldestKey string
+			var oldestAt time.Time
+			for key, ap := range r.approvals {
+				if ap.roomID == roomID && ap.agentOwner == inst.OwnerDeviceID && ap.agentID == agentInstanceID {
+					if oldestKey == "" || ap.openedAt.Before(oldestAt) {
+						oldestKey, oldestAt = key, ap.openedAt
+					}
+				}
+			}
+			if oldestKey != "" {
+				delete(r.approvals, oldestKey)
+			}
+		}
+	}
 	r.approvals[approvalScope(roomID, agentInstanceID, approvalID)] = openApproval{
-		roomID: roomID, agentOwner: inst.OwnerDeviceID, operator: operator,
+		roomID: roomID, agentOwner: inst.OwnerDeviceID, agentID: agentInstanceID, operator: operator,
+		openedAt: now,
 	}
 	return operator, nil
 }

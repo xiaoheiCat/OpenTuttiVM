@@ -562,10 +562,12 @@ func ensureUnder(root, dir string) error {
 // Apply-to-Workspace report success (and a following owner leave
 // dissolve the room) while the mirror carries permissions the room
 // never granted — with the authoritative state gone.
+// applyMode applies an EXPLICITLY synchronized mode. Both call sites
+// guard with ModeSet, so 0000 must chmod down from the temp file's
+// 0600 (or the directory's 0755) — the old mode==0 early return kept
+// reporting success while dropping the authoritative restriction, and
+// a later dissolution made the loss permanent.
 func applyMode(dst string, mode uint32) error {
-	if mode == 0 {
-		return nil
-	}
 	return os.Chmod(dst, fs.FileMode(mode&0o7777))
 }
 

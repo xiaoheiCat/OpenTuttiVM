@@ -437,6 +437,14 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			p := *msg.BorrowCommand
 			// Borrower identity comes from the authenticated connection.
 			p.BorrowerDeviceID = c.DeviceID
+			// Bounded command frames: the socket accepts ~49 MiB
+			// messages, and an unbounded Input would park gigabytes in
+			// the owner's 64-slot send queue before overflow closed it,
+			// while the registry separately retained giant command ids.
+			if len(p.CommandID) > 128 || len(p.Input) > 1<<20 {
+				h.log.Warn("borrow command over limit", "room", c.RoomID, "device", c.DeviceID)
+				continue
+			}
 			var out borrowagent.BorrowCommandPayload
 			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
 				var e error
@@ -467,6 +475,12 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 				continue
 			}
 			p := *msg.ApprovalRequest
+			// Bounded identifiers: the socket accepts ~49 MiB frames,
+			// and unbounded unique approval ids would accumulate in the
+			// registry with no expiry sweep (DeadlineMS was decorative).
+			if len(p.ApprovalID) > 128 || len(p.AgentInstanceID) > 128 {
+				continue
+			}
 			// Only the agent's OWNER may open an approval: any
 			// participant could otherwise fabricate prompt text and
 			// choices for a shared agent they do not own and have the

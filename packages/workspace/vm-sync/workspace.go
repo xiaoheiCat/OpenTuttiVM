@@ -125,11 +125,14 @@ type WorkspaceState struct {
 	// workspaces cannot materialize "README" and "readme" as distinct
 	// entries, so creates/mkdirs/renames are refused on collision.
 	ciPaths map[string]string
-	// structSeqs records, per path, the sequences of STRUCTURAL changes
-	// (create/remove/mkdir/rmdir/rename) that touched it: a text patch
-	// based before such a change edits a different file generation even
-	// when its content hash coincidentally matches (remove+recreate).
-	structSeqs map[string][]uint64
+	// structSeqs records, per path, the LATEST sequence of a STRUCTURAL
+	// change (create/remove/mkdir/rmdir/rename) that touched it: a text
+	// patch based before such a change edits a different file
+	// generation even when its content hash coincidentally matches
+	// (remove+recreate). Only the latest is retained — the fence
+	// compares max(mark) against the base, and an append-only history
+	// grew unboundedly and scanned quadratically under the lock.
+	structSeqs map[string]uint64
 	// EagerBlobs gates eager blob materialization on accepted
 	// replacements: full replicas (owner-survival contract) fetch
 	// immediately; lazy replicas defer to first read and stay lazy on
@@ -151,7 +154,7 @@ func NewWorkspaceState() *WorkspaceState {
 		accepted:   map[string]int{},
 		dedupStubs: map[string]uint64{},
 		ciPaths:    map[string]string{},
-		structSeqs: map[string][]uint64{},
+		structSeqs: map[string]uint64{},
 	}
 }
 
@@ -334,7 +337,9 @@ func asRejection(err error) error {
 // markStructural records a structural change on one path (generation
 // fence for later text patches).
 func (w *WorkspaceState) markStructural(path string, seq uint64) {
-	w.structSeqs[path] = append(w.structSeqs[path], seq)
+	if seq > w.structSeqs[path] {
+		w.structSeqs[path] = seq
+	}
 }
 
 func (w *WorkspaceState) record(env *vmprotocol.Envelope) {
@@ -431,10 +436,8 @@ func (w *WorkspaceState) applyTextPatch(env *vmprotocol.Envelope) error {
 	// after the author's base means this patch targets a DIFFERENT file
 	// generation even when the old generation's hash matches — offset-
 	// zero edits must not land on the unrelated recreated file.
-	for _, s := range w.structSeqs[op.Path] {
-		if s > env.BaseSeq {
-			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
-		}
+	if w.structSeqs[op.Path] > env.BaseSeq {
+		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
 	}
 	// A base older than the retained transform window cannot be safely
 	// transformed: the dropped patches would skew every offset.
@@ -471,10 +474,8 @@ func (w *WorkspaceState) applyBlobReplace(env *vmprotocol.Envelope) error {
 	// the author's preparation and this submission yields a second
 	// generation whose empty-base hash MATCHES the stale one, and a
 	// hash-only check would let the old write clobber the new file.
-	for _, s := range w.structSeqs[op.Path] {
-		if s > env.BaseSeq {
-			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
-		}
+	if w.structSeqs[op.Path] > env.BaseSeq {
+		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
 	}
 	if op.Blob.BaseHash != w.currentHash(op.Path) {
 		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
@@ -536,10 +537,8 @@ func (w *WorkspaceState) applyRemove(env *vmprotocol.Envelope) error {
 	// Generation fence (same as patches/blobs/renames): a remove whose
 	// path was removed AND recreated after its base must not delete the
 	// replacement generation.
-	for _, seqMark := range w.structSeqs[op.Path] {
-		if seqMark > env.BaseSeq {
-			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
-		}
+	if w.structSeqs[op.Path] > env.BaseSeq {
+		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
 	}
 	f, exists := w.files[op.Path]
 	if !exists {
@@ -591,10 +590,8 @@ func (w *WorkspaceState) applyRmdir(env *vmprotocol.Envelope) error {
 	// Same generation fence as OpRemove: an empty directory removed and
 	// RECREATED after this rmdir's base is a different generation, and
 	// deleting the replacement loses the unrelated tree.
-	for _, seqMark := range w.structSeqs[op.Path] {
-		if seqMark > env.BaseSeq {
-			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
-		}
+	if w.structSeqs[op.Path] > env.BaseSeq {
+		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
 	}
 	f, exists := w.files[op.Path]
 	if !exists || !f.IsDir {
@@ -622,10 +619,8 @@ func (w *WorkspaceState) applyRename(env *vmprotocol.Envelope) error {
 	// change at the destination means the author never saw the current
 	// occupant.
 	for _, path := range []string{r.OldPath, r.NewPath} {
-		for _, seqMark := range w.structSeqs[path] {
-			if seqMark > env.BaseSeq {
-				return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(r.OldPath)}
-			}
+		if w.structSeqs[path] > env.BaseSeq {
+			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(r.OldPath)}
 		}
 	}
 	f, exists := w.files[r.OldPath]

@@ -1,6 +1,9 @@
 package vmprotocol
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // TreeEntryKind distinguishes file entries from directory entries in a
 // workspace snapshot tree.
@@ -29,6 +32,13 @@ func ValidWorkspacePath(p string) bool {
 		return false
 	}
 	if strings.ContainsAny(p, "\x00\\") {
+		return false
+	}
+	// Valid UTF-8 only: Go's JSON encoder silently replaces invalid
+	// bytes with U+FFFD, so a non-UTF-8 name would seed a DIFFERENT
+	// authoritative path than the source (and distinct sources can
+	// collapse onto the same replacement name).
+	if !utf8.ValidString(p) {
 		return false
 	}
 	start := 0

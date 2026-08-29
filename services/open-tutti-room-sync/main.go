@@ -497,8 +497,13 @@ func run() error {
 		// committed before the disconnect).
 		resubmitPending(sess)
 		// Replica policy feeds automatic succession: only full replicas
-		// may inherit a lost owner (owner-survival contract).
-		if err := sess.ReportPolicy(string(policy)); err != nil {
+		// may inherit a lost owner (owner-survival contract). Report
+		// the MANAGER's current policy, not the startup-local value:
+		// a bootstrap-detected promotion (or an IsOwner event) set
+		// mgr.Policy = Full after startup, and reporting the stale
+		// startup value overwrote the server's full record — later
+		// successions would skip an actually-materialized replica.
+		if err := sess.ReportPolicy(string(mgr.Policy)); err != nil {
 			fmt.Fprintf(os.Stderr, "room-sync: report policy: %v\n", err)
 		}
 		// Barrier resolutions whose confirmation was lost with the old
@@ -845,11 +850,22 @@ func seedWorkspace(ctx context.Context, bridge *roomfsbridge.Handler, root strin
 			}
 			return bridge.Mkdir(rel, uint32(info.Mode().Perm()))
 		}
-		if st, err := bridge.Stat(rel); err == nil && st != nil && st.Exists && !st.Dir && st.Size == info.Size() {
-			return nil
+		exists := false
+		if st, err := bridge.Stat(rel); err == nil && st != nil && st.Exists && !st.Dir {
+			if st.Size == info.Size() {
+				return nil
+			}
+			// A PARTIAL earlier attempt (create acked, then the read,
+			// CAS upload, or write failed) leaves an authoritative
+			// zero-length entry: calling Create again would fail
+			// "already exists" and pin the seed at this entry forever.
+			// Continue straight to the write instead.
+			exists = true
 		}
-		if err := bridge.Create(rel, uint32(info.Mode().Perm())); err != nil {
-			return err
+		if !exists {
+			if err := bridge.Create(rel, uint32(info.Mode().Perm())); err != nil {
+				return err
+			}
 		}
 		content, err := os.ReadFile(p)
 		if err != nil {

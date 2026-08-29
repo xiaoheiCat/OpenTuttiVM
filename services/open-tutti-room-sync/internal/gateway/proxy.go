@@ -495,8 +495,24 @@ func (p *Proxy) pipe(client net.Conn, route vmprotocol.RouteKey) {
 		return
 	}
 	defer target.Close()
-	go io.Copy(target, client)
-	io.Copy(client, target)
+	// BOTH legs close when EITHER copy finishes: a client that
+	// disconnects while the backend stays open and quiet used to leave
+	// the foreground target-to-client copy blocked forever (deferred
+	// closes never ran) — one goroutine and yamux stream leaked per
+	// connection. Closing both sides unblocks the surviving copy and
+	// releases the stream.
+	done := make(chan struct{}, 2)
+	go func() {
+		io.Copy(target, client)
+		done <- struct{}{}
+	}()
+	go func() {
+		io.Copy(client, target)
+		done <- struct{}{}
+	}()
+	<-done
+	client.Close()
+	target.Close()
 }
 
 // isHTTP reports whether the buffered stream starts with an HTTP method.
