@@ -391,10 +391,26 @@ func (s *Session) writeTyped(typ string, payload any) error {
 
 // write serializes socket writes: coder/websocket allows exactly one
 // concurrent writer, and heartbeat pings run on their own goroutine.
+// Each write runs on a BOUNDED child context: a peer that stops
+// reading while holding the socket open would otherwise block this
+// goroutine forever (the heartbeat's idle check lives in the SAME
+// goroutine and can never fire), and every later submission queues
+// behind writeMu — FUSE flushes hang with no reconnect.
 func (s *Session) write(msg []byte) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	return s.conn.Write(s.ctx, websocket.MessageText, msg)
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+	defer cancel()
+	err := s.conn.Write(ctx, websocket.MessageText, msg)
+	if err != nil && ctx.Err() != nil {
+		// The deadline fired: the socket is wedged — cancel the
+		// session so the reconnect loop takes over instead of leaving
+		// every caller to time out one by one.
+		if s.cancel != nil {
+			s.cancel()
+		}
+	}
+	return err
 }
 
 // ReportPolicy tells the server this device's replica policy

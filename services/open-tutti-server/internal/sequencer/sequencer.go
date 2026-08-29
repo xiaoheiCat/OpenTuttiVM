@@ -121,7 +121,15 @@ func (m *Manager) Submit(env vmprotocol.Envelope) error {
 		RoomID:  env.RoomID,
 		Payload: mustJSON(accepted),
 	})
-	if vmsync.IsEnvironmentPath(env.Operation.Path) {
+	// Environment files renamed OVER (an editor's atomic save renames a
+	// temp file onto .opentuttivm/Dockerfile) must emit the rebuild
+	// prompt too: Operation.Path is the temp SOURCE, so checking only
+	// it missed the destination other devices keep using stale.
+	envPath := vmsync.IsEnvironmentPath(env.Operation.Path)
+	if !envPath && env.Operation.Rename != nil {
+		envPath = vmsync.IsEnvironmentPath(env.Operation.Rename.NewPath)
+	}
+	if envPath {
 		m.send.BroadcastRoom(env.RoomID, vmprotocol.Event{
 			Topic:  vmprotocol.TopicEnvironmentChanged,
 			RoomID: env.RoomID,
@@ -398,6 +406,11 @@ func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason
 		return snap, err
 	}
 	eng.opsSinceSnap = 0
+	// Payloads at or below the snapshot sequence are folded into the
+	// persisted snapshot; keeping them in memory let a room retain
+	// every ~8 MiB body forever (a few hundred edits exhaust the
+	// process for EVERY room).
+	eng.state.Checkpoint(snap.ServerSeq)
 	m.send.BroadcastRoom(roomID, vmprotocol.Event{
 		Topic:   vmprotocol.TopicSnapshotAnnounce,
 		RoomID:  roomID,

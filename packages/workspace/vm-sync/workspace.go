@@ -113,6 +113,14 @@ type WorkspaceState struct {
 	// sequence the same edit twice (a re-applied insert duplicates user
 	// content). Values index into ops.
 	accepted map[string]int
+	// dedupStubs + stubOrder retain the dedup decision for operations
+	// already compacted by Checkpoint: the envelope is gone (its
+	// payload was consuming unbounded server memory), but a retry must
+	// still be answered with the ORIGINAL sequence instead of
+	// re-sequencing. Bounded FIFO — eviction after maxDedupStubs newer
+	// operations means the generation fences reject the ancient retry.
+	dedupStubs map[string]uint64
+	stubOrder  []string
 	// ciPaths indexes lowercased paths: default case-insensitive Windows
 	// workspaces cannot materialize "README" and "readme" as distinct
 	// entries, so creates/mkdirs/renames are refused on collision.
@@ -141,6 +149,7 @@ func NewWorkspaceState() *WorkspaceState {
 		hashLog:    map[string][]seqHash{},
 		barriers:   map[string]*barrier{},
 		accepted:   map[string]int{},
+		dedupStubs: map[string]uint64{},
 		ciPaths:    map[string]string{},
 		structSeqs: map[string][]uint64{},
 	}
@@ -243,6 +252,15 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 		key := env.AuthorDeviceID + "\x00" + env.OperationID
 		if idx, ok := w.accepted[key]; ok && idx < len(w.ops) {
 			return w.ops[idx], nil
+		}
+		if seq, ok := w.dedupStubs[key]; ok {
+			// Compacted at a checkpoint: answer with the original
+			// sequence. Replicas skip it (seq <= applied); the waiting
+			// writer matches the operation id and unblocks.
+			return vmprotocol.Envelope{
+				OperationID: env.OperationID, AuthorDeviceID: env.AuthorDeviceID,
+				RoomID: env.RoomID, ServerSeq: seq,
+			}, nil
 		}
 	}
 	if !vmprotocol.ValidWorkspacePath(env.Operation.Path) {
@@ -1050,6 +1068,45 @@ func (w *WorkspaceState) BlobPaths() []string {
 func (w *WorkspaceState) IsBarriered(path string) bool {
 	b := w.barriers[path]
 	return b != nil && b.Locked
+}
+
+// maxDedupStubs bounds compacted dedup stubs.
+const maxDedupStubs = 4096
+
+// Checkpoint compacts accepted-operation history once seq is folded
+// into a persisted snapshot: envelopes at or below seq are never
+// replayed again (bootstrap sends the snapshot plus OpsSince(seq)), so
+// retaining them kept every payload — near the 8 MiB body cap each —
+// alive for the room's whole lifetime. Dedup keeps a bounded stub.
+func (w *WorkspaceState) Checkpoint(seq uint64) {
+	if seq == 0 {
+		return
+	}
+	kept := make([]vmprotocol.Envelope, 0, len(w.ops))
+	for _, env := range w.ops {
+		if env.ServerSeq <= seq {
+			if env.AuthorDeviceID != "" && env.OperationID != "" {
+				key := env.AuthorDeviceID + "\x00" + env.OperationID
+				if _, ok := w.dedupStubs[key]; !ok {
+					w.stubOrder = append(w.stubOrder, key)
+				}
+				w.dedupStubs[key] = env.ServerSeq
+			}
+			continue
+		}
+		kept = append(kept, env)
+	}
+	w.ops = kept
+	w.accepted = make(map[string]int, len(kept))
+	for i, env := range kept {
+		if env.AuthorDeviceID != "" && env.OperationID != "" {
+			w.accepted[env.AuthorDeviceID+"\x00"+env.OperationID] = i
+		}
+	}
+	for len(w.stubOrder) > maxDedupStubs {
+		delete(w.dedupStubs, w.stubOrder[0])
+		w.stubOrder = w.stubOrder[1:]
+	}
 }
 
 // OpsSince returns accepted envelopes after seq, for clients resuming from a

@@ -544,10 +544,14 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 	// changes ride the next flush's metadata.
 	if sz, ok := in.GetSize(); ok {
 		f.mu.Lock()
-		if f.loaded && int64(sz) == int64(len(f.buffer)) {
-			// Same-size truncate is a POSIX no-op: dirtying it anyway
-			// makes the whole-file submission hit "no content change"
-			// and fail with EAGAIN where truncate(2) must succeed.
+		if f.loaded && !f.dirty && int64(sz) == int64(len(f.buffer)) {
+			// Same-size truncate is a POSIX no-op ONLY over a CLEAN
+			// buffer: after a rejected standalone write (EAGAIN lost a
+			// base-hash race, say) the buffer is resized but dirty and
+			// fh == nil guarantees no later flush — a retry entering
+			// this branch would report success for content the
+			// authority never accepted. Dirty same-size retries fall
+			// through and resubmit.
 			f.mu.Unlock()
 			return 0
 		}
@@ -604,16 +608,18 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 	}
 	if mode, ok := in.GetMode(); ok {
 		perms := mode & 0o7777
+		// The change must reach the authoritative workspace: a local
+		// assignment alone reverts on the next invalidation and never
+		// reaches other participants. Commit the cached mode ONLY
+		// after acceptance — caching first kept reporting uncommitted
+		// (possibly WIDENED) permissions after a rejected Chmod.
+		if err := f.client.Chmod(f.path, perms); err != nil {
+			return syscall.EIO
+		}
 		f.mu.Lock()
 		f.mode = perms
 		f.modeSet = true
 		f.mu.Unlock()
-		// The change must reach the authoritative workspace: a local
-		// assignment alone reverts on the next invalidation and never
-		// reaches other participants.
-		if err := f.client.Chmod(f.path, perms); err != nil {
-			return syscall.EIO
-		}
 	}
 	return f.Getattr(ctx, fh, out)
 }

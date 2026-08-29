@@ -374,6 +374,25 @@ func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error
 	}
 	if h.inval != nil {
 		h.inval(op.Path)
+		// A LOCAL rename needs the same two-sided, descendant-aware
+		// invalidation remote renames get: the main WebSocket pump
+		// skips own-operation events, so other RoomFS connections on
+		// THIS process would keep a cached destination, negative
+		// lookup, or moved descendant forever.
+		if rn := op.Rename; op.Kind == vmprotocol.OpRename && rn != nil {
+			h.inval(rn.NewPath)
+			var moved []string
+			h.mgr.WithState(func(state *vmsync.WorkspaceState) {
+				for _, p := range state.Paths() {
+					if strings.HasPrefix(p, rn.NewPath+"/") {
+						moved = append(moved, p)
+					}
+				}
+			})
+			for _, p := range moved {
+				h.inval(p)
+			}
+		}
 	}
 	// The accepted operation may be this session's conflict fix: lift
 	// the barrier so every other participant can edit the path again.
