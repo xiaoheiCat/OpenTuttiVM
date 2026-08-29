@@ -434,11 +434,12 @@ func (f *fileNode) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadR
 	// empty bytes to an already-open handle would corrupt what the
 	// caller sees after a remote edit.
 	if !f.loaded {
-		content, err := f.client.Read(f.path)
+		content, base, err := f.client.ReadWithHash(f.path)
 		if err != nil {
 			return nil, syscall.EIO
 		}
 		f.buffer = content
+		f.bufBase = base // invalidated reload refreshes the flush baseline too
 		f.loaded = true
 	}
 	if off >= int64(len(f.buffer)) {
@@ -485,10 +486,14 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	if !dirty {
 		return 0
 	}
-	if err := f.client.Write(f.path, content, f.bufBase); err != nil {
+	newBase, err := f.client.Write(f.path, content, f.bufBase)
+	if err != nil {
 		// Room-level rejections (base mismatch, barrier fencing) map to
 		// EAGAIN so editors retry against the fresh revision.
 		return syscall.EAGAIN
+	}
+	if newBase != "" {
+		f.bufBase = newBase
 	}
 	f.mu.Lock()
 	// Clear dirty only when no write landed while we awaited the
@@ -584,8 +589,12 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		// submit the resize now or truncate(2) "succeeds" while the
 		// authoritative content never changes.
 		if fh == nil {
-			if err := f.client.Write(f.path, content, f.bufBase); err != nil {
+			newBase, err := f.client.Write(f.path, content, f.bufBase)
+			if err != nil {
 				return syscall.EAGAIN
+			}
+			if newBase != "" {
+				f.bufBase = newBase
 			}
 			f.mu.Lock()
 			// Same race as Flush: a concurrent Write while the resize

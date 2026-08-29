@@ -664,6 +664,12 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 	if err := s.repo.DeleteMembership(ctx, in.RoomID, in.DeviceID); err != nil {
 		return err
 	}
+	// Same barrier cleanup as kick: a leaving participant's barriers
+	// must not keep fencing their paths after the resolver can no
+	// longer authenticate or reconnect.
+	if s.barrierClean != nil {
+		s.barrierClean(in.RoomID, in.DeviceID)
+	}
 	s.broadcast(in.RoomID, vmprotocol.Event{
 		Topic:   vmprotocol.TopicPresence,
 		RoomID:  in.RoomID,

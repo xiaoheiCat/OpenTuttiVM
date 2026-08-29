@@ -1,6 +1,8 @@
 package roomfs
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net"
@@ -23,6 +25,13 @@ type memHandler struct {
 	dirs     map[string]bool
 	rejectOn string // path whose writes are rejected by the room
 	srv      *Server
+}
+
+// testContentHash mirrors the replica's content hash format without
+// crossing the module boundary.
+func testContentHash(content []byte) string {
+	sum := sha256.Sum256(content)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func newMemHandler() *memHandler {
@@ -104,6 +113,27 @@ func firstSegment(rest string) (string, bool) {
 		}
 	}
 	return rest, false
+}
+
+func (m *memHandler) ReadWithHash(path string) ([]byte, string, error) {
+	content, err := m.Read(path)
+	if err != nil {
+		return nil, "", err
+	}
+	return content, testContentHash(content), nil
+}
+
+func (m *memHandler) WriteGuarded(path string, content []byte, baseHash string) (string, error) {
+	if baseHash != "" {
+		cur, err := m.Read(path)
+		if err == nil && testContentHash(cur) != baseHash {
+			return "", fmt.Errorf("roomfs: stale base for %s; re-read and retry", path)
+		}
+	}
+	if err := m.Write(path, content); err != nil {
+		return "", err
+	}
+	return testContentHash(content), nil
 }
 
 func (m *memHandler) Write(path string, content []byte) error {
@@ -221,7 +251,7 @@ func TestProtocolRoundTrip(t *testing.T) {
 	if err := c.Create("notes/todo.txt", 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Write("notes/todo.txt", []byte("buy milk"), ""); err != nil {
+	if _, err := c.Write("notes/todo.txt", []byte("buy milk"), ""); err != nil {
 		t.Fatal(err)
 	}
 	back, _ := c.Read("notes/todo.txt")
@@ -253,7 +283,7 @@ func TestBinaryBodiesSurviveFraming(t *testing.T) {
 
 	// Bytes with zeros, high bytes, and invalid UTF-8.
 	blob := []byte{0x00, 0xff, 0xfe, 0x89, 'a', 0x00, 0x80}
-	if err := c.Write("bin/logo.png", blob, ""); err != nil {
+	if _, err := c.Write("bin/logo.png", blob, ""); err != nil {
 		t.Fatal(err)
 	}
 	back, err := c.Read("bin/logo.png")
@@ -277,7 +307,7 @@ func TestRejectionSurfacesAsErrRejected(t *testing.T) {
 	}
 	defer c.Close()
 
-	if err := c.Write("guarded.txt", []byte("x"), ""); err == nil || err.Error() == "" {
+	if _, err := c.Write("guarded.txt", []byte("x"), ""); err == nil || err.Error() == "" {
 		t.Fatalf("expected rejection error, got %v", err)
 	}
 }
@@ -301,7 +331,7 @@ func TestInvalidationPush(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer writer.Close()
-	if err := writer.Write("shared/plan.md", []byte("v2"), ""); err != nil {
+	if _, err := writer.Write("shared/plan.md", []byte("v2"), ""); err != nil {
 		t.Fatal(err)
 	}
 	select {

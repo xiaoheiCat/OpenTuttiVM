@@ -3,6 +3,7 @@ package gateway
 import (
 	"net"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -72,23 +73,30 @@ func probeSharedAddr() net.IP {
 		if runtime.GOOS != "linux" {
 			return
 		}
-		addrs, err := net.InterfaceAddrs()
+		ifaces, err := net.Interfaces()
 		if err != nil {
 			return
 		}
-		for _, a := range addrs {
-			ipNet, ok := a.(*net.IPNet)
-			if !ok || ipNet.IP.IsLoopback() || ipNet.IP.To4() == nil || ipNet.IP.IsLinkLocalUnicast() {
+		for _, ifc := range ifaces {
+			// Only an IDENTIFIED container bridge qualifies: the first
+			// private address on a native or multi-homed host is
+			// routinely Wi-Fi/Ethernet, and binding room routes there
+			// publishes unauthenticated session listeners to the whole
+			// LAN. Native hosts (no docker*/br-* interface) fall back
+			// to loopback — in-room proxying keeps working, and only
+			// cross-machine exposure shrinks.
+			if !strings.HasPrefix(ifc.Name, "docker") && !strings.HasPrefix(ifc.Name, "br-") {
 				continue
 			}
-			// Only a PRIVATE range qualifies as a room bridge: the
-			// first non-loopback address on a native or multi-homed
-			// host is routinely the LAN/Wi-Fi adapter, and binding
-			// room routes there publishes session services to other
-			// machines without room authentication. Anything else
-			// falls back to loopback (in-room proxying still works;
-			// only cross-machine exposure shrinks).
-			if ipNet.IP.IsPrivate() {
+			addrs, err := ifc.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, a := range addrs {
+				ipNet, ok := a.(*net.IPNet)
+				if !ok || ipNet.IP.IsLoopback() || ipNet.IP.To4() == nil || !ipNet.IP.IsPrivate() {
+					continue
+				}
 				sharedAddr = ipNet.IP.To4()
 				return
 			}

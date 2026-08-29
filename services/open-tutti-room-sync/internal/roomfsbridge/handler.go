@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -201,6 +202,59 @@ func (h *Handler) List(path string) ([]roomfs.DirEntry, error) {
 }
 
 // Write implements roomfs.Handler: whole-file write → File Operation.
+// ReadWithHash returns content and its hash from ONE replica snapshot.
+func (h *Handler) ReadWithHash(path string) ([]byte, string, error) {
+	var content []byte
+	var hash string
+	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
+		if info, ok := state.EntryInfo(path); ok && !info.IsDir && info.IsText {
+			content = info.Content
+		}
+		hash = state.CurrentHash(path)
+	})
+	if content == nil {
+		// Blob or unknown path: fall back to the replica reader.
+		c, err := h.Read(path)
+		if err != nil {
+			return nil, "", err
+		}
+		return c, hash, nil
+	}
+	return content, hash, nil
+}
+
+// WriteGuarded validates the flush baseline and prepares the write in
+// ONE critical section, then submits; the returned hash is the
+// post-write content hash for the mount's next baseline.
+func (h *Handler) WriteGuarded(path string, content []byte, baseHash string) (string, error) {
+	old, base, baseSeq, err := h.mgr.PrepareWriteGuarded(context.Background(), path, baseHash)
+	if err != nil {
+		if errors.Is(err, replica.ErrStaleBase) {
+			return "", fmt.Errorf("roomfs: stale base for %s; re-read and retry", path)
+		}
+		return "", err
+	}
+	op, convErr := vmsync.ConvertChange(h.nextOpID(), path, base, h.mgr.TrackedAsBlob(path), old, content,
+		func(manifest vmcas.Manifest, chunks [][]byte) error {
+			if h.uploader == nil {
+				return fmt.Errorf("no chunk uploader configured")
+			}
+			return h.uploader.EnsureChunks(context.Background(), manifest, chunks)
+		})
+	if convErr != nil {
+		return "", convErr
+	}
+	if err := h.submitAtSeq(op, baseSeq); err != nil {
+		return "", err
+	}
+	// Post-write baseline for the mount's next flush: the manifest for
+	// blob replacements, the content hash for text.
+	if op.Blob != nil {
+		return op.Blob.Manifest, nil
+	}
+	return vmsync.ContentHash(content), nil
+}
+
 func (h *Handler) Write(path string, content []byte) error {
 	// Old content, tracked base hash, and base sequence come from ONE
 	// locked snapshot: a remote operation landing between separate reads

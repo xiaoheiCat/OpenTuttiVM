@@ -13,6 +13,14 @@ import (
 type Handler interface {
 	Stat(path string) (*Stat, error)
 	Read(path string) ([]byte, error)
+	// ReadWithHash returns the content and its content hash from ONE
+	// consistent replica snapshot (a separate Stat could label older
+	// bytes with a newer hash and defeat flush baselines).
+	ReadWithHash(path string) ([]byte, string, error)
+	// WriteGuarded applies a whole-file write whose submitted baseline
+	// is validated ATOMICALLY with the write preparation; returns the
+	// acknowledged post-write hash.
+	WriteGuarded(path string, content []byte, baseHash string) (string, error)
 	List(path string) ([]DirEntry, error)
 	// Write applies a whole-file write through the ops converter and
 	// submits the resulting operation; implementations signal room-level
@@ -118,7 +126,7 @@ func (s *Server) dispatch(req Request, body []byte) Response {
 		}
 		res.Stat = st
 	case TypeRead:
-		content, err := s.handler.Read(req.Path)
+		content, hash, err := s.handler.ReadWithHash(req.Path)
 		if err != nil {
 			return errorResponse(req.ID, err)
 		}
@@ -132,9 +140,7 @@ func (s *Server) dispatch(req Request, body []byte) Response {
 			return errorResponse(req.ID, fmt.Errorf("roomfs: read of %s exceeds protocol body limit (%d bytes)", req.Path, MaxBodyBytes))
 		}
 		res.Body = content
-		if st, err := s.handler.Stat(req.Path); err == nil && st != nil {
-			res.Hash = st.Hash
-		}
+		res.Hash = hash
 	case TypeList:
 		entries, err := s.handler.List(req.Path)
 		if err != nil {
@@ -142,22 +148,16 @@ func (s *Server) dispatch(req Request, body []byte) Response {
 		}
 		res.Entries = entries
 	case TypeWrite:
-		// Optimistic-concurrency guard: a flush carrying the hash of a
-		// superseded revision must fail HERE (EAGAIN upstream) instead
-		// of diffing stale bytes against current content and silently
-		// overwriting the other participant's accepted edit.
-		if req.BaseHash != "" {
-			st, err := s.handler.Stat(req.Path)
-			if err != nil {
-				return errorResponse(req.ID, err)
-			}
-			if st == nil || st.Hash != req.BaseHash {
-				return errorResponse(req.ID, fmt.Errorf("roomfs: stale base for %s; re-read and retry", req.Path))
-			}
-		}
-		if err := s.handler.Write(req.Path, body); err != nil {
+		// Optimistic-concurrency guard, ATOMIC with write preparation
+		// (WriteGuarded): a flush carrying a superseded revision's hash
+		// fails HERE (EAGAIN upstream) instead of diffing stale bytes
+		// against current content and silently overwriting the other
+		// participant's accepted edit.
+		newHash, err := s.handler.WriteGuarded(req.Path, body, req.BaseHash)
+		if err != nil {
 			return errorResponse(req.ID, err)
 		}
+		res.Hash = newHash
 	case TypeCreate:
 		if err := s.handler.Create(req.Path, req.Mode); err != nil {
 			return errorResponse(req.ID, err)

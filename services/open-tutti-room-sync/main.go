@@ -249,7 +249,7 @@ func run() error {
 	// The bridge submits under the same session id the port announcements
 	// use ("sess-"+label): barrier resolver assignment compares against
 	// AgentSessionID, and a mismatched id would never lift a fence.
-	sessionLabel := os.Getenv("OPEN_TUTTI_SESSION_LABEL")
+	sessionLabel := vmprotocol.SlugifyLabel(os.Getenv("OPEN_TUTTI_SESSION_LABEL"))
 	if sessionLabel == "" {
 		sessionLabel = "main"
 	}

@@ -75,6 +75,19 @@ func isValidSlug(s string) bool {
 }
 
 // SlugifyHostname converts a machine name into a valid .tutti slug.
+// SlugifyLabel canonicalizes a human-facing session label for use in
+// session ids and canonical .tutti hosts: ParseTuttiHost only accepts
+// lowercase letters, digits, and hyphens, so an override like
+// "Claude Code" must become "claude-code" (an empty label keeps the
+// caller's own default).
+func SlugifyLabel(label string) string {
+	out := SlugifyHostname(label)
+	if out == "device" { // slugify's empty fallback is hostnames, not labels
+		return ""
+	}
+	return out
+}
+
 func SlugifyHostname(name string) string {
 	var b strings.Builder
 	lastDash := true // avoid leading dash

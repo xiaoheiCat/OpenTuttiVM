@@ -229,15 +229,15 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, roomID, dev
 	// disconnect right after the dissolution commits previously sent
 	// this branch into the participant-only path, and the terminal
 	// room's sockets, routes, and tunnels survived indefinitely.
-	roomDissolved := false
-	if req.Disband {
-		roomDissolved = true
-	} else {
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
-		room, err := s.rooms.GetRoom(ctx, roomID)
-		cancel()
-		roomDissolved = err == nil && room.DissolvedAt != nil
-	}
+	// Authoritative lookup on a NON-CANCELED context (a client
+	// disconnect must not steer teardown): the request's own disband
+	// flag is untrusted — a non-owner's Leave ignores it, and treating
+	// the flag as terminal would close the sequencer and drop every
+	// transport for a room that is still active.
+	roomCtx, roomCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+	room, roomErr := s.rooms.GetRoom(roomCtx, roomID)
+	roomCancel()
+	roomDissolved := roomErr == nil && room.DissolvedAt != nil
 	if roomDissolved {
 		s.seq.CloseRoom(roomID)
 		s.previews.ClearRoom(roomID)

@@ -199,7 +199,19 @@ func (s *LocalStore) Get(hash string) ([]byte, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrObjectNotFound
 	}
-	return data, err
+	if err != nil {
+		return nil, err
+	}
+	// Integrity check on read: content-addressed storage must never
+	// hand back bytes that no longer hash to their key (truncation,
+	// modification, or same-length disk corruption would otherwise
+	// silently flow into replicas and final applies — the size check
+	// downstream cannot catch same-length damage).
+	sum := sha256.Sum256(data)
+	if "sha256:"+hex.EncodeToString(sum[:]) != hash {
+		return nil, fmt.Errorf("cas: integrity failure for %s", hash)
+	}
+	return data, nil
 }
 
 // Delete removes one chunk object file; a missing file is already

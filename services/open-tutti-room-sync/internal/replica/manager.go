@@ -314,6 +314,30 @@ func (m *Manager) PrepareWrite(ctx context.Context, path string) (content []byte
 	return content, m.Replica.State.CurrentBaseHash(path), m.Replica.AppliedSeq, nil
 }
 
+// ErrStaleBase reports a flush whose buffer baseline no longer matches
+// the current content hash (another participant's edit superseded it).
+var ErrStaleBase = errors.New("stale base: content changed since buffer was loaded")
+
+// PrepareWriteGuarded snapshots the write base ATOMICALLY with an
+// optional baseline check: without the guard inside the same critical
+// section, an edit landing between the server's pre-check and this
+// prepare would be diffed against the newer revision and accepted as
+// current, silently overwriting it.
+func (m *Manager) PrepareWriteGuarded(ctx context.Context, path, baseHash string) ([]byte, string, uint64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if baseHash != "" {
+		if cur := m.Replica.State.CurrentBaseHash(path); cur != baseHash {
+			return nil, "", 0, ErrStaleBase
+		}
+	}
+	content, err := m.readLocked(ctx, path)
+	if err != nil {
+		return nil, "", m.Replica.AppliedSeq, err
+	}
+	return content, m.Replica.State.CurrentBaseHash(path), m.Replica.AppliedSeq, nil
+}
+
 func (m *Manager) readLocked(ctx context.Context, path string) ([]byte, error) {
 	if content, ok := m.Replica.State.CurrentContent(path); ok {
 		return content, nil
@@ -374,8 +398,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 	// immediate chmod would strip the owner's write permission before
 	// the children's CreateTemp lands beneath it.
 	var deferredDirs []struct {
-		dst  string
-		mode uint32
+		dst     string
+		mode    uint32
+		modeSet bool
 	}
 	for _, path := range m.Replica.State.Paths() {
 		roomPaths[path] = true
@@ -413,11 +438,15 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			if err := os.MkdirAll(dst, 0o755); err != nil {
 				return err
 			}
-			if info.Mode != 0 {
+			// ModeSet, not Mode != 0: an explicitly synchronized 0000
+			// must still chmod down from MkdirAll's 0755; only an
+			// absent mode skips the deferred chmod.
+			if info.ModeSet {
 				deferredDirs = append(deferredDirs, struct {
-					dst  string
-					mode uint32
-				}{dst, info.Mode})
+					dst     string
+					mode    uint32
+					modeSet bool
+				}{dst, info.Mode, true})
 			}
 			continue
 		}
@@ -455,8 +484,10 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		return deferredDirs[i].dst > deferredDirs[j].dst
 	})
 	for _, d := range deferredDirs {
-		if err := applyMode(d.dst, d.mode); err != nil {
-			return fmt.Errorf("chmod %s: %w", d.dst, err)
+		if d.modeSet {
+			if err := applyMode(d.dst, d.mode); err != nil {
+				return fmt.Errorf("chmod %s: %w", d.dst, err)
+			}
 		}
 	}
 	return nil
