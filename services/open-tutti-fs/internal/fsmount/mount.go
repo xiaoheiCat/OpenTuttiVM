@@ -293,7 +293,10 @@ func (n *roomNode) Rename(ctx context.Context, name string, newParent fs.InodeEm
 	}
 	to := np.path(newName)
 	if flags&renameNoreplace != 0 {
-		if st, err := n.client.Stat(to); err == nil && st != nil {
+		// RoomFS answers a MISS with a non-nil Stat{Exists:false}; only
+		// an explicit Exists is a collision. Treating the miss as
+		// EEXIST blocked every valid no-replace rename.
+		if st, err := n.client.Stat(to); err == nil && st != nil && st.Exists {
 			return syscall.EEXIST
 		}
 	}

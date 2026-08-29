@@ -408,6 +408,16 @@ func run() error {
 				if json.Unmarshal(ev.Payload, &cp) == nil {
 					bridge.OnConflictDetected(cp)
 				}
+			case vmprotocol.TopicConflictResolved:
+				// The SERVER confirmed a barrier lift: only this
+				// acknowledgement may retire the resolver duty (a
+				// fire-and-forget resolve frame can die with a
+				// dropped socket; the duty must survive to retry
+				// after reconnect).
+				var cp vmprotocol.ConflictPayload
+				if json.Unmarshal(ev.Payload, &cp) == nil {
+					bridge.OnConflictResolved(cp.Path)
+				}
 			case borrowagent.TopicAgentShared:
 				var p borrowagent.AgentSharedPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {

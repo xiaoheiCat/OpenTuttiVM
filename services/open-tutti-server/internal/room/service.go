@@ -991,6 +991,14 @@ func (s *Service) upsertDevice(ctx context.Context, in DeviceInput) error {
 	if err := validateDevice(&in); err != nil {
 		return err
 	}
+	// Hostname is device identity, not per-join state: a device in
+	// room A rejoining elsewhere with a different hostname must not
+	// rewrite the canonical .tutti hosts room A already advertises
+	// (its slug would collide there with no re-check). An enrolled
+	// device keeps its registered hostname.
+	if existing, err := s.repo.GetDevice(ctx, in.ID); err == nil {
+		in.Hostname = existing.Hostname
+	}
 	return s.repo.UpsertDevice(ctx, store.Device{
 		ID: in.ID, DisplayName: in.DisplayName, Hostname: in.Hostname,
 		PublicKeyPEM: in.PublicKey, FirstSeenAt: s.clock.Now(),

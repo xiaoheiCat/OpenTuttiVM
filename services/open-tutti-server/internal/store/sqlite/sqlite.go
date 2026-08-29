@@ -178,7 +178,7 @@ func (r *Repo) CreateRoomWithOwner(ctx context.Context, d store.Device, room sto
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO devices (id, display_name, hostname, public_key_pem, first_seen_at)
 		 VALUES (?,?,?,?,?)
-		 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, hostname=excluded.hostname, public_key_pem=excluded.public_key_pem`,
+		 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, public_key_pem=excluded.public_key_pem`,
 		d.ID, d.DisplayName, d.Hostname, d.PublicKeyPEM, d.FirstSeenAt.Unix()); err != nil {
 		return err
 	}
@@ -303,7 +303,7 @@ func (r *Repo) UpsertDevice(ctx context.Context, d store.Device) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO devices (id, display_name, hostname, public_key_pem, first_seen_at)
 		 VALUES (?,?,?,?,?)
-		 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, hostname=excluded.hostname, public_key_pem=excluded.public_key_pem`,
+		 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, public_key_pem=excluded.public_key_pem`,
 		d.ID, d.DisplayName, d.Hostname, d.PublicKeyPEM, d.FirstSeenAt.Unix())
 	return err
 }
@@ -464,7 +464,7 @@ func (r *Repo) EnrollWithTicket(ctx context.Context, hash string, now time.Time,
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO devices (id, display_name, hostname, public_key_pem, first_seen_at)
 		 VALUES (?,?,?,?,?)
-		 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, hostname=excluded.hostname, public_key_pem=excluded.public_key_pem`,
+		 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, public_key_pem=excluded.public_key_pem`,
 		d.ID, d.DisplayName, d.Hostname, d.PublicKeyPEM, d.FirstSeenAt.Unix()); err != nil {
 		return err
 	}

@@ -313,14 +313,14 @@ func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error
 			}
 		}
 	} else {
-		delete(h.resolverDuty, op.Path)
 	}
 	h.mu.Unlock()
-	// Duty clears ONLY on an acknowledged resolution: if the socket
-	// drops before ResolveBarrier is written, the barrier stays up on
-	// the server and retrying the same content would be a no-change
-	// write — the retained duty keeps the resolution retryable
-	// (RetryDuties after reconnect).
+	// Duty clears ONLY on the server's conflict_resolved broadcast
+	// (see OnConflictResolved): a fire-and-forget ResolveBarrier frame
+	// can be written to a socket that drops before the server processes
+	// it — deleting the duty here would leave the server barrier locked
+	// with nothing left to retry, fencing every other participant from
+	// the path permanently.
 	if duty && r != nil {
 		if err := r.ResolveBarrier(op.Path); err != nil {
 			h.mu.Lock()
@@ -338,6 +338,15 @@ func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error
 		}
 	}
 	return nil
+}
+
+// OnConflictResolved drops the resolver duty once the SERVER confirmed
+// the lift (conflict_resolved broadcast): that acknowledgement is the
+// only authoritative evidence the barrier is down.
+func (h *Handler) OnConflictResolved(path string) {
+	h.mu.Lock()
+	delete(h.resolverDuty, path)
+	h.mu.Unlock()
 }
 
 // RetryDuties re-attempts barrier resolutions whose confirmation never
