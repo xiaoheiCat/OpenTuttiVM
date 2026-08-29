@@ -1012,10 +1012,12 @@ func (s *Service) dissolveLocked(ctx context.Context, roomID string) error {
 	if room.DissolvedAt != nil {
 		return nil
 	}
-	s.broadcast(roomID, vmprotocol.Event{
-		Topic: vmprotocol.TopicRoomEnding, RoomID: roomID,
-		Payload: mustJSON(map[string]string{"reason": "dissolved"}),
-	})
+	// Terminal event AFTER the commit: broadcasting before
+	// DissolveRoomFenced sent every member to their local finalize
+	// path while a canceled request context or DB error could still
+	// roll the dissolution back — the room stayed fully active
+	// (members, tokens, sequencing) under clients that had already
+	// treated it as ended.
 	// Refs read and dissolved under the CAS publication fence: an
 	// upload inserting a reference between the read and the delete
 	// leaked the object behind an orphan cas_refs row for the terminal
@@ -1024,6 +1026,10 @@ func (s *Service) dissolveLocked(ctx context.Context, roomID string) error {
 	if err != nil {
 		return err
 	}
+	s.broadcast(roomID, vmprotocol.Event{
+		Topic: vmprotocol.TopicRoomEnding, RoomID: roomID,
+		Payload: mustJSON(map[string]string{"reason": "dissolved"}),
+	})
 	// Reference-aware collection AFTER the fence released: the
 	// collector re-checks global refcounts so objects other rooms
 	// still share survive.

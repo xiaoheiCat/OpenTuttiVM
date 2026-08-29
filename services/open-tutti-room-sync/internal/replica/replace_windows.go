@@ -22,7 +22,24 @@ var (
 	movefileThrough = uintptr(0x8) // MOVEFILE_WRITE_THROUGH
 )
 
+var procSetFileAttributesW = kernel32.NewProc("SetFileAttributesW")
+
+// clearReadOnly drops FILE_ATTRIBUTE_READONLY from path (best effort):
+// os.Chmod mirrors room modes, and a mode without 0200 (e.g. a room
+// member's 0444) sets READONLY, after which MoveFileEx(REPLACE_EXISTING)
+// and deletes fail ACCESS_DENIED — permanently wedging apply-and-leave
+// for rooms containing such files.
+func clearReadOnly(path string) {
+	p, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return
+	}
+	const fileAttributeNormal = 0x80
+	procSetFileAttributesW.Call(uintptr(unsafe.Pointer(p)), fileAttributeNormal)
+}
+
 func replaceFile(source, destination string) error {
+	clearReadOnly(destination)
 	src, err := syscall.UTF16PtrFromString(source)
 	if err != nil {
 		return fmt.Errorf("replace %s: %w", destination, err)

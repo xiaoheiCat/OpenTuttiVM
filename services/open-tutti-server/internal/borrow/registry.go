@@ -91,6 +91,10 @@ func NewRegistry() *Registry {
 // Share enables or disables borrowing for one agent instance. Only the
 // owner may share; every share start bumps the lease generation so old
 // commands cannot ride a re-share.
+// maxAgentsPerDevice bounds one owner's concurrently registered shared
+// agents in a room.
+const maxAgentsPerDevice = 32
+
 func (r *Registry) Share(roomID string, p borrowagent.AgentSharedPayload) (borrowagent.AgentSharedPayload, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -101,6 +105,20 @@ func (r *Registry) Share(roomID string, p borrowagent.AgentSharedPayload) (borro
 	if room == nil {
 		room = map[string]*AgentInstance{}
 		r.agents[roomID] = room
+	}
+	// Per-owner quota mirrors maxRoutesPerDevice: without it an owner
+	// cycling unique agent ids retained unbounded registry entries
+	// (and broadcast echoes) until dissolution.
+	if room[p.AgentInstanceID] == nil {
+		owned := 0
+		for _, a := range room {
+			if a.OwnerDeviceID == p.OwnerDeviceID {
+				owned++
+			}
+		}
+		if owned >= maxAgentsPerDevice {
+			return p, fmt.Errorf("device shares at most %d agents", maxAgentsPerDevice)
+		}
 	}
 	existing := room[p.AgentInstanceID]
 	if existing != nil && existing.OwnerDeviceID != p.OwnerDeviceID {

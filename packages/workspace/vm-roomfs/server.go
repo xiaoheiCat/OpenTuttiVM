@@ -104,9 +104,21 @@ func (s *Server) serveConn(conn net.Conn, sc *serverConn) {
 		}
 		res := s.dispatch(req, body)
 		sc.mu.Lock()
+		// Bounded response writes, same policy as pushes: a mount that
+		// stops reading while holding its socket open parked this write
+		// forever HOLDING sc.mu, so every later BroadcastInvalidate
+		// blocked acquiring the lock and stalled the device's whole WS
+		// event pump. A timed-out response drops the connection (the
+		// mount reconnects and re-reads).
+		if dl, ok := sc.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
+			_ = dl.SetWriteDeadline(time.Now().Add(30 * time.Second))
+		}
 		err = WriteFrame(sc.writer, res, res.Body)
 		if err == nil {
 			err = sc.writer.Flush()
+		}
+		if dl, ok := sc.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
+			_ = dl.SetWriteDeadline(time.Time{})
 		}
 		sc.mu.Unlock()
 		if err != nil {

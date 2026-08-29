@@ -39,9 +39,9 @@ func TransformPatch(patch *vmprotocol.TextPatch, concurrent []appliedPatch) Tran
 			// and apply it once instead of mutating s.Offset mid-pass
 			// (a shifted s would compare later splices in a mixed frame).
 			shift := 0
-			for ci := range c.Patch.Splices {
-				o := c.Patch.Splices[ci]
-				delta := len(o.Insert) - o.DeleteLen
+			for ci := range c.Splices {
+				o := c.Splices[ci]
+				delta := o.InsertLen - o.DeleteLen
 				oEnd := o.Offset + o.DeleteLen
 				sEnd := s.Offset + s.DeleteLen
 
@@ -68,10 +68,23 @@ func TransformPatch(patch *vmprotocol.TextPatch, concurrent []appliedPatch) Tran
 // splices in the coordinate frame the sequencer used when applying, which is
 // what transform needs.
 type appliedPatch struct {
-	Seq    uint64
-	Agent  string
-	Device string
-	Patch  vmprotocol.TextPatch
+	Seq     uint64
+	Agent   string
+	Device  string
+	Splices []compactSplice
+}
+
+// compactSplice is the transform-ready summary of one splice: the
+// transform needs ONLY offset/extent/insert-length, so retained
+// history never pins the insert PAYLOAD — full text stays solely in
+// w.ops until the next Checkpoint compacts it. Without this, a path
+// edited with ~8 MiB inserts retained every payload forever (the
+// 128-entry window bounded COUNT, not bytes) and one member could
+// OOM the process-global server.
+type compactSplice struct {
+	Offset    int
+	DeleteLen int
+	InsertLen int
 }
 
 func appendUnique(list []string, v string) []string {

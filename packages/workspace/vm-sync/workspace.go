@@ -471,7 +471,7 @@ func (w *WorkspaceState) applyTextPatch(env *vmprotocol.Envelope) error {
 	concurrent := w.concurrentPatches(op.Path, env.BaseSeq)
 	retained := 0
 	for i := range concurrent {
-		retained += len(concurrent[i].Patch.Splices)
+		retained += len(concurrent[i].Splices)
 	}
 	// Aggregate fence: the per-patch cap alone still allows
 	// 2048 × (128 window × 2048) ≈ 5×10^8 comparisons. Bound the
@@ -593,6 +593,11 @@ func (w *WorkspaceState) applyRemove(env *vmprotocol.Envelope) error {
 	}
 	delete(w.files, op.Path)
 	w.untrackPath(op.Path)
+	// The removed file's transform history dies with it: the next op
+	// on this pathname faces the generation fence (recreate bumps
+	// structSeqs, so stale patches reject on base mismatch), so
+	// retaining the summaries only pinned memory for dead paths.
+	delete(w.history, op.Path)
 	return nil
 }
 
@@ -835,14 +840,22 @@ func (w *WorkspaceState) recordHistory(env *vmprotocol.Envelope) {
 	if op.Kind != vmprotocol.OpTextPatch || op.Patch == nil {
 		return
 	}
+	compact := make([]compactSplice, 0, len(op.Patch.Splices))
+	for _, sp := range op.Patch.Splices {
+		compact = append(compact, compactSplice{
+			Offset: sp.Offset, DeleteLen: sp.DeleteLen, InsertLen: len(sp.Insert),
+		})
+	}
 	w.history[op.Path] = append(w.history[op.Path], appliedPatch{
-		Seq:    env.ServerSeq,
-		Agent:  env.AgentSessionID,
-		Device: env.AuthorDeviceID,
-		Patch:  *op.Patch,
+		Seq:     env.ServerSeq,
+		Agent:   env.AgentSessionID,
+		Device:  env.AuthorDeviceID,
+		Splices: compact,
 	})
 	if n := len(w.history[op.Path]); n > transformHistoryWindow {
-		w.history[op.Path] = w.history[op.Path][n-transformHistoryWindow:]
+		// COPY into a fresh slice: reslicing the tail keeps the grown
+		// backing array (and every string header it still spans) live.
+		w.history[op.Path] = append([]appliedPatch(nil), w.history[op.Path][n-transformHistoryWindow:]...)
 	}
 }
 

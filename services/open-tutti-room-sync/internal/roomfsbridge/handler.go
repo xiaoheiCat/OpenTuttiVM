@@ -433,6 +433,13 @@ func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error
 				newPath := rn.NewPath + p[len(rn.OldPath):]
 				if p == op.Path {
 					delete(h.resolverDuty, p)
+					// The RENAMED file's own duty resolves at its NEW
+					// path (the server moved the barrier with the
+					// file): resolving the pre-rename path is always
+					// rejected, which reported a spurious EIO for the
+					// already-accepted rename and left the barrier
+					// fencing every other participant until reconnect.
+					duty = false
 				}
 				h.resolverDuty[newPath] = true
 				movedDuties = append(movedDuties, newPath)

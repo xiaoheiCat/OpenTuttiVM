@@ -638,6 +638,10 @@ func pruneRemoved(root string, roomPaths map[string]bool) error {
 			return nil
 		}
 		if !roomPaths[rel] {
+			// Windows: a mirrored read-only mode (no 0200 bit) sets
+			// FILE_ATTRIBUTE_READONLY and the delete fails ACCESS_DENIED,
+			// failing the whole apply. Clear it first (POSIX no-op).
+			clearReadOnly(p)
 			return os.Remove(p)
 		}
 		return nil

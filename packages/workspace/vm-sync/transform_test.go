@@ -17,10 +17,10 @@ func TestTransformMultipleConcurrentDeletionsKeepFrame(t *testing.T) {
 		Splices: []vmprotocol.Splice{{Offset: 10, Insert: "X"}},
 	}
 	concurrent := []appliedPatch{{
-		Patch: vmprotocol.TextPatch{Splices: []vmprotocol.Splice{
+		Splices: []compactSplice{
 			{Offset: 0, DeleteLen: 5},
 			{Offset: 6, DeleteLen: 2},
-		}},
+		},
 	}}
 	res := TransformPatch(&patch, concurrent)
 	if res.Conflict {

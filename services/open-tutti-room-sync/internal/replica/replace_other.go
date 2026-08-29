@@ -11,3 +11,6 @@ import "os"
 func replaceFile(source, destination string) error {
 	return os.Rename(source, destination)
 }
+
+// clearReadOnly is Windows-only (POSIX rename/unlink ignore file mode).
+func clearReadOnly(path string) {}

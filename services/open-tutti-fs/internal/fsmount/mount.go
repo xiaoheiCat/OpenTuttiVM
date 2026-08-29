@@ -37,6 +37,13 @@ func Mount(ctx context.Context, dir string, client *roomfs.Client) error {
 	}
 	server, err := fs.Mount(dir, root, &fs.Options{
 		MountOptions: fuse.MountOptions{FsName: "open-tutti"},
+		// Report permission bits VERBATIM: go-fuse's default setAttr
+		// widens any mode whose permission bits are 0 to 0644 (+0111
+		// for directories) on every Lookup/Getattr reply, silently
+		// defeating the room-authoritative chmod 0000 this mount
+		// explicitly preserves (a session-container process could then
+		// read a file the room locked).
+		NullPermissions: true,
 	})
 	if err != nil {
 		return err
@@ -132,11 +139,21 @@ func (n *roomNode) invalidatePath(path string) {
 }
 
 func (n *roomNode) path(child string) string {
-	parent := n.Path(nil)
-	if parent == "/" {
-		return strings.TrimPrefix(child, "/")
+	// go-fuse Path(nil) returns "" for the ROOT and relative paths
+	// below it, so a literal "/"-prefix guard never fires: for a
+	// first-level directory with an empty child this produced "a/" —
+	// a trailing slash that matched no tracked path (Readdir listed
+	// every subdirectory as empty) and failed workspace-path
+	// validation on directory chmods. Normalize instead of guarding.
+	parent := strings.Trim(n.Path(nil), "/")
+	child = strings.Trim(child, "/")
+	if parent == "" {
+		return child
 	}
-	return strings.TrimPrefix(parent+"/"+child, "/")
+	if child == "" {
+		return parent
+	}
+	return parent + "/" + child
 }
 
 var (
@@ -160,8 +177,16 @@ var (
 )
 
 func (n *roomNode) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
+	// Plausible free space: tools that preflight capacity (installers,
+	// package managers, editors writing temp/swap files) saw 0 bytes
+	// and 0 inodes free and failed ENOSPC inside the workspace even
+	// though writes succeed.
 	out.Blocks = 1 << 30
+	out.Bfree = 1 << 30
+	out.Bavail = 1 << 30
 	out.Bsize = 4096
+	out.Files = 1 << 24
+	out.Ffree = 1 << 24
 	return 0
 }
 
@@ -537,6 +562,10 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	// below never races a concurrent reload handing a torn base hash
 	// to the optimistic-concurrency guard.
 	base := f.bufBase
+	// path joins the same snapshot: rename rekeys write it under f.mu,
+	// and reading it unlocked here could flush through the pre-rename
+	// pathname — onto the old name or an unrelated later replacement.
+	p := f.path
 	f.mu.Unlock()
 	// Clean flushes (touch with no write, a second flush of one handle)
 	// are successes: the room rejects same-content whole-file writes by
@@ -544,7 +573,7 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	if !dirty {
 		return 0
 	}
-	newBase, err := f.client.Write(f.path, content, base)
+	newBase, err := f.client.Write(p, content, base)
 	if err != nil {
 		// Room-level rejections (base mismatch, barrier fencing) map to
 		// EAGAIN so editors retry against the fresh revision.
@@ -651,12 +680,13 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		gen := f.writeGen
 		// bufBase snapshot stays under the lock (same race as Flush).
 		base := f.bufBase
+		tp := f.path
 		f.mu.Unlock()
 		// Without an open handle there is no guaranteed later flush:
 		// submit the resize now or truncate(2) "succeeds" while the
 		// authoritative content never changes.
 		if fh == nil {
-			newBase, err := f.client.Write(f.path, content, base)
+			newBase, err := f.client.Write(tp, content, base)
 			if err != nil {
 				return syscall.EAGAIN
 			}
@@ -674,12 +704,16 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 	}
 	if mode, ok := in.GetMode(); ok {
 		perms := mode & 0o7777
+		// path snapshot under the lock (rename rekeys race this read).
+		f.mu.Lock()
+		cp := f.path
+		f.mu.Unlock()
 		// The change must reach the authoritative workspace: a local
 		// assignment alone reverts on the next invalidation and never
 		// reaches other participants. Commit the cached mode ONLY
 		// after acceptance — caching first kept reporting uncommitted
 		// (possibly WIDENED) permissions after a rejected Chmod.
-		if err := f.client.Chmod(f.path, perms); err != nil {
+		if err := f.client.Chmod(cp, perms); err != nil {
 			return syscall.EIO
 		}
 		f.mu.Lock()

@@ -400,6 +400,28 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			p := *msg.AgentShare
 			// Only the connection's own agents can be shared.
 			p.OwnerDeviceID = c.DeviceID
+			// Field bounds BEFORE any registry mutation or broadcast:
+			// this is the last unbounded WS case — the socket accepts
+			// ~49 MiB frames, the registry retains whatever it stores
+			// until dissolution, and the broadcast echoes the payload
+			// into every member's send queue.
+			if len(p.AgentInstanceID) > 128 || len(p.Provider) > 64 || len(p.BorrowSafety) > 64 ||
+				len(p.Capabilities.Skills) > 16 || len(p.Capabilities.MCP) > 16 || len(p.Capabilities.Tools) > 16 {
+				h.log.Warn("agent share over limit", "room", c.RoomID, "device", c.DeviceID)
+				continue
+			}
+			overCap := false
+			for _, list := range [][]string{p.Capabilities.Skills, p.Capabilities.MCP, p.Capabilities.Tools} {
+				for _, item := range list {
+					if len(item) > 256 {
+						overCap = true
+					}
+				}
+			}
+			if overCap {
+				h.log.Warn("agent share capability over limit", "room", c.RoomID, "device", c.DeviceID)
+				continue
+			}
 			if p.Shared {
 				// Guarded by the admission fence: a paused share frame
 				// resuming after kick's DropDevice must not resurrect
