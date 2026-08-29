@@ -216,12 +216,27 @@ jobs:
         run: |
           # The per-device collaboration runtime ships beside the desktop
           # client: without it the released client cannot join the room
-          # topology. (open-tutti-fs is Linux-container-only per the
-          # architecture doc and rides in the room VM image, not here.)
+          # topology.
           ext=""
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           out="open-tutti-room-sync-${GOOS}-${GOARCH}${ext}"
           go -C services/open-tutti-room-sync build -trimpath -ldflags="-s -w" -o "../../dist/${out}" .
+          cd dist && sha256sum "${out}" > "${out}.sha256"
+      - name: Build open-tutti-fs (linux)
+        # The Room FS Protocol mount ships with the release too: the
+        # documented Linux-container topology needs this executable
+        # inside the room container, and nothing else packages it (no
+        # room VM image exists). It is Linux-only (fsmount build tag),
+        # statically linked, and rides the same per-OS/arch artifact.
+        if: matrix.goos == 'linux'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+          GOTOOLCHAIN: local
+        run: |
+          out="open-tutti-fs-${GOOS}-${GOARCH}"
+          go -C services/open-tutti-fs build -trimpath -ldflags="-s -w" -o "../../dist/${out}" .
           cd dist && sha256sum "${out}" > "${out}.sha256"
       - uses: actions/upload-artifact@v4
         with:

@@ -72,6 +72,14 @@ func (m *Manager) Submit(env vmprotocol.Envelope) error {
 	if _, err := m.repo.GetMembership(context.Background(), env.RoomID, env.AuthorDeviceID); err != nil {
 		return fmt.Errorf("device %s is not a member of room %s", env.AuthorDeviceID, env.RoomID)
 	}
+	// Deduplication identity is REQUIRED, not advisory: an empty
+	// OperationID bypasses the dedup block, so a retry after a lost
+	// acknowledgement would sequence the same insertion twice instead
+	// of returning the original ack — breaking the at-least-once
+	// contract and duplicating content.
+	if env.OperationID == "" || env.AuthorDeviceID == "" {
+		return fmt.Errorf("operation id and author device id are required")
+	}
 
 	eng, err := m.engine(env.RoomID)
 	if err != nil {

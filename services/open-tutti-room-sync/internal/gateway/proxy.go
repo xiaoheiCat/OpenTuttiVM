@@ -266,6 +266,16 @@ func (p *Proxy) handle(conn net.Conn, b *routeBinding) {
 	defer conn.Close()
 	client := &bufferedConn{Conn: conn, r: bufio.NewReader(conn)}
 
+	// Bound protocol detection: a peer connecting and sending NOTHING
+	// would block the initial Peek forever (one goroutine and fd per
+	// attempt — a cheap resource-exhaustion vector on any preview
+	// listener). The deadline covers the TLS sniff, handshake, and the
+	// later eight-byte HTTP sniff, and is cleared once routing begins.
+	if dl, ok := conn.(interface{ SetReadDeadline(time.Time) error }); ok {
+		_ = dl.SetReadDeadline(time.Now().Add(15 * time.Second))
+		defer func() { _ = dl.SetReadDeadline(time.Time{}) }()
+	}
+
 	// SNI seen during the handshake selects the shared-mode target.
 	sniHost := ""
 	// TLS ClientHello starts with 0x16; the room CA terminates it so

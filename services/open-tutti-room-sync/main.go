@@ -536,7 +536,12 @@ func run() error {
 // "main"). The registry id is "sess-"+label — the same convention the
 // gateway and room FS bridge use.
 func announceSessionPorts(sess *client.Session, deviceID string) error {
-	label := os.Getenv("OPEN_TUTTI_SESSION_LABEL")
+	// Canonicalize with the SAME SlugifyLabel the bridge identity uses:
+	// announcing the raw value ("Claude Code") produced a route whose
+	// .tutti label is invalid — VIP listeners skip it, DNS parsing
+	// rejects it, and the conflict resolver no longer matches the
+	// bridge's identity.
+	label := vmprotocol.SlugifyLabel(os.Getenv("OPEN_TUTTI_SESSION_LABEL"))
 	if label == "" {
 		label = "main"
 	}

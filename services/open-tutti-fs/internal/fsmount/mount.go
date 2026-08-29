@@ -253,7 +253,7 @@ func (n *roomNode) Create(ctx context.Context, name string, flags uint32, mode u
 	// checks must not expose more than the creator asked for.
 	perms := mode & 0o7777 // zero is a valid explicit 0000 (see Mkdir)
 	out.Attr.Mode = perms | syscall.S_IFREG
-	child := &fileNode{client: n.client, path: path, buffer: []byte{}, loaded: true, srvMode: perms}
+	child := &fileNode{client: n.client, path: path, buffer: []byte{}, loaded: true, srvMode: perms, srvModeSet: true}
 	return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFREG}), nil, 0, 0
 }
 

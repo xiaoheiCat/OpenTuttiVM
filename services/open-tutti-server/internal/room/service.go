@@ -685,7 +685,13 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) error {
 				}
 				return err
 			}
-			return s.deleteMembershipGuarded(ctx, in.RoomID, in.DeviceID)
+			// DissolveRoomFenced already deleted EVERY membership of
+			// the room inside its fence; a guarded delete here would
+			// require the membership to still exist, fail, and turn a
+			// committed dissolution into a 409 — skipping the terminal
+			// teardown (sequencer, sockets, tunnels, routes, borrows)
+			// of an already-terminal room.
+			return nil
 		}
 		// Without disband, the owner may only leave after a completed
 		// transfer moved ownership away.
