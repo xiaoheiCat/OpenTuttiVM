@@ -87,6 +87,38 @@ jobs:
           go vet $mods
           go test $mods
 
+  validate-macos:
+    name: Validate Go workspace (native macos)
+    runs-on: macos-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.5"
+          cache: false
+        # The release publishes Darwin room-sync binaries, but the push
+        # CI's macOS lane cannot block THIS pipeline — a Darwin-only
+        # failure would coexist with published Darwin assets and a
+        # promoted :latest image. Native validation gates publication.
+      - name: Build + vet + test
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          mods=(
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/..."
+          )
+          go build "${mods[@]}"
+          go vet "${mods[@]}"
+          go test "${mods[@]}"
+
   server-image:
     name: Server image → ghcr.io
     runs-on: ubuntu-latest
@@ -98,7 +130,7 @@ jobs:
     # :latest in step with the GitHub release: pushing the image while
     # desktop/runtime packaging still runs would promote a partial
     # release that the (possibly failed) release job can no longer match.
-    needs: [validate, validate-windows, client-desktop, client-runtimes]
+    needs: [validate, validate-windows, validate-macos, client-desktop, client-runtimes]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -153,6 +185,18 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Derive installer version
+        # The installers embed the OTV release tag as their semver: the
+        # shallow checkout cannot see the not-yet-existing otv-v* tag,
+        # so the fallback would stamp a "0.0.0-<sha>" hash prerelease
+        # whose ordering contradicts the release chronology (update
+        # comparisons could treat a newer OpenTutti release as older).
+        shell: bash
+        run: |
+          v="${{ needs.validate.outputs.tag }}"
+          v="${v#otv-v}"
+          echo "TUTTI_DESKTOP_BUILD_VERSION=$v" >> "$GITHUB_ENV"
+          echo "installer version: $v"
       - name: Build renderer + main
         run: pnpm --filter @tutti-os/desktop build
       - name: Package (${{ matrix.build }})
@@ -247,7 +291,7 @@ jobs:
   release:
     name: Create release
     runs-on: ubuntu-latest
-    needs: [validate, validate-windows, server-image, client-desktop, client-runtimes]
+    needs: [validate, validate-windows, validate-macos, server-image, client-desktop, client-runtimes]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

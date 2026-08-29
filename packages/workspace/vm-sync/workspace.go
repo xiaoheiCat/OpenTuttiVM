@@ -113,14 +113,16 @@ type WorkspaceState struct {
 	// sequence the same edit twice (a re-applied insert duplicates user
 	// content). Values index into ops.
 	accepted map[string]int
-	// dedupStubs + stubOrder retain the dedup decision for operations
+	// dedupStubs retain an IRREVOCABLE identity record for operations
 	// already compacted by Checkpoint: the envelope is gone (its
 	// payload was consuming unbounded server memory), but a retry must
 	// still be answered with the ORIGINAL sequence instead of
-	// re-sequencing. Bounded FIFO — eviction after maxDedupStubs newer
-	// operations means the generation fences reject the ancient retry.
+	// re-sequencing. Evicting stubs re-opened a real duplication: on a
+	// quiet text path the old base and retained patch history still
+	// validate, so a retry after eviction applied the same insertion
+	// twice. A stub is ~100 bytes against the ~8 MiB payload it
+	// replaces — unbounded in room lifetime by design.
 	dedupStubs map[string]uint64
-	stubOrder  []string
 	// ciPaths indexes lowercased paths: default case-insensitive Windows
 	// workspaces cannot materialize "README" and "readme" as distinct
 	// entries, so creates/mkdirs/renames are refused on collision.
@@ -783,83 +785,6 @@ func (w *WorkspaceState) applyMetadata(env *vmprotocol.Envelope) error {
 	return nil
 }
 
-// openBarrier locks a path after a semantic conflict. The agent that most
-// recently completed a patch on the path becomes the resolver; notified
-// agents are everyone with recent history on the path plus the colliding
-// authors, so all affected agents hear conflict_detected and later
-// conflict_resolved.
-func (w *WorkspaceState) openBarrier(path string, env *vmprotocol.Envelope, conflictedWith []string) error {
-	hist := w.history[path]
-	resolver := ""
-	resolverDevice := env.AuthorDeviceID
-	if n := len(hist); n > 0 {
-		resolver = hist[n-1].Agent
-		if hist[n-1].Device != "" {
-			resolverDevice = hist[n-1].Device
-		}
-	}
-	notified := append([]string{}, conflictedWith...)
-	// The rejected submitter is an affected party: their edit collided.
-	if env.AgentSessionID != "" {
-		notified = appendUnique(notified, env.AgentSessionID)
-	}
-	for _, p := range hist {
-		if p.Agent != "" {
-			notified = appendUnique(notified, p.Agent)
-		}
-	}
-	w.barriers[path] = &barrier{
-		Locked:         true,
-		ResolverAgent:  resolver,
-		ResolverDevice: resolverDevice,
-		Notified:       notified,
-		Revision:       w.seq,
-	}
-	return &RejectionError{
-		Reason:         RejectSemanticConflict,
-		ResolverAgent:  resolver,
-		NotifiedAgents: notified,
-	}
-}
-
-// ClearBarriersOf lifts every barrier assigned to a device that just
-// lost membership (kick/leave): leaving it bound to the evicted resolver
-// would block the path for every remaining member until dissolution.
-// Returns the affected paths so callers can notify the room.
-func (w *WorkspaceState) ClearBarriersOf(deviceID string) []string {
-	var cleared []string
-	for path, b := range w.barriers {
-		if b.Locked && b.ResolverDevice == deviceID {
-			b.Locked = false
-			cleared = append(cleared, path)
-		}
-	}
-	sort.Strings(cleared)
-	return cleared
-}
-
-// ResolveBarrier lifts the barrier after the resolver committed a fixed
-// revision. Returns the notified agents so the caller broadcasts
-// conflict_resolved with the resolved revision.
-func (w *WorkspaceState) ResolveBarrier(path string) (notified []string, ok bool) {
-	b := w.barriers[path]
-	if b == nil || !b.Locked {
-		return nil, false
-	}
-	notified = b.Notified
-	delete(w.barriers, path)
-	return notified, true
-}
-
-// BarrierInfo exposes barrier state for status and events.
-func (w *WorkspaceState) BarrierInfo(path string) (resolver string, locked bool, notified []string) {
-	b := w.barriers[path]
-	if b == nil {
-		return "", false, nil
-	}
-	return b.ResolverAgent, b.Locked, b.Notified
-}
-
 // hashAt returns the recorded content hash of path as of seq (the latest
 // entry with seq' <= seq), or "" when unknown.
 func (w *WorkspaceState) hashAt(path string, seq uint64) string {
@@ -1081,9 +1006,6 @@ func (w *WorkspaceState) IsBarriered(path string) bool {
 	return b != nil && b.Locked
 }
 
-// maxDedupStubs bounds compacted dedup stubs.
-const maxDedupStubs = 4096
-
 // Checkpoint compacts accepted-operation history once seq is folded
 // into a persisted snapshot: envelopes at or below seq are never
 // replayed again (bootstrap sends the snapshot plus OpsSince(seq)), so
@@ -1098,9 +1020,6 @@ func (w *WorkspaceState) Checkpoint(seq uint64) {
 		if env.ServerSeq <= seq {
 			if env.AuthorDeviceID != "" && env.OperationID != "" {
 				key := env.AuthorDeviceID + "\x00" + env.OperationID
-				if _, ok := w.dedupStubs[key]; !ok {
-					w.stubOrder = append(w.stubOrder, key)
-				}
 				w.dedupStubs[key] = env.ServerSeq
 			}
 			continue
@@ -1113,10 +1032,6 @@ func (w *WorkspaceState) Checkpoint(seq uint64) {
 		if env.AuthorDeviceID != "" && env.OperationID != "" {
 			w.accepted[env.AuthorDeviceID+"\x00"+env.OperationID] = i
 		}
-	}
-	for len(w.stubOrder) > maxDedupStubs {
-		delete(w.dedupStubs, w.stubOrder[0])
-		w.stubOrder = w.stubOrder[1:]
 	}
 }
 

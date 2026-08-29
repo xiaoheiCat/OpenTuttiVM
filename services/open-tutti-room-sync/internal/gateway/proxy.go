@@ -306,10 +306,22 @@ func (p *Proxy) handle(conn net.Conn, b *routeBinding) {
 				if host == "" {
 					host = b.target.host
 				}
-				if host != "" {
-					sniHost = strings.ToLower(host)
+				host = strings.ToLower(host)
+				// Validate BEFORE issuing: LeafFor mints AND CACHES a fresh
+				// ECDSA key + certificate per name, so an unauthenticated
+				// client cycling unique SNI values against a preview
+				// listener drove unbounded CPU and heap growth before
+				// pickShared ever checked registration. Unknown names fail
+				// the handshake immediately.
+				if host != "" && host != b.target.host {
+					if _, aliased := b.shared[host]; !aliased {
+						return nil, fmt.Errorf("unknown sni host %q", host)
+					}
 				}
-				cert, err := p.ca.LeafFor(strings.ToLower(host))
+				if host != "" {
+					sniHost = host
+				}
+				cert, err := p.ca.LeafFor(host)
 				if err != nil {
 					return nil, err
 				}
