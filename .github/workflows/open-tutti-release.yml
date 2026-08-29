@@ -264,6 +264,15 @@ jobs:
           owner=$(echo "$OWNER_LC" | tr '[:upper:]' '[:lower:]')
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" release-assets/* --clobber
+            # An interrupted first attempt (canceled job, transient
+            # API failure mid-asset-upload) leaves a DRAFT behind:
+            # upload has no publish behavior, so retrying the upload
+            # alone kept a fully-uploaded release hidden forever while
+            # its GHCR images were already live. Publish the draft and
+            # keep it Latest per the repository owner's policy.
+            if gh release view "$TAG" --json isDraft --jq .isDraft | grep -q true; then
+              gh release edit "$TAG" --draft=false --latest
+            fi
           else
             # --target pins the release to the commit this workflow
             # validated, even if main advances mid-build. Every push to

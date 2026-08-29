@@ -301,6 +301,20 @@ func run() error {
 		if err := mgr.Bootstrap(ctx, boot.Snapshot, boot.Ops); err != nil {
 			return err
 		}
+		// Ownership reconciliation on EVERY bootstrap: succession may
+		// have promoted THIS device while its socket could not receive
+		// events, and the missed live IsOwner broadcast would leave the
+		// new owner lazy (stale policy report, no full copy to survive
+		// server loss).
+		if boot.OwnerDeviceID == deviceID && mgr.Policy != replica.Full {
+			if err := mgr.PromoteToFull(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "room-sync: bootstrap owner promotion: %v\n", err)
+			} else if sess := sessionRef.get(); sess != nil {
+				if err := sess.ReportPolicy("full"); err != nil {
+					fmt.Fprintf(os.Stderr, "room-sync: report promoted policy: %v\n", err)
+				}
+			}
+		}
 		bridge.InvalidateRemote("")
 		return nil
 	}

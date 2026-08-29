@@ -352,7 +352,12 @@ func (r *Registry) DropDevice(roomID, ownerDeviceID string) []borrowagent.Borrow
 		delete(r.agents[roomID], id)
 	}
 	for key, ap := range r.approvals {
-		if ap.roomID == roomID && ap.agentOwner == ownerDeviceID {
+		// The OPERATOR's pending approvals die with it too: an
+		// already-read decision frame can race socket cancellation, and
+		// a rejoining device must not resolve a stale approval from
+		// before its revocation — the decision would be forwarded to
+		// the agent owner after membership is gone.
+		if ap.roomID == roomID && (ap.agentOwner == ownerDeviceID || ap.operator == ownerDeviceID) {
 			delete(r.approvals, key)
 		}
 	}

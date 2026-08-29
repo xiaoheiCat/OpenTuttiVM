@@ -300,7 +300,7 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 	case vmprotocol.OpMkdir:
 		err = w.applyMkdir(env.Operation)
 	case vmprotocol.OpRmdir:
-		err = w.applyRmdir(env.Operation)
+		err = w.applyRmdir(&next)
 	case vmprotocol.OpRename:
 		err = w.applyRename(&next)
 	case vmprotocol.OpMetadataChange:
@@ -586,7 +586,16 @@ func (w *WorkspaceState) applyMkdir(op vmprotocol.FileOperation) error {
 	return nil
 }
 
-func (w *WorkspaceState) applyRmdir(op vmprotocol.FileOperation) error {
+func (w *WorkspaceState) applyRmdir(env *vmprotocol.Envelope) error {
+	op := env.Operation
+	// Same generation fence as OpRemove: an empty directory removed and
+	// RECREATED after this rmdir's base is a different generation, and
+	// deleting the replacement loses the unrelated tree.
+	for _, seqMark := range w.structSeqs[op.Path] {
+		if seqMark > env.BaseSeq {
+			return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
+		}
+	}
 	f, exists := w.files[op.Path]
 	if !exists || !f.IsDir {
 		return &RejectionError{Reason: RejectInvalid}

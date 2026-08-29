@@ -435,6 +435,29 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			if err := ensureUnder(targetDir, dst); err != nil {
 				return err
 			}
+			if fi, err := os.Lstat(dst); err == nil && fi.IsDir() && fi.Mode().Perm()&0o200 == 0 {
+				// Temporarily WIDEN an existing restrictive
+				// directory (0555/0500…): MkdirAll is a no-op on
+				// existing dirs, so creating children (or an
+				// apply-and-leave RETRY after an earlier attempt
+				// applied the restrictive mode before a
+				// leave-fence rejection) would fail EACCES for a
+				// non-root process. The deferred pass restores
+				// the authoritative mode after every descendant
+				// exists.
+				if err := os.Chmod(dst, fi.Mode().Perm()|0o700); err != nil {
+					return fmt.Errorf("widen %s: %w", dst, err)
+				}
+				if !info.ModeSet {
+					// No authoritative mode for this dir: restore
+					// the pre-widen host mode, not a fabricated one.
+					deferredDirs = append(deferredDirs, struct {
+						dst     string
+						mode    uint32
+						modeSet bool
+					}{dst, uint32(fi.Mode().Perm()), true})
+				}
+			}
 			if err := os.MkdirAll(dst, 0o755); err != nil {
 				return err
 			}

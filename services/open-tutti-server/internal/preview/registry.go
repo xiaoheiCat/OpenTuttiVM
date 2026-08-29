@@ -46,6 +46,19 @@ func (r *Registry) Upsert(e Entry) {
 	r.routes[e.RoomID][e.DeviceID][e.RouteKey] = e
 }
 
+// CountDevice reports how many routes one device currently holds in a
+// room (per-device quota enforcement against unbounded registration).
+func (r *Registry) CountDevice(roomID, deviceID string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, sess := range r.routes[roomID][deviceID] {
+		_ = sess
+		n++
+	}
+	return n
+}
+
 // Remove drops one route (port stopped listening or session ended).
 func (r *Registry) Remove(key vmprotocol.RouteKey) {
 	r.mu.Lock()

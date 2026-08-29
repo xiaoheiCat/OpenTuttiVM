@@ -305,7 +305,7 @@ func (h *Handler) Remove(path string) error {
 	op := vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: path, Kind: vmprotocol.OpRemove,
 	}
-	return h.submitObserved(op, func(state *vmsync.WorkspaceState) {
+	return h.submitObserved(&op, func(state *vmsync.WorkspaceState, op *vmprotocol.FileOperation) {
 		if info, ok := state.EntryInfo(path); ok && info.IsDir {
 			op.IsDir = true
 		}
@@ -318,7 +318,7 @@ func (h *Handler) Rename(from, to string, noReplace bool) error {
 		ID: h.nextOpID(), Path: from, Kind: vmprotocol.OpRename,
 		Rename: &vmprotocol.Rename{OldPath: from, NewPath: to, NoReplace: noReplace},
 	}
-	return h.submitObserved(op, func(state *vmsync.WorkspaceState) {
+	return h.submitObserved(&op, func(state *vmsync.WorkspaceState, op *vmprotocol.FileOperation) {
 		if info, ok := state.EntryInfo(from); ok && info.IsDir {
 			op.IsDir = true
 		}
@@ -331,14 +331,17 @@ func (h *Handler) Rename(from, to string, noReplace bool) error {
 // a remote remove+recreate landing after the observation always
 // sequences ABOVE the stamped base — the server-side generation fence
 // then rejects the stale removal/rename instead of deleting the
-// replacement generation it never saw.
-func (h *Handler) submitObserved(op vmprotocol.FileOperation, observe func(state *vmsync.WorkspaceState)) error {
+// replacement generation it never saw. The operation arrives by
+// POINTER: observing directory intent must reach the envelope that is
+// actually submitted (a by-value copy silently dropped it, and every
+// rmdir failed EIO against the authoritative directory).
+func (h *Handler) submitObserved(op *vmprotocol.FileOperation, observe func(state *vmsync.WorkspaceState, op *vmprotocol.FileOperation)) error {
 	var baseSeq uint64
 	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
-		observe(state)
+		observe(state, op)
 		baseSeq = h.mgr.Replica.AppliedSeq
 	})
-	return h.submitAtSeq(op, baseSeq)
+	return h.submitAtSeq(*op, baseSeq)
 }
 
 // Chmod submits a permission-bit change to the authoritative workspace:

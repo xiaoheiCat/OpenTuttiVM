@@ -948,19 +948,23 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 		return a.Before(*b)
 	})
 	successor := online[0].DeviceID
+	// Policy FIRST, ownership SECOND: with ownership committed first, a
+	// failed or canceled policy write returned without broadcasting
+	// IsOwner, and every later check saw an online owner and returned
+	// early — the successor stayed lazy forever (no materialization,
+	// no owner-survival). Ordering this way makes every interruption
+	// recoverable: a failed policy write leaves the room still
+	// leaderless for the next cycle, and a failed ownership write
+	// leaves a full-marked member the next cycle can promote.
+	if online[0].ReplicaPolicy != "full" {
+		if err := s.repo.UpdateMembershipPolicy(ctx, roomID, successor, "full"); err != nil {
+			return false, err
+		}
+	}
 	room.OwnerDeviceID = successor
 	room.PendingTransferToDevice = ""
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
 		return false, err
-	}
-	if online[0].ReplicaPolicy != "full" {
-		// The promoted successor may be policy-lazy: record full so
-		// restarts and later successions treat it as the owner
-		// contract requires (its own room-sync reports full again
-		// after materializing).
-		if err := s.repo.UpdateMembershipPolicy(ctx, roomID, successor, "full"); err != nil {
-			return false, err
-		}
 	}
 	s.broadcast(roomID, vmprotocol.Event{
 		Topic: vmprotocol.TopicPresence, RoomID: roomID,

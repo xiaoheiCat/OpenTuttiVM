@@ -355,7 +355,19 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			// DropDevice, then resume and resurrect the departed
 			// device's route. Fence-check-mutate in one critical
 			// section.
+			// Bounded, validated registration: an authenticated member
+			// can send ~49 MiB frames, so unvalidated session ids and
+			// unbounded unique routes would grow the server heap until
+			// OOM. Field shapes are validated, and each device may hold
+			// at most maxRoutesPerDevice routes (replacements free).
+			if p.Port == 0 || p.Port > 65535 || len(p.SessionID) > 64 || len(p.SessionLabel) > 64 || len(p.Protocol) > 16 {
+				continue
+			}
 			key := vmprotocol.RouteKey{RoomID: c.RoomID, DeviceID: c.DeviceID, SessionID: p.SessionID, Port: p.Port}
+			if p.Listening && !h.previews.HasRoute(c.RoomID, c.DeviceID, p.SessionID, p.Port) && h.previews.CountDevice(c.RoomID, c.DeviceID) >= maxRoutesPerDevice {
+				h.log.Warn("route quota exceeded", "room", c.RoomID, "device", c.DeviceID)
+				continue
+			}
 			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
 				if p.Listening {
 					h.previews.Upsert(preview.Entry{
@@ -480,7 +492,15 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			}
 			p := *msg.ApprovalDecision
 			p.DeciderDeviceID = c.DeviceID
-			owner, err := h.borrows.ResolveDecision(c.RoomID, p.AgentInstanceID, p.ApprovalID, c.DeviceID)
+			// Resolve under the admission fence: a decision frame read
+			// before a kick can otherwise resolve and forward after
+			// the membership deletion committed.
+			var owner string
+			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
+				var e error
+				owner, e = h.borrows.ResolveDecision(c.RoomID, p.AgentInstanceID, p.ApprovalID, c.DeviceID)
+				return e
+			})
 			if err != nil {
 				h.log.Warn("approval decision", "room", c.RoomID, "err", err)
 				continue
@@ -506,6 +526,11 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 		}
 	}
 }
+
+// maxRoutesPerDevice bounds one device's preview routes per room:
+// legitimate sessions need a handful; hostile or buggy clients must not
+// grow the process-global registry without limit.
+const maxRoutesPerDevice = 64
 
 func labelAgent(sessionLabel string) string {
 	for i := 0; i < len(sessionLabel); i++ {
