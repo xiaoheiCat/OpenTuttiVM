@@ -632,6 +632,24 @@ func (r *Repo) DeleteRoomCASRefs(ctx context.Context, roomID string) error {
 	return err
 }
 
+// DissolveRoomFenced reads the room's CAS refs and dissolves the room
+// (deleting those refs) inside the SAME casMu critical section that
+// serializes CAS publication: an upload inserting a reference can no
+// longer land between the ref read and the delete, which leaked the
+// object behind a terminal room's orphan cas_refs row.
+func (r *Repo) DissolveRoomFenced(ctx context.Context, roomID string, at time.Time) ([]string, error) {
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
+	refs, err := r.RoomCASRefs(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.DissolveRoom(ctx, roomID, at); err != nil {
+		return nil, err
+	}
+	return refs, nil
+}
+
 func (r *Repo) DissolveRoom(ctx context.Context, roomID string, at time.Time) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

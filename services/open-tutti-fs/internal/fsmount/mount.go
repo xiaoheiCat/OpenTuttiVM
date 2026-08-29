@@ -208,7 +208,7 @@ func (n *roomNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 	fileMode := st.Mode & 0o7777
 	out.Attr.Mode = fileMode | syscall.S_IFREG
 	out.Attr.Size = uint64(st.Size)
-	child := &fileNode{client: n.client, path: path, srvMode: fileMode, srvSize: st.Size}
+	child := &fileNode{client: n.client, path: path, srvMode: fileMode, srvModeSet: true, srvSize: st.Size}
 	return n.NewInode(ctx, child, fs.StableAttr{Mode: syscall.S_IFREG}), 0
 }
 
@@ -361,8 +361,12 @@ type fileNode struct {
 	modeSet bool
 	// srvMode is the authoritative permission bits from the protocol
 	// metadata (executable scripts stay executable in every mount;
-	// without it Getattr would flatten everything to 0644).
+	// without it Getattr would flatten everything to 0644). srvModeSet
+	// distinguishes an authoritative 0000 from "no server mode yet"
+	// (zero is a valid synchronized permission).
 	srvMode uint32
+	// srvModeSet marks srvMode as authoritative (Lookup carried a mode).
+	srvModeSet bool
 	// srvSize is the authoritative size from Lookup: a looked-up but
 	// unread file has no buffer, and Getattr must not report an empty
 	// file to tools that only stat it.
@@ -388,6 +392,11 @@ func (f *fileNode) invalidate() {
 	f.buffer = nil
 	f.loaded = false
 	f.dirty = false
+	// Drop the cached authoritative size too: InodeNotify forces a
+	// Getattr before any reload, and the stale pre-edit size would keep
+	// answering stat/fstat with the old length after the accepted edit.
+	// -1 is unstatable; the next Lookup/load restores the real value.
+	f.srvSize = -1
 }
 
 func (f *fileNode) load() syscall.Errno {
@@ -491,17 +500,29 @@ func (f *fileNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 	defer f.mu.Unlock()
 	if f.loaded {
 		out.Attr.Size = uint64(len(f.buffer))
-	} else {
-		// Looked up but not read (or invalidated): report the
-		// authoritative size rather than pretending the file is empty.
+	} else if f.srvSize >= 0 {
+		// Looked up but not read: report the authoritative size rather
+		// than pretending the file is empty.
 		out.Attr.Size = uint64(f.srvSize)
+	} else {
+		// Invalidated by a remote edit: the cached size predates the
+		// edit, so ask the room now (a stat-sized round trip, but
+		// never a stale length on an accepted edit).
+		if st, err := f.client.Stat(f.path); err == nil && st != nil && st.Exists {
+			f.srvSize = int64(st.Size)
+			if st.Mode != 0 {
+				f.srvMode = st.Mode & 0o7777
+				f.srvModeSet = true
+			}
+			out.Attr.Size = uint64(f.srvSize)
+		}
 	}
 	switch {
 	case f.modeSet:
 		// f.mode stores permission bits from Setattr: OR the regular
 		// file type back in, or st_mode loses its type after chmod.
 		out.Attr.Mode = (f.mode & 0o7777) | syscall.S_IFREG
-	case f.srvMode != 0:
+	case f.srvModeSet:
 		out.Attr.Mode = f.srvMode | syscall.S_IFREG
 	default:
 		out.Attr.Mode = 0o644 | syscall.S_IFREG

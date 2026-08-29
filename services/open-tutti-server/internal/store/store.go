@@ -154,5 +154,8 @@ type Repository interface {
 	HasCASRef(ctx context.Context, roomID, hash string) (bool, error)
 
 	// Dissolution cleanup
+	// DissolveRoomFenced dissolves under the CAS publication lock and
+	// returns the room's refs for post-dissolution collection.
+	DissolveRoomFenced(ctx context.Context, roomID string, at time.Time) ([]string, error)
 	DissolveRoom(ctx context.Context, roomID string, at time.Time) error
 }

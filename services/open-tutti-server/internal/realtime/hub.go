@@ -349,6 +349,15 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			}
 			p := *msg.Ports
 			p.DeviceID = c.DeviceID
+			// Membership recheck at the registry mutation point: the
+			// pump may have read this frame before a kick/leave
+			// deleted the membership and dropped the socket — an
+			// Upsert racing DropDevice would resurrect the evicted
+			// device's route (and gateways would keep binding an
+			// unreachable endpoint until the room ends).
+			if err := h.rooms.MembershipOf(c.Ctx, c.RoomID, c.DeviceID); err != nil {
+				continue
+			}
 			key := vmprotocol.RouteKey{RoomID: c.RoomID, DeviceID: c.DeviceID, SessionID: p.SessionID, Port: p.Port}
 			if p.Listening {
 				h.previews.Upsert(preview.Entry{

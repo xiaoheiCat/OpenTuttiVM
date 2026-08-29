@@ -25,7 +25,7 @@ func (w *WorkspaceState) ApplySequenced(env vmprotocol.Envelope) error {
 	case vmprotocol.OpRmdir:
 		w.applyRmdir(op)
 	case vmprotocol.OpRename:
-		w.applyRename(op)
+		w.applyRename(&env)
 	case vmprotocol.OpMetadataChange:
 		w.applyMetadata(op)
 	case vmprotocol.OpTextPatch:

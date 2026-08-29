@@ -364,10 +364,11 @@ func (h *Handler) RetryDuties() {
 		return
 	}
 	for _, p := range paths {
-		if err := r.ResolveBarrier(p); err == nil {
-			h.mu.Lock()
-			delete(h.resolverDuty, p)
-			h.mu.Unlock()
-		}
+		// The duty SURVIVES a successful send: this frame is as
+		// fire-and-forget as the original, and a socket dropping after
+		// the write but before server processing must leave a record
+		// for the NEXT reconnect. Only the server's conflict_resolved
+		// acknowledgement (OnConflictResolved) retires it.
+		_ = r.ResolveBarrier(p)
 	}
 }

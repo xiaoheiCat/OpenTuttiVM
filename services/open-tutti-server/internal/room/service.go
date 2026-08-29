@@ -124,6 +124,13 @@ func (s *Service) SetLeaveFence(fence func(roomID string, baseSeq uint64) error)
 	s.leaveFence = fence
 }
 
+// MembershipOf reports whether a device is an active member of a room
+// (registry-mutation rechecks at the sequencing point use it).
+func (s *Service) MembershipOf(ctx context.Context, roomID, deviceID string) error {
+	_, err := s.repo.GetMembership(ctx, roomID, deviceID)
+	return err
+}
+
 // SetBarrierClean attaches the conflict-barrier cleanup for evicted
 // members: a barrier still assigned to a kicked device would block its
 // path for every remaining participant until room dissolution.
@@ -904,14 +911,18 @@ func (s *Service) dissolveLocked(ctx context.Context, roomID string) error {
 		Topic: vmprotocol.TopicRoomEnding, RoomID: roomID,
 		Payload: mustJSON(map[string]string{"reason": "dissolved"}),
 	})
-	refs, refErr := s.repo.RoomCASRefs(ctx, roomID)
-	if err := s.repo.DissolveRoom(ctx, roomID, s.clock.Now()); err != nil {
+	// Refs read and dissolved under the CAS publication fence: an
+	// upload inserting a reference between the read and the delete
+	// leaked the object behind an orphan cas_refs row for the terminal
+	// room forever (no FK, and collection had already stopped).
+	refs, err := s.repo.DissolveRoomFenced(ctx, roomID, s.clock.Now())
+	if err != nil {
 		return err
 	}
-	// Reference-aware collection AFTER the refs died: the collector
-	// re-checks global refcounts so objects other rooms still share
-	// survive.
-	if s.cas != nil && refErr == nil && len(refs) > 0 {
+	// Reference-aware collection AFTER the fence released: the
+	// collector re-checks global refcounts so objects other rooms
+	// still share survive.
+	if s.cas != nil && len(refs) > 0 {
 		s.cas.Collect(ctx, refs)
 	}
 	return nil

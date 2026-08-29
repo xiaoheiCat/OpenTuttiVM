@@ -284,7 +284,7 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 	case vmprotocol.OpRmdir:
 		err = w.applyRmdir(env.Operation)
 	case vmprotocol.OpRename:
-		err = w.applyRename(env.Operation)
+		err = w.applyRename(&next)
 	case vmprotocol.OpMetadataChange:
 		err = w.applyMetadata(env.Operation)
 	case vmprotocol.OpTextPatch:
@@ -543,8 +543,11 @@ func (w *WorkspaceState) applyMkdir(op vmprotocol.FileOperation) error {
 	// Requested directory permissions ride the operation (RoomFS mkdir
 	// carries them): snapshots, peer replicas, and Apply-to-Workspace
 	// must expose what the caller asked (e.g. 0700), not a widened 0755.
+	// A non-nil Mode{0} is an EXPLICIT 0000 — by the time RoomFS
+	// forwards the mkdir the kernel has applied umask, so zero is a
+	// real permission here, not "unspecified".
 	mode := uint32(0o755)
-	if op.Mode != nil && op.Mode.Mode != 0 {
+	if op.Mode != nil {
 		mode = op.Mode.Mode & 0o7777
 	}
 	w.files[op.Path] = &fileState{IsDir: true, Mode: mode, ModeSet: true}
@@ -567,10 +570,23 @@ func (w *WorkspaceState) applyRmdir(op vmprotocol.FileOperation) error {
 	return nil
 }
 
-func (w *WorkspaceState) applyRename(op vmprotocol.FileOperation) error {
+func (w *WorkspaceState) applyRename(env *vmprotocol.Envelope) error {
+	op := env.Operation
 	r := op.Rename
 	if r == nil {
 		return &RejectionError{Reason: RejectInvalid}
+	}
+	// Generation fence on BOTH endpoints (same as patches/blobs): a
+	// remove+recreate of the source after the author's base yields a
+	// second generation this rename must not move, and a structural
+	// change at the destination means the author never saw the current
+	// occupant.
+	for _, path := range []string{r.OldPath, r.NewPath} {
+		for _, seqMark := range w.structSeqs[path] {
+			if seqMark > env.BaseSeq {
+				return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(r.OldPath)}
+			}
+		}
 	}
 	f, exists := w.files[r.OldPath]
 	if !exists {
