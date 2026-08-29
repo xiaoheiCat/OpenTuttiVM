@@ -179,6 +179,16 @@ func (m *Manager) ForgetPending(operationID string) {
 	delete(m.pendingEnvs, operationID)
 }
 
+// AppliedSeq reads the replica's applied sequence UNDER the manager
+// lock: ApplyServerOp writes it here, and external readers (the
+// apply-and-leave capture, roomfs submissions) on their own goroutines
+// raced the WS apply loop otherwise.
+func (m *Manager) AppliedSeq() uint64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.Replica.AppliedSeq
+}
+
 // WithState runs fn against the replica state under the manager lock —
 // the sanctioned read path for Room FS metadata queries.
 func (m *Manager) WithState(fn func(state *vmsync.WorkspaceState)) {

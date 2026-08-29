@@ -532,6 +532,11 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	content := append([]byte(nil), f.buffer...)
 	dirty := f.dirty
 	gen := f.writeGen
+	// bufBase is guarded by f.mu everywhere else (load/Read-reload/
+	// Setattr): snapshot it under the lock so the unlocked write call
+	// below never races a concurrent reload handing a torn base hash
+	// to the optimistic-concurrency guard.
+	base := f.bufBase
 	f.mu.Unlock()
 	// Clean flushes (touch with no write, a second flush of one handle)
 	// are successes: the room rejects same-content whole-file writes by
@@ -539,16 +544,16 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	if !dirty {
 		return 0
 	}
-	newBase, err := f.client.Write(f.path, content, f.bufBase)
+	newBase, err := f.client.Write(f.path, content, base)
 	if err != nil {
 		// Room-level rejections (base mismatch, barrier fencing) map to
 		// EAGAIN so editors retry against the fresh revision.
 		return syscall.EAGAIN
 	}
+	f.mu.Lock()
 	if newBase != "" {
 		f.bufBase = newBase
 	}
-	f.mu.Lock()
 	// Clear dirty only when no write landed while we awaited the
 	// acknowledgement; newer bytes keep the node dirty for the next
 	// flush.
@@ -644,19 +649,21 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		f.srvSize = int64(sz)
 		content := append([]byte(nil), f.buffer...)
 		gen := f.writeGen
+		// bufBase snapshot stays under the lock (same race as Flush).
+		base := f.bufBase
 		f.mu.Unlock()
 		// Without an open handle there is no guaranteed later flush:
 		// submit the resize now or truncate(2) "succeeds" while the
 		// authoritative content never changes.
 		if fh == nil {
-			newBase, err := f.client.Write(f.path, content, f.bufBase)
+			newBase, err := f.client.Write(f.path, content, base)
 			if err != nil {
 				return syscall.EAGAIN
 			}
+			f.mu.Lock()
 			if newBase != "" {
 				f.bufBase = newBase
 			}
-			f.mu.Lock()
 			// Same race as Flush: a concurrent Write while the resize
 			// awaited its acknowledgement must keep the node dirty.
 			if f.writeGen == gen {

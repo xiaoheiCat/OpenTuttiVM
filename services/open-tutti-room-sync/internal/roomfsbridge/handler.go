@@ -356,6 +356,9 @@ func (h *Handler) submitObserved(op *vmprotocol.FileOperation, observe func(stat
 	var baseSeq uint64
 	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
 		observe(state, op)
+		// Lock context: WithState already holds the manager lock, so
+		// the direct read cannot race the apply loop (re-locking here
+		// would self-deadlock).
 		baseSeq = h.mgr.Replica.AppliedSeq
 	})
 	return h.submitAtSeq(*op, baseSeq)
@@ -374,7 +377,7 @@ func (h *Handler) Chmod(path string, mode uint32) error {
 // submit sends one operation and reports success only after the server
 // accepted it (broadcast acknowledgement); rejections surface as errors.
 func (h *Handler) submit(op vmprotocol.FileOperation) error {
-	return h.submitAtSeq(op, h.mgr.Replica.AppliedSeq)
+	return h.submitAtSeq(op, h.mgr.AppliedSeq())
 }
 
 // submitAtSeq is submit with an explicit base sequence (write path: the

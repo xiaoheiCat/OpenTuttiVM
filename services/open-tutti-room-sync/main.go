@@ -138,7 +138,7 @@ func run() error {
 		// the whole capture-mirror-leave cycle retries.
 		const attempts = 3
 		for i := 0; i < attempts; i++ {
-			baseSeq := mgr.Replica.AppliedSeq
+			baseSeq := mgr.AppliedSeq()
 			if err := mgr.ApplyToWorkspace(context.Background(), wsDir); err != nil {
 				return fmt.Errorf("apply-to-workspace: %w", err)
 			}

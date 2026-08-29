@@ -366,6 +366,15 @@ func (p *Proxy) handle(conn net.Conn, b *routeBinding) {
 		}
 		route.SessionID = res.SessionID
 	}
+	// Routing decided: CLEAR the sniff deadline before piping. The
+	// deferred clear runs only AFTER pipe returns, and the SNI
+	// early-return path never reaches it — an absolute 15s deadline
+	// surviving into the pipe severed every VIP-mode session (browser
+	// previews, terminals, websockets, long downloads) exactly 15s
+	// after accept when a read crossed the mark.
+	if dl, ok := client.Conn.(interface{ SetReadDeadline(time.Time) error }); ok {
+		_ = dl.SetReadDeadline(time.Time{})
+	}
 	p.pipe(client, route)
 }
 

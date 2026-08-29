@@ -53,7 +53,18 @@ func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, dev
 	netConn := websocket.NetConn(ctx, ws, websocket.MessageBinary)
 	defer netConn.Close()
 
-	sess, err := yamux.Server(netConn, nil)
+	// Short StreamOpenTimeout: a wedged device's un-ACKed opens fail
+	// fast instead of parking the SYN window for the 75s default (the
+	// per-connection Open still bounded the stall, but failing fast
+	// returns errors to dialers instead of queueing them).
+	sess, err := yamux.Server(netConn, &yamux.Config{
+		AcceptBacklog:      256,
+		EnableKeepAlive:    true,
+		KeepAliveInterval:  30 * time.Second,
+		StreamOpenTimeout:  10 * time.Second,
+		StreamCloseTimeout: 5 * time.Minute,
+		LogOutput:          io.Discard,
+	})
 	if err != nil {
 		return fmt.Errorf("tunnel yamux server: %w", err)
 	}
@@ -187,9 +198,15 @@ func (r *Relay) handleStream(stream net.Conn, authenticatedRoom string) {
 }
 
 func (r *Relay) dial(route vmprotocol.RouteKey) net.Conn {
+	// Snapshot the session under the lock, OPEN outside it: yamux's
+	// Open blocks on the peer's SYN-ACK window (up to 75s with the
+	// default StreamOpenTimeout when a registered-but-wedged device
+	// stops processing frames), and holding r.mu across that stall
+	// froze tunnel registration, DropDevice/DropRoom teardown, and
+	// every other room's relaying.
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	sess := r.sessions[route.RoomID][route.DeviceID]
+	r.mu.Unlock()
 	if sess == nil {
 		return nil
 	}

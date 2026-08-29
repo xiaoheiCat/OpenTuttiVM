@@ -220,8 +220,24 @@ func (s *Service) CreateRoom(ctx context.Context, in CreateRoomInput) (CreatedRo
 	// two concurrent first-time creates claiming the same id both observe
 	// it absent, and the later write would otherwise overwrite the first
 	// key without proof.
+	// Derive the password hash BEFORE taking the lifecycle lock and
+	// under the same Argon2id semaphore as rotate/ticket: the create
+	// endpoint is unauthenticated in the default deployment, and an
+	// unbounded pile of 64 MiB derivations ran under s.mu — a memory
+	// amplifier that also stalled every lifecycle operation (joins,
+	// leaves, kicks, presence, grace) process-wide.
+	roomID := "room_" + randomToken(16)
+	shareID := "r_" + randomToken(24)
+	password := sixDigitPassword()
+	s.argonSem <- struct{}{}
+	hash, hashErr := HashRoomPassword(password)
+	<-s.argonSem
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if hashErr != nil {
+		return CreatedRoom{}, hashErr
+	}
 	if existing, err := s.repo.GetDevice(ctx, in.Device.ID); err == nil {
 		if in.Device.Proof == "" || existing.PublicKeyPEM == "" {
 			return CreatedRoom{}, errors.New("device identity proof required")
@@ -234,13 +250,6 @@ func (s *Service) CreateRoom(ctx context.Context, in CreateRoomInput) (CreatedRo
 	// Device-field validation still runs before anything persists
 	// (upsertDevice folded into the creation transaction below).
 	if err := validateDevice(&in.Device); err != nil {
-		return CreatedRoom{}, err
-	}
-	roomID := "room_" + randomToken(16)
-	shareID := "r_" + randomToken(24)
-	password := sixDigitPassword()
-	hash, err := HashRoomPassword(password)
-	if err != nil {
 		return CreatedRoom{}, err
 	}
 	now := s.clock.Now()
