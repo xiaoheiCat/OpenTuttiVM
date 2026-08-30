@@ -35,13 +35,14 @@ type Request struct {
 // Response answers a request by id. Push responses (Push=true) carry
 // server notifications instead: Type "invalidate" with Path set.
 type Response struct {
-	ID      uint64     `json:"id"`
-	OK      bool       `json:"ok"`
-	Error   string     `json:"error,omitempty"`
-	Body    []byte     `json:"-"`
-	Entries []DirEntry `json:"entries,omitempty"`
-	Stat    *Stat      `json:"stat,omitempty"`
-	Seq     uint64     `json:"seq,omitempty"`
+	ID        uint64     `json:"id"`
+	OK        bool       `json:"ok"`
+	Error     string     `json:"error,omitempty"`
+	ErrorCode string     `json:"error_code,omitempty"`
+	Body      []byte     `json:"-"`
+	Entries   []DirEntry `json:"entries,omitempty"`
+	Stat      *Stat      `json:"stat,omitempty"`
+	Seq       uint64     `json:"seq,omitempty"`
 	// Hash reports the read path's content hash (flush baselines).
 	Hash    string          `json:"hash,omitempty"`
 	Extra   json.RawMessage `json:"extra,omitempty"`
@@ -50,6 +51,15 @@ type Response struct {
 	Path    string          `json:"path,omitempty"`
 	NewPath string          `json:"new_path,omitempty"`
 }
+
+// Stable error categories are part of the protocol, not presentation text.
+const (
+	ErrorNotFound = "ENOENT"
+	ErrorExists   = "EEXIST"
+	ErrorNotEmpty = "ENOTEMPTY"
+	ErrorAgain    = "EAGAIN"
+	ErrorIO       = "EIO"
+)
 
 // DirEntry is one child of a directory listing.
 type DirEntry struct {

@@ -776,19 +776,42 @@ func (s *Service) PrepareTransfer(ctx context.Context, roomID, ownerDeviceID, ca
 	return s.repo.UpdateRoom(ctx, room)
 }
 
+// PrepareTransferResult is the server-issued transfer fence.
+type PrepareTransferResult struct {
+	Generation  string
+	SnapshotSeq uint64
+}
+
+func (s *Service) PrepareTransferWithSnapshot(ctx context.Context, roomID, ownerDeviceID, candidateDeviceID string, snapshotSeq uint64) (PrepareTransferResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	room, _, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID)
+	if err != nil {
+		return PrepareTransferResult{}, err
+	}
+	if _, err := s.repo.GetMembership(ctx, roomID, candidateDeviceID); err != nil {
+		return PrepareTransferResult{}, errors.New("transfer candidate is not a room member")
+	}
+	generation := randomToken(16)
+	room.PendingTransferToDevice = candidateDeviceID
+	room.PendingTransferGeneration = generation
+	room.PendingTransferSnapshotSeq = snapshotSeq
+	if err := s.repo.UpdateRoom(ctx, room); err != nil {
+		return PrepareTransferResult{}, err
+	}
+	return PrepareTransferResult{Generation: generation, SnapshotSeq: snapshotSeq}, nil
+}
+
 // CommitTransfer finishes the transfer once the candidate reports a full
 // replica and an initialized host workspace (phases 1–2 done client-side).
-func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, candidateDeviceID string, replicaFull, workspaceInitialized bool) error {
+func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, candidateDeviceID, generation string, snapshotSeq uint64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	room, _, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID)
 	if err != nil {
 		return err
 	}
-	if room.PendingTransferToDevice != candidateDeviceID {
-		return ErrTransferIncomplete
-	}
-	if !replicaFull || !workspaceInitialized {
+	if room.PendingTransferToDevice != candidateDeviceID || room.PendingTransferGeneration != generation || room.PendingTransferSnapshotSeq != snapshotSeq {
 		return ErrTransferIncomplete
 	}
 	// Revalidate at commit time: the prepared candidate may have left or
@@ -796,8 +819,9 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 	// non-member would leave the room with an absent owner until grace
 	// handling intervenes. The caller-supplied readiness booleans say
 	// nothing about membership.
-	if _, err := s.repo.GetMembership(ctx, roomID, candidateDeviceID); err != nil {
-		return errors.New("transfer candidate is no longer a room member")
+	membership, err := s.repo.GetMembership(ctx, roomID, candidateDeviceID)
+	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq {
+		return ErrTransferIncomplete
 	}
 	room.OwnerDeviceID = candidateDeviceID
 	room.PendingTransferToDevice = ""
@@ -809,6 +833,20 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 		Payload: mustJSON(vmprotocol.PresenceDevice{DeviceID: candidateDeviceID, Online: true, IsOwner: true}),
 	})
 	return nil
+}
+
+// ReportTransferReady records readiness from the candidate's authenticated connection.
+func (s *Service) ReportTransferReady(ctx context.Context, roomID, deviceID, generation string, snapshotSeq uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	room, err := s.repo.GetRoom(ctx, roomID)
+	if err != nil || room.PendingTransferToDevice != deviceID || room.PendingTransferGeneration != generation || room.PendingTransferSnapshotSeq != snapshotSeq {
+		return ErrTransferIncomplete
+	}
+	if _, err := s.repo.GetMembership(ctx, roomID, deviceID); err != nil {
+		return err
+	}
+	return s.repo.UpdateTransferReadiness(ctx, roomID, deviceID, generation, snapshotSeq)
 }
 
 // AbortTransfer cancels an in-flight transfer; the original owner keeps the

@@ -156,7 +156,7 @@ func (h *Handler) Stat(path string) (*roomfs.Stat, error) {
 		stat = roomfs.Stat{Dir: info.IsDir, Mode: mode, Exists: true, Size: info.Size, Hash: state.CurrentHash(path)}
 	})
 	if !stat.Exists {
-		return &roomfs.Stat{}, nil
+		return &roomfs.Stat{}, fmt.Errorf("ENOENT: %s", path)
 	}
 	if !stat.Dir && info.IsText {
 		// Text content is in-memory on every replica policy: the exact
@@ -261,9 +261,9 @@ func (h *Handler) WriteGuarded(path string, content []byte, baseHash string) (st
 	old, base, baseSeq, err := h.mgr.PrepareWriteGuarded(context.Background(), path, baseHash)
 	if err != nil {
 		if errors.Is(err, replica.ErrStaleBase) {
-			return "", fmt.Errorf("roomfs: stale base for %s; re-read and retry", path)
+			return "", fmt.Errorf("%s: stale base for %s; re-read and retry", roomfs.ErrorAgain, path)
 		}
-		return "", err
+		return "", classifyRoomError(err)
 	}
 	op, convErr := vmsync.ConvertChange(h.nextOpID(), path, base, h.mgr.TrackedAsBlob(path), old, content,
 		func(manifest vmcas.Manifest, chunks [][]byte) error {
@@ -273,10 +273,10 @@ func (h *Handler) WriteGuarded(path string, content []byte, baseHash string) (st
 			return h.uploader.EnsureChunks(context.Background(), manifest, chunks)
 		})
 	if convErr != nil {
-		return "", convErr
+		return "", classifyRoomError(convErr)
 	}
 	if err := h.submitAtSeq(op, baseSeq); err != nil {
-		return "", err
+		return "", classifyRoomError(err)
 	}
 	// Post-write baseline for the mount's next flush: the manifest for
 	// blob replacements, the content hash for text.
@@ -284,6 +284,21 @@ func (h *Handler) WriteGuarded(path string, content []byte, baseHash string) (st
 		return op.Blob.Manifest, nil
 	}
 	return vmsync.ContentHash(content), nil
+}
+
+func protocolError(code string, err error) error { return fmt.Errorf("%s: %w", code, err) }
+
+func classifyRoomError(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	for _, code := range []string{roomfs.ErrorNotFound, roomfs.ErrorExists, roomfs.ErrorNotEmpty, roomfs.ErrorAgain, roomfs.ErrorIO} {
+		if strings.Contains(msg, code) {
+			return protocolError(code, err)
+		}
+	}
+	return protocolError(roomfs.ErrorIO, err)
 }
 
 func (h *Handler) Write(path string, content []byte) error {
@@ -365,17 +380,17 @@ func (h *Handler) submitObserved(op *vmprotocol.FileOperation, observe func(stat
 		// would self-deadlock).
 		baseSeq = h.mgr.Replica.AppliedSeq
 	})
-	return h.submitAtSeq(*op, baseSeq)
+	return classifyRoomError(h.submitAtSeq(*op, baseSeq))
 }
 
 // Chmod submits a permission-bit change to the authoritative workspace:
 // a local-only assignment would revert on the next invalidation and
 // never reach other participants.
 func (h *Handler) Chmod(path string, mode uint32) error {
-	return h.submit(vmprotocol.FileOperation{
+	return classifyRoomError(h.submit(vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: path, Kind: vmprotocol.OpMetadataChange,
 		Mode: &vmprotocol.MetadataChange{Mode: mode & 0o7777},
-	})
+	}))
 }
 
 // submit sends one operation and reports success only after the server

@@ -419,6 +419,18 @@ func (s *Session) ReportPolicy(policy string) error {
 	return s.writeTyped("policy", map[string]string{"policy": policy})
 }
 
+// ReportTransferReady proves readiness from the candidate's authenticated
+// room connection. The server accepts it only for the currently prepared
+// generation and snapshot sequence.
+func (c *Client) ReportTransferReady(ctx context.Context, generation string, snapshotSeq uint64) error {
+	c.mu.Lock()
+	token, roomID := c.token, c.roomID
+	c.mu.Unlock()
+	return postJSON(ctx, c.http, c.server.BaseURL+"/api/rooms/"+roomID+"/transfer/ready", map[string]any{
+		"generation": generation, "snapshot_seq": snapshotSeq,
+	}, nil, authHeader(token))
+}
+
 // ShareAgent enables or disables borrowing for one local agent instance.
 // The server stamps ownership from the authenticated connection.
 func (s *Session) ShareAgent(p borrowagent.AgentSharedPayload) error {

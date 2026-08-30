@@ -75,6 +75,10 @@ type Hub struct {
 	previews *preview.Registry
 	borrows  *borrow.Registry
 	log      *slog.Logger
+	// borrowingEnabled is false unless the composition root provides a real
+	// Agent Host adapter. Room-sync's observation-only default must not
+	// advertise a capability it cannot execute.
+	borrowingEnabled bool
 
 	mu    sync.RWMutex
 	conns map[string]map[string]*Conn
@@ -133,6 +137,10 @@ func (h *Hub) WaitPumps() { h.pumping.Wait() }
 
 // SetSequencer attaches the operation sequencer.
 func (h *Hub) SetSequencer(seq *sequencer.Manager) { h.seq = seq }
+
+// SetBorrowingEnabled enables borrowing only for hosts wired to an actual
+// Agent Host/Capability Broker adapter. It is intentionally opt-in.
+func (h *Hub) SetBorrowingEnabled(enabled bool) { h.borrowingEnabled = enabled }
 
 // BroadcastRoom implements sequencer.Sender and room.Broadcaster.
 func (h *Hub) BroadcastRoom(roomID string, ev vmprotocol.Event) {
@@ -423,6 +431,12 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 				continue
 			}
 			if p.Shared {
+				// The default room-sync process has no executable Host adapter;
+				// do not publish a borrowable agent without an explicit host.
+				if !h.borrowingEnabled {
+					h.log.Warn("agent borrowing disabled: no host adapter", "room", c.RoomID, "device", c.DeviceID)
+					continue
+				}
 				// Guarded by the admission fence: a paused share frame
 				// resuming after kick's DropDevice must not resurrect
 				// the evicted owner's agent as a permanent ghost.

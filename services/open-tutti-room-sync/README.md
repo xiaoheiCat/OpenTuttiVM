@@ -26,3 +26,6 @@ project):
 | `OPEN_TUTTI_FS_LISTEN` | `/run/open-tutti/roomfs.sock` | Room FS socket |
 
 Architecture: `docs/architecture/open-tutti-vm.md`.
+
+Room-sync has no Agent Host adapter in this deployment, so it does not publish
+`agent_share shared=true`; the server rejects such declarations as well.

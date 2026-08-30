@@ -7,6 +7,8 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -56,7 +58,7 @@ func Load(envFile string) (Config, error) {
 	}
 
 	cfg := Config{
-		ListenAddr:       get("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080"),
+		ListenAddr:       get("OPEN_TUTTI_LISTEN_ADDR", "127.0.0.1:8080"),
 		PublicURL:        get("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080"),
 		DataDir:          get("OPEN_TUTTI_DATA_DIR", defaultDataDir()),
 		LogLevel:         get("OPEN_TUTTI_LOG_LEVEL", "info"),
@@ -73,6 +75,19 @@ func Load(envFile string) (Config, error) {
 
 	if cfg.Secret == "" {
 		return Config{}, errors.New("OPEN_TUTTI_SECRET must be set (generate one, e.g. `openssl rand -hex 32`)")
+	}
+	u, err := url.Parse(cfg.PublicURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return Config{}, errors.New("OPEN_TUTTI_PUBLIC_URL must be an absolute URL")
+	}
+	if u.Scheme == "http" {
+		host := cfg.ListenAddr
+		if h, _, splitErr := net.SplitHostPort(cfg.ListenAddr); splitErr == nil {
+			host = h
+		}
+		if host != "" && host != "localhost" && host != "127.0.0.1" && host != "::1" {
+			return Config{}, errors.New("plain HTTP public URL requires a loopback listen address; use a TLS reverse proxy for remote deployment")
+		}
 	}
 	if cfg.OwnerGracePeriod <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 {
 		return Config{}, errors.New("grace period, ticket TTL, and snapshot interval must be positive")

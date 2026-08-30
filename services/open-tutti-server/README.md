@@ -20,6 +20,10 @@ Or from source:
 go run . # reads .env and OPEN_TUTTI_* environment variables
 ```
 
+Remote deployment requires TLS termination in a reverse proxy. The server
+fails closed when a plain `http://` public URL is paired with a non-loopback
+listen address; loopback HTTP remains available for local development.
+
 ## Configuration
 
 Environment > `.env` > defaults. Every variable is documented in
@@ -49,7 +53,8 @@ Environment > `.env` > defaults. Every variable is documented in
   member; membership row, live business socket, and tunnel session all
   die immediately
 
-All room-scoped routes require the session token from join.
+All room-scoped routes require `Authorization: Bearer <session-token>`; query
+parameters are never accepted for session tokens.
 
 ## Business WebSocket messages (summary)
 

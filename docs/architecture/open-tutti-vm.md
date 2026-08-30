@@ -82,8 +82,9 @@ Hybrid, by content class:
   workspace) before leaving; then disband or transfer.
 - Owner disconnect: 5-minute grace → ownership transfers to the longest
   continuously-connected participant, or the room dissolves.
-- Transfer is three-phase: prepare (candidate must be a member) → the
-  candidate builds a full replica and initializes the host workspace →
+- Transfer is three-phase: prepare issues a server generation and snapshot
+  sequence → the candidate builds a full replica and initializes the host
+  workspace, then reports readiness on its authenticated room connection →
   commit. Partial transfers never land.
 - Server restart ends all rooms (meeting over; durable artifacts remain in
   CAS and participants' applied workspaces).
@@ -96,6 +97,10 @@ URL `/share/<share-id>` + a 6-digit room password (Argon2id). The share
 page mints a one-time join ticket (60 s TTL) that the desktop redeems for
 a session token; the `open-tutti://join` deep link carries the ticket —
 never the password.
+
+Remote server deployment requires TLS termination in a reverse proxy before
+exposing the HTTP listener. Plain HTTP is fail-closed on non-loopback binds;
+loopback HTTP is for local development only.
 
 ## `.tutti` virtual network
 

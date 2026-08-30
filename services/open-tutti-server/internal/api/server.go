@@ -78,6 +78,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/rooms/{roomID}/routes", s.authRoom(s.handleRoutes))
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/prepare", s.authRoomOwner(s.handleTransferPrepare))
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/commit", s.authRoomOwner(s.handleTransferCommit))
+	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/ready", s.authRoom(s.handleTransferReady))
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/abort", s.authRoomOwner(s.handleTransferAbort))
 	mux.HandleFunc("GET /api/rooms/{roomID}/ws", s.authRoomWS(s.handleRoomWS))
 	mux.HandleFunc("GET /api/tunnel", s.handleTunnelWS)
@@ -325,21 +326,23 @@ func (s *Server) handleTransferPrepare(w http.ResponseWriter, r *http.Request, r
 		writeErr(w, http.StatusBadRequest, "to_device_id required")
 		return
 	}
-	if _, err := s.seq.SnapshotForTransfer(r.Context(), roomID); err != nil {
+	snap, err := s.seq.SnapshotForTransfer(r.Context(), roomID)
+	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := s.rooms.PrepareTransfer(r.Context(), roomID, deviceID, req.To); err != nil {
+	prepared, err := s.rooms.PrepareTransferWithSnapshot(r.Context(), roomID, deviceID, req.To, snap.ServerSeq)
+	if err != nil {
 		writeErr(w, http.StatusConflict, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "prepared"})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "prepared", "generation": prepared.Generation, "snapshot_seq": prepared.SnapshotSeq, "candidate_device_id": req.To})
 }
 
 type transferCommitRequest struct {
-	To                   string `json:"to_device_id"`
-	ReplicaFull          bool   `json:"replica_full"`
-	WorkspaceInitialized bool   `json:"workspace_initialized"`
+	To          string `json:"to_device_id"`
+	Generation  string `json:"generation"`
+	SnapshotSeq uint64 `json:"snapshot_seq"`
 }
 
 func (s *Server) handleTransferCommit(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
@@ -348,11 +351,31 @@ func (s *Server) handleTransferCommit(w http.ResponseWriter, r *http.Request, ro
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.rooms.CommitTransfer(r.Context(), roomID, deviceID, req.To, req.ReplicaFull, req.WorkspaceInitialized); err != nil {
+	if req.To == "" || req.Generation == "" || req.SnapshotSeq == 0 {
+		writeErr(w, http.StatusBadRequest, "to_device_id, generation, and snapshot_seq required")
+		return
+	}
+	if err := s.rooms.CommitTransfer(r.Context(), roomID, deviceID, req.To, req.Generation, req.SnapshotSeq); err != nil {
 		writeErr(w, http.StatusConflict, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "transferred"})
+}
+
+func (s *Server) handleTransferReady(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
+	var req struct {
+		Generation  string `json:"generation"`
+		SnapshotSeq uint64 `json:"snapshot_seq"`
+	}
+	if err := readJSON(r, &req); err != nil || req.Generation == "" || req.SnapshotSeq == 0 {
+		writeErr(w, http.StatusBadRequest, "generation and snapshot_seq required")
+		return
+	}
+	if err := s.rooms.ReportTransferReady(r.Context(), roomID, deviceID, req.Generation, req.SnapshotSeq); err != nil {
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
 func (s *Server) handleTransferAbort(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
@@ -604,7 +627,7 @@ func bearerOrQuery(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimPrefix(h, "Bearer ")
 	}
-	return r.URL.Query().Get("token")
+	return ""
 }
 
 func serverID(secret string) string {

@@ -310,20 +310,23 @@ func TestOwnershipTransferThreePhases(t *testing.T) {
 	if err := svc.PrepareTransfer(ctx, created.RoomID, "dev_owner", "dev_stranger"); err == nil {
 		t.Fatal("non-member candidate accepted")
 	}
-	if err := svc.PrepareTransfer(ctx, created.RoomID, "dev_owner", "dev_leo"); err != nil {
+	prepared, err := svc.PrepareTransferWithSnapshot(ctx, created.RoomID, "dev_owner", "dev_leo", 1)
+	if err != nil {
 		t.Fatalf("prepare: %v", err)
 	}
-	// Commit without both client-side confirmations fails.
-	err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_leo", false, true)
+	// Client-side claims alone cannot commit.
+	err = svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_leo", "old", prepared.SnapshotSeq)
 	if !errors.Is(err, ErrTransferIncomplete) {
 		t.Fatalf("expected ErrTransferIncomplete, got %v", err)
 	}
-	err = svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_leo", true, false)
+	err = svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_leo", prepared.Generation, prepared.SnapshotSeq)
 	if !errors.Is(err, ErrTransferIncomplete) {
 		t.Fatalf("expected ErrTransferIncomplete, got %v", err)
 	}
-	// Full replica + initialized workspace commits the transfer.
-	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_leo", true, true); err != nil {
+	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_leo", prepared.Generation, prepared.SnapshotSeq); err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_leo", prepared.Generation, prepared.SnapshotSeq); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
 	room, _ := svc.repo.GetRoom(ctx, created.RoomID)

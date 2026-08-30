@@ -27,7 +27,9 @@ type Room struct {
 	// members stay until the room ends.
 	ShareRevokedAt *time.Time
 	// PendingTransferToDevice marks a 3-phase ownership transfer in flight.
-	PendingTransferToDevice string
+	PendingTransferToDevice    string
+	PendingTransferGeneration  string
+	PendingTransferSnapshotSeq uint64
 }
 
 // Device is one enrolled device; a device is a user.
@@ -53,7 +55,10 @@ type Membership struct {
 	// ReplicaPolicy is the member's self-reported replica policy
 	// ("full" or "lazy"): automatic succession only promotes members
 	// keeping a full replica (owner-survival contract).
-	ReplicaPolicy string
+	ReplicaPolicy       string
+	TransferGeneration  string
+	TransferSnapshotSeq uint64
+	TransferReady       bool
 }
 
 // JoinTicket is a one-time, short-lived ticket issued by the share page
@@ -107,6 +112,7 @@ type Repository interface {
 	UpdatePresence(ctx context.Context, roomID, deviceID string, online bool, now time.Time) error
 	// UpdateMembershipPolicy records a member replica policy report.
 	UpdateMembershipPolicy(ctx context.Context, roomID, deviceID, policy string) error
+	UpdateTransferReadiness(ctx context.Context, roomID, deviceID, generation string, snapshotSeq uint64) error
 	ListActiveRooms(ctx context.Context) ([]Room, error)
 
 	// Devices

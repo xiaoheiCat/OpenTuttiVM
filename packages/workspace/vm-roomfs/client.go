@@ -71,7 +71,7 @@ func (c *Client) call(req Request, body []byte) (*Response, error) {
 
 	res := <-ch
 	if !res.OK {
-		if res.Error == "rejected" {
+		if res.ErrorCode == "EAGAIN" || res.Error == "rejected" {
 			return &res, fmt.Errorf("%w: %s", ErrRejected, res.Error)
 		}
 		return &res, fmt.Errorf("roomfs: %s", res.Error)

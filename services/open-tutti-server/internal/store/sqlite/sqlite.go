@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS rooms (
 	created_at INTEGER NOT NULL,
 	dissolved_at INTEGER,
 	pending_transfer_to_device TEXT NOT NULL DEFAULT '',
+	pending_transfer_generation TEXT NOT NULL DEFAULT '',
+	pending_transfer_snapshot_seq INTEGER NOT NULL DEFAULT 0,
 	share_revoked_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS devices (
@@ -68,6 +70,9 @@ CREATE TABLE IF NOT EXISTS memberships (
 	online INTEGER NOT NULL DEFAULT 0,
 	session_token_hash TEXT NOT NULL DEFAULT '',
 	replica_policy TEXT NOT NULL DEFAULT 'lazy',
+	transfer_generation TEXT NOT NULL DEFAULT '',
+	transfer_snapshot_seq INTEGER NOT NULL DEFAULT 0,
+	transfer_ready INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY (room_id, device_id)
 );
 CREATE TABLE IF NOT EXISTS join_tickets (
@@ -105,11 +110,30 @@ CREATE INDEX IF NOT EXISTS idx_cas_refs_hash ON cas_refs(hash);
 			return fmt.Errorf("migrate share_revoked_at: %w", err)
 		}
 	}
+	if _, err := db.Exec(`ALTER TABLE rooms ADD COLUMN pending_transfer_generation TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate pending_transfer_generation: %w", err)
+		}
+	}
+	if _, err := db.Exec(`ALTER TABLE rooms ADD COLUMN pending_transfer_snapshot_seq INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate pending_transfer_snapshot_seq: %w", err)
+		}
+	}
 	// Databases created before replica-policy reporting existed: every
 	// member reads as lazy until it says otherwise.
 	if _, err := db.Exec(`ALTER TABLE memberships ADD COLUMN replica_policy TEXT NOT NULL DEFAULT 'lazy'`); err != nil {
 		if !strings.Contains(err.Error(), "duplicate column") {
 			return fmt.Errorf("migrate replica_policy: %w", err)
+		}
+	}
+	for _, stmt := range []string{
+		`ALTER TABLE memberships ADD COLUMN transfer_generation TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE memberships ADD COLUMN transfer_snapshot_seq INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE memberships ADD COLUMN transfer_ready INTEGER NOT NULL DEFAULT 0`,
+	} {
+		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate transfer readiness: %w", err)
 		}
 	}
 	return nil
@@ -125,18 +149,24 @@ func (r *Repo) UpdateMembershipPolicy(ctx context.Context, roomID, deviceID, pol
 	return err
 }
 
+func (r *Repo) UpdateTransferReadiness(ctx context.Context, roomID, deviceID, generation string, snapshotSeq uint64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE memberships SET transfer_generation=?, transfer_snapshot_seq=?, transfer_ready=1 WHERE room_id=? AND device_id=?`, generation, snapshotSeq, roomID, deviceID)
+	return err
+}
+
 // Close closes the database.
 func (r *Repo) Close() error { return r.db.Close() }
 
-const roomCols = "id, share_id, password_hash, owner_device_id, created_at, dissolved_at, pending_transfer_to_device, share_revoked_at"
+const roomCols = "id, share_id, password_hash, owner_device_id, created_at, dissolved_at, pending_transfer_to_device, pending_transfer_generation, pending_transfer_snapshot_seq, share_revoked_at"
 
 func scanRoom(row interface{ Scan(...any) error }) (store.Room, error) {
 	var room store.Room
 	var created int64
 	var dissolved sql.NullInt64
+	var snapshotSeq uint64
 	var shareRevoked sql.NullInt64
 	err := row.Scan(&room.ID, &room.ShareID, &room.PasswordHash, &room.OwnerDeviceID,
-		&created, &dissolved, &room.PendingTransferToDevice, &shareRevoked)
+		&created, &dissolved, &room.PendingTransferToDevice, &room.PendingTransferGeneration, &snapshotSeq, &shareRevoked)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.Room{}, store.ErrNotFound
 	}
@@ -144,6 +174,7 @@ func scanRoom(row interface{ Scan(...any) error }) (store.Room, error) {
 		return store.Room{}, err
 	}
 	room.CreatedAt = time.Unix(created, 0).UTC()
+	room.PendingTransferSnapshotSeq = snapshotSeq
 	if dissolved.Valid {
 		t := time.Unix(dissolved.Int64, 0).UTC()
 		room.DissolvedAt = &t
@@ -157,9 +188,9 @@ func scanRoom(row interface{ Scan(...any) error }) (store.Room, error) {
 
 func (r *Repo) CreateRoom(ctx context.Context, room store.Room) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?)`,
+		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		room.ID, room.ShareID, room.PasswordHash, room.OwnerDeviceID,
-		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice,
+		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice, room.PendingTransferGeneration, room.PendingTransferSnapshotSeq,
 		nilTime(room.ShareRevokedAt))
 	return err
 }
@@ -183,9 +214,9 @@ func (r *Repo) CreateRoomWithOwner(ctx context.Context, d store.Device, room sto
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?)`,
+		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		room.ID, room.ShareID, room.PasswordHash, room.OwnerDeviceID,
-		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice,
+		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice, room.PendingTransferGeneration, room.PendingTransferSnapshotSeq,
 		nilTime(room.ShareRevokedAt)); err != nil {
 		return err
 	}
@@ -194,8 +225,8 @@ func (r *Repo) CreateRoomWithOwner(ctx context.Context, d store.Device, room sto
 		connected = m.ConnectedAt.Unix()
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?)`,
-		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), 0, m.SessionTokenHash, "lazy"); err != nil {
+		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), 0, m.SessionTokenHash, "lazy", "", 0, 0); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -255,9 +286,9 @@ func (r *Repo) UpdateRoomPassword(ctx context.Context, roomID, passwordHash stri
 
 func (r *Repo) UpdateRoom(ctx context.Context, room store.Room) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE rooms SET password_hash=?, owner_device_id=?, dissolved_at=?, pending_transfer_to_device=?, share_revoked_at=? WHERE id=?`,
+		`UPDATE rooms SET password_hash=?, owner_device_id=?, dissolved_at=?, pending_transfer_to_device=?, pending_transfer_generation=?, pending_transfer_snapshot_seq=?, share_revoked_at=? WHERE id=?`,
 		room.PasswordHash, room.OwnerDeviceID, nilTime(room.DissolvedAt), room.PendingTransferToDevice,
-		nilTime(room.ShareRevokedAt), room.ID)
+		room.PendingTransferGeneration, room.PendingTransferSnapshotSeq, nilTime(room.ShareRevokedAt), room.ID)
 	if err != nil {
 		return err
 	}
@@ -286,6 +317,13 @@ func nilTime(t *time.Time) any {
 		return nil
 	}
 	return t.Unix()
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func requireUpdated(res sql.Result) error {
@@ -324,14 +362,15 @@ func (r *Repo) GetDevice(ctx context.Context, id string) (store.Device, error) {
 	return d, nil
 }
 
-const membershipCols = "room_id, device_id, joined_at, connected_at, last_seen_at, online, session_token_hash, replica_policy"
+const membershipCols = "room_id, device_id, joined_at, connected_at, last_seen_at, online, session_token_hash, replica_policy, transfer_generation, transfer_snapshot_seq, transfer_ready"
 
 func scanMembership(row interface{ Scan(...any) error }) (store.Membership, error) {
 	var m store.Membership
 	var connected sql.NullInt64
 	var joined, lastSeen int64
 	var online int
-	err := row.Scan(&m.RoomID, &m.DeviceID, &joined, &connected, &lastSeen, &online, &m.SessionTokenHash, &m.ReplicaPolicy)
+	var ready int
+	err := row.Scan(&m.RoomID, &m.DeviceID, &joined, &connected, &lastSeen, &online, &m.SessionTokenHash, &m.ReplicaPolicy, &m.TransferGeneration, &m.TransferSnapshotSeq, &ready)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.Membership{}, store.ErrNotFound
 	}
@@ -339,6 +378,7 @@ func scanMembership(row interface{ Scan(...any) error }) (store.Membership, erro
 		return store.Membership{}, err
 	}
 	m.Online = online != 0
+	m.TransferReady = ready != 0
 	if connected.Valid {
 		t := time.Unix(connected.Int64, 0).UTC()
 		m.ConnectedAt = &t
@@ -365,14 +405,14 @@ func (r *Repo) UpsertMembership(ctx context.Context, m store.Membership) error {
 		policy = "lazy"
 	}
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?)
+		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(room_id, device_id) DO UPDATE SET
 		   connected_at=excluded.connected_at,
 		   last_seen_at=excluded.last_seen_at,
 		   online=excluded.online,
 		   session_token_hash=excluded.session_token_hash,
-		   replica_policy=excluded.replica_policy`,
-		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), online, m.SessionTokenHash, policy)
+			   replica_policy=excluded.replica_policy`,
+		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), online, m.SessionTokenHash, policy, m.TransferGeneration, m.TransferSnapshotSeq, boolInt(m.TransferReady))
 	return err
 }
 
@@ -473,14 +513,14 @@ func (r *Repo) EnrollWithTicket(ctx context.Context, hash string, now time.Time,
 		policy = "lazy"
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?)
+		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(room_id, device_id) DO UPDATE SET
 		   connected_at=excluded.connected_at,
 		   last_seen_at=excluded.last_seen_at,
 		   online=excluded.online,
 		   session_token_hash=excluded.session_token_hash,
-		   replica_policy=excluded.replica_policy`,
-		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), nil, m.LastSeenAt.Unix(), 0, m.SessionTokenHash, policy); err != nil {
+			   replica_policy=excluded.replica_policy`,
+		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), nil, m.LastSeenAt.Unix(), 0, m.SessionTokenHash, policy, "", 0, 0); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -253,5 +254,12 @@ func errorResponse(id uint64, err error) Response {
 	if msg == "" {
 		msg = "unknown error"
 	}
-	return Response{ID: id, OK: false, Error: msg}
+	code := ErrorIO
+	for _, candidate := range []string{ErrorNotFound, ErrorExists, ErrorNotEmpty, ErrorAgain, ErrorIO} {
+		if strings.HasPrefix(msg, candidate+":") {
+			code = candidate
+			break
+		}
+	}
+	return Response{ID: id, OK: false, Error: msg, ErrorCode: code}
 }
