@@ -882,6 +882,13 @@ func (s *Service) PrepareRecoveryTransfer(ctx context.Context, roomID, requester
 	room.PendingTransferToDevice = candidateDeviceID
 	room.PendingTransferGeneration = generation
 	room.PendingTransferSnapshotSeq = snapshotSeq
+	owner, ownerErr := s.repo.GetMembership(ctx, roomID, room.OwnerDeviceID)
+	if ownerErr != nil || owner.Online || s.clock.Now().Sub(owner.LastSeenAt) < s.cfg.OwnerGracePeriod {
+		return PrepareTransferResult{}, errors.New("owner is not eligible for recovery")
+	}
+	room.PendingRecoveryOwnerPresenceEpoch = owner.PresenceEpoch
+	room.PendingRecoveryOwnerLastSeen = owner.LastSeenAt
+	room.PendingRecoveryOwnerOnline = owner.Online
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
 		return PrepareTransferResult{}, err
 	}
@@ -942,6 +949,10 @@ func (s *Service) CommitRecoveryTransfer(ctx context.Context, roomID, requesterD
 	if room.PendingTransferGeneration != generation || room.PendingTransferSnapshotSeq != snapshotSeq || room.PendingTransferToDevice == "" || room.PendingTransferToDevice != requesterDeviceID {
 		return ErrTransferIncomplete
 	}
+	owner, err := s.repo.GetMembership(ctx, roomID, room.OwnerDeviceID)
+	if err != nil || owner.Online || owner.PresenceEpoch != room.PendingRecoveryOwnerPresenceEpoch || !owner.LastSeenAt.Equal(room.PendingRecoveryOwnerLastSeen) || owner.Online != room.PendingRecoveryOwnerOnline || s.clock.Now().Sub(owner.LastSeenAt) < s.cfg.OwnerGracePeriod {
+		return ErrTransferIncomplete
+	}
 	membership, err := s.repo.GetMembership(ctx, roomID, requesterDeviceID)
 	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq {
 		return ErrTransferIncomplete
@@ -958,6 +969,8 @@ func (s *Service) CommitRecoveryTransfer(ctx context.Context, roomID, requesterD
 	}
 	room.OwnerDeviceID = requesterDeviceID
 	room.PendingTransferToDevice = ""
+	room.PendingTransferGeneration = ""
+	room.PendingTransferSnapshotSeq = 0
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
 		return err
 	}

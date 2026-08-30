@@ -299,6 +299,29 @@ func TestAuthenticatedMemberCanPrepareRecoveryWithoutOwnership(t *testing.T) {
 	}
 }
 
+func TestRecoveryCommitRejectsOwnerReconnectAfterPrepare(t *testing.T) {
+	svc, clock := newTestService(t, "")
+	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
+	svc.SetCurrentSequence(func(string) (uint64, error) { return 0, nil })
+	created := createRoom(t, svc, "")
+	joinRoom(t, svc, created, memberDevice("dev_bob"))
+	clock.Advance(6 * time.Minute)
+	ctx := context.Background()
+	prepared, err := svc.PrepareRecoveryTransfer(ctx, created.RoomID, "dev_bob", "dev_bob", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_bob", prepared.Generation, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CommitRecoveryTransfer(ctx, created.RoomID, "dev_bob", prepared.Generation, 0); !errors.Is(err, ErrTransferIncomplete) {
+		t.Fatalf("recovery commit after owner reconnect = %v", err)
+	}
+}
+
 func TestOwnerGracePeriodNobodyOnlineDissolves(t *testing.T) {
 	svc, clock := newTestService(t, "")
 	created := createRoom(t, svc, "")

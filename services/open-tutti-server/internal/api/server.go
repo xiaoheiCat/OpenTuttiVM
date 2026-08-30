@@ -488,7 +488,7 @@ func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, de
 		}
 		return s.cas.Put(hash, body)
 	}); err != nil {
-		_ = s.repo.DeleteCASPending(context.WithoutCancel(r.Context()), roomID, deviceID, []string{hash})
+		_ = s.repo.DeleteCASPendingAndCollect(context.WithoutCancel(r.Context()), roomID, deviceID, []string{hash})
 		if strings.Contains(err.Error(), "dissolved") {
 			writeErr(w, http.StatusConflict, err.Error())
 		} else {

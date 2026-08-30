@@ -48,8 +48,12 @@ func NewMemoryStore() *MemoryStore { return &MemoryStore{objects: map[string][]b
 func (s *MemoryStore) Has(hash string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, ok := s.objects[hash]
-	return ok, nil
+	c, ok := s.objects[hash]
+	if !ok {
+		return false, nil
+	}
+	sum := sha256.Sum256(c)
+	return "sha256:"+hex.EncodeToString(sum[:]) == hash, nil
 }
 
 func (s *MemoryStore) Put(hash string, content []byte) error {
@@ -168,9 +172,8 @@ func (s *LocalStore) Has(hash string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, err = os.Stat(p)
-	if err == nil {
-		return true, nil
+	if _, err = os.Stat(p); err == nil {
+		return verifyChunk(p, hash), nil
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil

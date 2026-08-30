@@ -27,9 +27,12 @@ type Room struct {
 	// members stay until the room ends.
 	ShareRevokedAt *time.Time
 	// PendingTransferToDevice marks a 3-phase ownership transfer in flight.
-	PendingTransferToDevice    string
-	PendingTransferGeneration  string
-	PendingTransferSnapshotSeq uint64
+	PendingTransferToDevice           string
+	PendingTransferGeneration         string
+	PendingTransferSnapshotSeq        uint64
+	PendingRecoveryOwnerPresenceEpoch uint64
+	PendingRecoveryOwnerLastSeen      time.Time
+	PendingRecoveryOwnerOnline        bool
 }
 
 // Device is one enrolled device; a device is a user.
@@ -44,12 +47,13 @@ type Device struct {
 
 // Membership is a device's participation in a room.
 type Membership struct {
-	RoomID      string
-	DeviceID    string
-	JoinedAt    time.Time
-	ConnectedAt *time.Time
-	LastSeenAt  time.Time
-	Online      bool
+	RoomID        string
+	DeviceID      string
+	JoinedAt      time.Time
+	ConnectedAt   *time.Time
+	LastSeenAt    time.Time
+	Online        bool
+	PresenceEpoch uint64
 	// SessionTokenHash authorizes this membership's API and WS calls.
 	SessionTokenHash string
 	// ReplicaPolicy is the member's self-reported replica policy
@@ -161,6 +165,7 @@ type Repository interface {
 	PublishCASPending(ctx context.Context, roomID, deviceID string, hashes []string, quotaBytes int64, fn func() error) error
 	CanPromoteCASPending(ctx context.Context, roomID, deviceID string, hashes []string, quotaBytes int64) error
 	DeleteCASPending(ctx context.Context, roomID, deviceID string, hashes []string) error
+	DeleteCASPendingAndCollect(ctx context.Context, roomID, deviceID string, hashes []string) error
 	SweepCASPending(ctx context.Context, now time.Time) error
 	ListCASRefCounts(ctx context.Context) (map[string]int, error)
 	// RoomCASRefs lists one room's referenced object hashes.

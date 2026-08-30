@@ -179,3 +179,32 @@ func TestCollectCASDeletesMetadataOnlyAfterObjectDelete(t *testing.T) {
 		t.Fatal("unreferenced CAS metadata was retained")
 	}
 }
+
+func TestDeleteCASPendingAndCollectKeepsOtherRoomLiveMetadata(t *testing.T) {
+	r, err := Open(t.TempDir() + "/cas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	ctx := context.Background()
+	hash := "sha256:" + strings.Repeat("1", 64)
+	if err := r.AddCASRefsSized(ctx, "room-live", []store.CASObject{{Hash: hash, Size: 4}}, 10); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ReserveCASPending(ctx, store.CASPendingRef{RoomID: "room-failed", DeviceID: "dev", Hash: hash, Size: 4, ExpiresAt: time.Now().Add(time.Hour)}, 10); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.DeleteCASPendingAndCollect(ctx, "room-failed", "dev", []string{hash}); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM cas_objects WHERE hash=?`, hash).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("live metadata count = %d", count)
+	}
+	if ok, err := r.HasCASRef(ctx, "room-live", hash); err != nil || !ok {
+		t.Fatalf("live ref lost: %v %v", ok, err)
+	}
+}

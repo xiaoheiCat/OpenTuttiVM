@@ -272,6 +272,27 @@ func TestCommandIDRetriesAreIdempotentAndPayloadBound(t *testing.T) {
 	}
 }
 
+func TestDispatchFailureDoesNotConsumeCommandID(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "retry", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration, Input: "one"}
+	if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return false }); !errors.Is(err, ErrDeliveryUnavailable) {
+		t.Fatalf("first delivery = %v", err)
+	}
+	var delivered int
+	if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { delivered++; return true }); err != nil {
+		t.Fatalf("retry delivery = %v", err)
+	}
+	if delivered != 1 {
+		t.Fatalf("delivery count = %d", delivered)
+	}
+	changed := cmd
+	changed.Input = "two"
+	if err := r.DispatchCommand("room1", changed, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); !errors.Is(err, ErrDuplicateCommand) {
+		t.Fatalf("changed retry = %v", err)
+	}
+}
+
 func TestApprovalChoiceValidationDoesNotConsume(t *testing.T) {
 	r := NewRegistry()
 	shared := shareClaude(t, r)

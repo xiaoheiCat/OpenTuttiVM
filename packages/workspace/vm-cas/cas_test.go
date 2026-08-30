@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -100,6 +101,33 @@ func TestLocalStoreRoundTripAndIdempotency(t *testing.T) {
 	missing, _ := store.Missing([]string{hash, "sha256:" + strings.Repeat("0", 64)})
 	if len(missing) != 1 || missing[0] != "sha256:"+strings.Repeat("0", 64) {
 		t.Fatalf("missing = %v", missing)
+	}
+}
+
+func TestLocalStoreRepairsCorruptedObject(t *testing.T) {
+	store, err := NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("correct content")
+	sum := sha256.Sum256(content)
+	hash := "sha256:" + hex.EncodeToString(sum[:])
+	if err := store.Put(hash, content); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := store.path(hash)
+	if err := os.WriteFile(p, []byte("corrupt content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := store.Has(hash); err != nil || ok {
+		t.Fatalf("corrupt object Has = %v %v", ok, err)
+	}
+	if err := store.Put(hash, content); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Get(hash)
+	if err != nil || !bytes.Equal(got, content) {
+		t.Fatalf("repaired object = %q %v", got, err)
 	}
 }
 

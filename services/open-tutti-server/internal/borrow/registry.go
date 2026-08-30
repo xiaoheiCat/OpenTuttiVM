@@ -75,7 +75,15 @@ type openApproval struct {
 type commandRecord struct {
 	payload  borrowagent.BorrowCommandPayload
 	borrower string
+	delivery commandDeliveryState
 }
+
+type commandDeliveryState uint8
+
+const (
+	commandQueued commandDeliveryState = iota + 1
+	commandDelivered
+)
 
 // maxTrackedCommandsPerAgent bounds one room+agent's tracked commands:
 // prompts only arrive for commands still executing on that agent.
@@ -270,7 +278,7 @@ func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPaylo
 			}
 			r.commandOrder[agentKey] = order
 		}
-		r.commandBorrowers[key] = commandRecord{payload: p, borrower: p.BorrowerDeviceID}
+		r.commandBorrowers[key] = commandRecord{payload: p, borrower: p.BorrowerDeviceID, delivery: commandQueued}
 	}
 	return p, true, nil
 }
@@ -293,8 +301,21 @@ func (r *Registry) DispatchCommand(roomID string, p borrowagent.BorrowCommandPay
 		return nil
 	}
 	if !deliver(owner, generation, out) {
+		r.mu.Lock()
+		key := roomID + "\x00" + p.AgentInstanceID + "\x00" + p.CommandID
+		if record, ok := r.commandBorrowers[key]; ok && record.delivery == commandQueued && record.payload.LeaseGeneration == generation {
+			delete(r.commandBorrowers, key)
+		}
+		r.mu.Unlock()
 		return ErrDeliveryUnavailable
 	}
+	r.mu.Lock()
+	key := roomID + "\x00" + p.AgentInstanceID + "\x00" + p.CommandID
+	if record, ok := r.commandBorrowers[key]; ok && record.delivery == commandQueued && record.payload.LeaseGeneration == generation {
+		record.delivery = commandDelivered
+		r.commandBorrowers[key] = record
+	}
+	r.mu.Unlock()
 	return nil
 }
 
