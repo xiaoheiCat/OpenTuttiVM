@@ -385,6 +385,29 @@ func TestWorkspacePathTraversalRejected(t *testing.T) {
 	}
 }
 
+func TestAcceptDeduplicatesBeforeQuotaAndRejectsChangedDuplicate(t *testing.T) {
+	w := NewWorkspaceState()
+	w.MaxEntries = 1
+	env := vmprotocol.Envelope{RoomID: "room", AuthorDeviceID: "device", OperationID: "op-1", BaseSeq: 0,
+		Operation: vmprotocol.FileOperation{ID: "op-1", Path: "file.txt", Kind: vmprotocol.OpCreate}}
+	accepted, err := w.Accept(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry, err := w.Accept(env)
+	if err != nil || retry != accepted {
+		t.Fatalf("retry = %+v, err=%v; want original %+v", retry, err, accepted)
+	}
+	changed := env
+	changed.Operation.Path = "other.txt"
+	if _, err := w.Accept(changed); err == nil {
+		t.Fatal("changed duplicate identity was accepted")
+	}
+	if w.Seq() != accepted.ServerSeq {
+		t.Fatalf("changed duplicate advanced sequence to %d", w.Seq())
+	}
+}
+
 func TestBarrierBindsResolverToDevice(t *testing.T) {
 	w := NewWorkspaceState()
 	mustAccept(t, w, vmprotocol.FileOperation{ID: "1", Path: "cfg.ts", Kind: vmprotocol.OpCreate})

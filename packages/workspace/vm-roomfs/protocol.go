@@ -32,6 +32,13 @@ type Request struct {
 	BaseHash string `json:"base_hash,omitempty"`
 }
 
+type capabilityHello struct {
+	Type  string `json:"type"`
+	Token string `json:"token"`
+}
+
+const capabilityHelloType = "roomfs_capability"
+
 // Response answers a request by id. Push responses (Push=true) carry
 // server notifications instead: Type "invalidate" with Path set.
 type Response struct {

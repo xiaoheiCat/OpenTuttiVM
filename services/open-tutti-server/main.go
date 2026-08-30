@@ -180,6 +180,44 @@ type casCollector struct {
 }
 
 func (c casCollector) Collect(ctx context.Context, hashes []string) {
+	if len(hashes) == 0 {
+		if local, ok := c.cas.(*vmcas.LocalStore); ok {
+			after := ""
+			for page := 0; page < 16; page++ {
+				objects, err := local.List(after, 256)
+				if err != nil {
+					c.log.Warn("cas file enumeration", "err", err)
+					break
+				}
+				hashes = append(hashes, objects...)
+				if len(objects) > 0 {
+					after = objects[len(objects)-1]
+				}
+				if len(objects) < 256 {
+					break
+				}
+			}
+			for page := 0; page < 16; page++ {
+				objects, err := c.repo.ListCASObjects(ctx, after, 256)
+				if err != nil {
+					c.log.Warn("cas object enumeration", "err", err)
+					break
+				}
+				if len(objects) == 0 {
+					break
+				}
+				for _, object := range objects {
+					after = object.Hash
+					if ok, err := local.Has(object.Hash); err == nil && ok {
+						hashes = append(hashes, object.Hash)
+					}
+				}
+				if len(objects) < 256 {
+					break
+				}
+			}
+		}
+	}
 	if orphaned, err := c.repo.ListCASOrphans(ctx); err == nil {
 		hashes = append(hashes, orphaned...)
 	}

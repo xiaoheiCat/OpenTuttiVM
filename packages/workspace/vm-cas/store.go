@@ -105,6 +105,45 @@ type LocalStore struct {
 	root string
 }
 
+// List returns at most limit committed object hashes. It is intentionally
+// bounded so startup/periodic reconciliation cannot turn an untrusted object
+// directory into one unbounded allocation.
+func (s *LocalStore) List(after string, limit int) ([]string, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	root := filepath.Join(s.root, "sha256")
+	var out []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		if len(name) != 62 {
+			return nil
+		}
+		prefix := filepath.Base(filepath.Dir(path))
+		hash := "sha256:" + prefix + name
+		if !ValidHash(hash) || hash <= after {
+			return nil
+		}
+		out = append(out, hash)
+		if len(out) >= limit {
+			return errListLimit
+		}
+		return nil
+	})
+	if errors.Is(err, errListLimit) {
+		return out, nil
+	}
+	return out, err
+}
+
+var errListLimit = errors.New("cas listing limit reached")
+
 // NewLocalStore opens (and creates) a store rooted at dir.
 func NewLocalStore(dir string) (*LocalStore, error) {
 	if dir == "" {

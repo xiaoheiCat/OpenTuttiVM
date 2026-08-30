@@ -24,8 +24,22 @@ project):
 | `OPEN_TUTTI_POLICY` | `lazy` | `lazy` or `full` |
 | `OPEN_TUTTI_CACHE_DIR` | `/data/cache` | CAS cache |
 | `OPEN_TUTTI_FS_LISTEN` | `/run/open-tutti/roomfs.sock` | Room FS socket |
+| `OPEN_TUTTI_ROOMFS_CAPABILITY` | random per process | Capability for open-tutti-fs |
+| `OPEN_TUTTI_ROOMFS_CAPABILITY_FILE` | sibling `roomfs.cap` for Unix sockets | Private capability handoff |
+| `OPEN_TUTTI_ROOMFS_CAPABILITY` | random per process | Capability for open-tutti-fs |
+| `OPEN_TUTTI_ROOMFS_CAPABILITY_FILE` | sibling `roomfs.cap` for Unix sockets | Private capability handoff |
 
 Architecture: `docs/architecture/open-tutti-vm.md`.
 
 Room-sync has no Agent Host adapter in this deployment, so it does not publish
 `agent_share shared=true`; the server rejects such declarations as well.
+
+Room FS delivery is standalone and fail-closed: room-sync writes a Unix
+capability file with mode `0600`, while Windows uses loopback TCP plus the same
+first-frame capability. This does not claim Desktop Docker orchestration or
+Full Replica persistence, which remain outside the current standalone boundary.
+
+Room FS delivery is standalone and fail-closed: room-sync writes a Unix
+capability file with mode `0600`, while Windows uses loopback TCP plus the same
+first-frame capability. This does not claim Desktop Docker orchestration or
+Full Replica persistence, which remain outside the current standalone boundary.

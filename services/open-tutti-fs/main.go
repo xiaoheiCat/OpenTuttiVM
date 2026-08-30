@@ -38,7 +38,24 @@ func dialRoomFS(addr string) (*roomfs.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("roomfs dial %s: %w", addr, err)
 	}
-	return roomfs.NewClient(conn), nil
+	capability := os.Getenv("OPEN_TUTTI_ROOMFS_CAPABILITY")
+	if capability == "" {
+		path := os.Getenv("OPEN_TUTTI_ROOMFS_CAPABILITY_FILE")
+		if path == "" {
+			path = "/run/open-tutti/roomfs.cap"
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("read roomfs capability: %w", readErr)
+		}
+		capability = string(data)
+	}
+	client, err := roomfs.NewClient(conn, capability)
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 func main() {

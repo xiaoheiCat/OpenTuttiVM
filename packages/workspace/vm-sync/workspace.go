@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -304,6 +305,28 @@ func (w *WorkspaceState) fenced(env *vmprotocol.Envelope) *barrier {
 // to broadcast. On conflict it may open a barrier and returns a
 // *RejectionError.
 func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, error) {
+	// Deduplication is deliberately before admission: an acknowledged retry is
+	// not a new operation and must remain answerable after a quota fills.
+	if env.AuthorDeviceID != "" && env.OperationID != "" {
+		key := env.AuthorDeviceID + "\x00" + env.OperationID
+		if idx, ok := w.accepted[key]; ok && idx < len(w.ops) {
+			original := w.ops[idx]
+			if !reflect.DeepEqual(env.Operation, original.Operation) {
+				return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "duplicate operation identity has different content"}
+			}
+			return original, nil
+		}
+		if seq, ok := w.dedupStubs[key]; ok {
+			// Compacted entries no longer retain payload bytes. They are still
+			// terminal identities: never execute a retry again, and return the
+			// original sequence. A malformed or changed retry is therefore also
+			// harmless, though its payload cannot be reconstructed after compaction.
+			return vmprotocol.Envelope{
+				OperationID: env.OperationID, AuthorDeviceID: env.AuthorDeviceID,
+				RoomID: env.RoomID, ServerSeq: seq,
+			}, nil
+		}
+	}
 	if w.MaxEntries > 0 && len(w.files) >= w.MaxEntries && (env.Operation.Kind == vmprotocol.OpCreate || env.Operation.Kind == vmprotocol.OpMkdir) {
 		return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "workspace entry limit exceeded"}
 	}
@@ -321,24 +344,6 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 			if _, exists := w.dedupStubs[env.AuthorDeviceID+"\x00"+env.OperationID]; !exists {
 				return env, &RejectionError{Reason: RejectTooComplex, CurrentHash: "operation identity budget exceeded"}
 			}
-		}
-	}
-	// At-least-once retries: the operation identity is
-	// (AuthorDeviceID, OperationID). A duplicate returns the ORIGINAL
-	// acknowledgement — re-sequencing would apply a text insert twice.
-	if env.AuthorDeviceID != "" && env.OperationID != "" {
-		key := env.AuthorDeviceID + "\x00" + env.OperationID
-		if idx, ok := w.accepted[key]; ok && idx < len(w.ops) {
-			return w.ops[idx], nil
-		}
-		if seq, ok := w.dedupStubs[key]; ok {
-			// Compacted at a checkpoint: answer with the original
-			// sequence. Replicas skip it (seq <= applied); the waiting
-			// writer matches the operation id and unblocks.
-			return vmprotocol.Envelope{
-				OperationID: env.OperationID, AuthorDeviceID: env.AuthorDeviceID,
-				RoomID: env.RoomID, ServerSeq: seq,
-			}, nil
 		}
 	}
 	if !vmprotocol.ValidWorkspacePath(env.Operation.Path) {

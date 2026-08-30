@@ -186,6 +186,7 @@ type Repository interface {
 	RecordCASOrphan(ctx context.Context, hash string) error
 	ListCASOrphans(ctx context.Context) ([]string, error)
 	DeleteCASOrphan(ctx context.Context, hash string) error
+	ListCASObjects(ctx context.Context, after string, limit int) ([]CASObject, error)
 
 	// Dissolution cleanup
 	// DissolveRoomFenced dissolves under the CAS publication lock and

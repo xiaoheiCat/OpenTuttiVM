@@ -216,6 +216,21 @@ domain streams, the adapter translating it belongs in
 
 ## Compatibility
 
+### Standalone delivery boundary
+
+The checked-in standalone components are fail-closed building blocks, not a
+complete Desktop orchestration product. `open-tutti-room-sync` requires its
+server/session inputs and authenticates every `open-tutti-fs` connection with a
+per-process capability before dispatching filesystem requests. Unix socket
+permissions are `0600`; Windows uses loopback TCP plus the same first-frame
+capability. Failed room decisions return retryable `EAGAIN`, while transport,
+timeout, and CAS failures return `EIO` without discarding dirty mount buffers.
+
+This boundary does not claim that Desktop Docker project orchestration or
+durable Full Replica persistence has been implemented. Host lifecycle and
+promotion logic must provide those capabilities before they are advertised as
+product behavior.
+
 Go modules build and test on Linux, macOS, and Windows; the FUSE layer is
 Linux-only by design (it runs inside session containers on the Docker
 Desktop VM) and is build-tagged out elsewhere. Deployment ships only the

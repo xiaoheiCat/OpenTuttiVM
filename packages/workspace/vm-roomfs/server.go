@@ -2,6 +2,8 @@ package roomfs
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net"
@@ -40,8 +42,9 @@ type Handler interface {
 // Server hosts the protocol on a listener and can push invalidations to
 // every connected mount when remote operations land.
 type Server struct {
-	handler Handler
-	log     *slog.Logger
+	handler    Handler
+	log        *slog.Logger
+	capability string
 
 	mu    sync.Mutex
 	conns map[*serverConn]struct{}
@@ -60,8 +63,24 @@ func NewServer(h Handler, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Server{handler: h, log: log, conns: map[*serverConn]struct{}{}}
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		panic(fmt.Sprintf("roomfs capability generation: %v", err))
+	}
+	return &Server{handler: h, log: log, capability: hex.EncodeToString(raw[:]), conns: map[*serverConn]struct{}{}}
 }
+
+// NewServerWithCapability provisions a capability at the process boundary so
+// a separately launched mount can receive it through a private channel.
+func NewServerWithCapability(h Handler, log *slog.Logger, capability string) *Server {
+	if capability == "" {
+		panic("roomfs capability required")
+	}
+	return &Server{handler: h, log: log, capability: capability, conns: map[*serverConn]struct{}{}}
+}
+
+// Capability is the per-process secret required by every mount connection.
+func (s *Server) Capability() string { return s.capability }
 
 // SetHandler attaches or replaces the handler.
 func (s *Server) SetHandler(h Handler) {
@@ -77,18 +96,29 @@ func (s *Server) Serve(ln net.Listener) error {
 		if err != nil {
 			return err
 		}
-		// Register synchronously with accept: a client that connected
-		// earlier must be visible to any later broadcast, instead of
-		// racing the serve goroutine's registration.
 		sc := &serverConn{conn: conn, writer: bufio.NewWriter(conn)}
-		s.mu.Lock()
-		s.conns[sc] = struct{}{}
-		s.mu.Unlock()
-		go s.serveConn(conn, sc)
+		go s.authenticateAndServe(conn, sc)
 	}
 }
 
+func (s *Server) authenticateAndServe(conn net.Conn, sc *serverConn) {
+	reader := bufio.NewReader(conn)
+	var hello capabilityHello
+	if _, err := ReadFrame(reader, &hello); err != nil || hello.Type != capabilityHelloType || hello.Token == "" || hello.Token != s.capability {
+		_ = conn.Close()
+		return
+	}
+	s.mu.Lock()
+	s.conns[sc] = struct{}{}
+	s.mu.Unlock()
+	s.serveConnReader(conn, sc, reader)
+}
+
 func (s *Server) serveConn(conn net.Conn, sc *serverConn) {
+	s.serveConnReader(conn, sc, bufio.NewReader(conn))
+}
+
+func (s *Server) serveConnReader(conn net.Conn, sc *serverConn, reader *bufio.Reader) {
 	defer conn.Close()
 	defer func() {
 		s.mu.Lock()
@@ -96,7 +126,6 @@ func (s *Server) serveConn(conn net.Conn, sc *serverConn) {
 		s.mu.Unlock()
 	}()
 
-	reader := bufio.NewReader(conn)
 	for {
 		var req Request
 		body, err := ReadFrame(reader, &req)

@@ -35,6 +35,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -243,7 +245,24 @@ func run() error {
 	if dir := filepath.Dir(roomfsAddr); !strings.Contains(roomfsAddr, ":") {
 		os.MkdirAll(dir, 0o755)
 	}
-	roomfsSrv := roomfs.NewServer(nil, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	capability := os.Getenv("OPEN_TUTTI_ROOMFS_CAPABILITY")
+	if capability == "" {
+		var raw [32]byte
+		if _, err := rand.Read(raw[:]); err != nil {
+			return fmt.Errorf("generate roomfs capability: %w", err)
+		}
+		capability = hex.EncodeToString(raw[:])
+	}
+	capabilityFile := os.Getenv("OPEN_TUTTI_ROOMFS_CAPABILITY_FILE")
+	if capabilityFile == "" && !strings.Contains(roomfsAddr, ":") {
+		capabilityFile = filepath.Join(filepath.Dir(roomfsAddr), "roomfs.cap")
+	}
+	if capabilityFile != "" {
+		if err := os.WriteFile(capabilityFile, []byte(capability), 0o600); err != nil {
+			return fmt.Errorf("write roomfs capability: %w", err)
+		}
+	}
+	roomfsSrv := roomfs.NewServerWithCapability(nil, slog.New(slog.NewTextHandler(os.Stderr, nil)), capability)
 	// Borrowing host: the owning device's execution adapter. Room-sync
 	// never runs agent code; the host application (Agent Host
 	// integration) injects a real adapter. Until one exists this build
@@ -878,8 +897,16 @@ func listenRoomFS(addr string) (net.Listener, error) {
 	if strings.Contains(addr, ":") {
 		return net.Listen("tcp", addr)
 	}
-	os.Remove(addr)
-	return net.Listen("unix", addr)
+	_ = os.Remove(addr)
+	ln, err := net.Listen("unix", addr)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(addr, 0o600); err != nil {
+		_ = ln.Close()
+		return nil, err
+	}
+	return ln, nil
 }
 
 // seedWorkspace submits an entire host directory tree into the empty

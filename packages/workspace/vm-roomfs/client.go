@@ -22,10 +22,14 @@ type Client struct {
 	conn net.Conn
 	rw   *bufio.ReadWriter
 
-	mu      sync.Mutex
-	pending map[uint64]chan Response
-	next    uint64
-	closed  error
+	mu            sync.Mutex
+	writeMu       sync.Mutex
+	pending       map[uint64]chan Response
+	next          uint64
+	closed        error
+	capability    string
+	handshakeDone chan struct{}
+	handshakeErr  error
 
 	// OnInvalidate receives remote-change notifications (path-level).
 	OnInvalidate func(path string)
@@ -37,14 +41,35 @@ type Client struct {
 // transport selection (unix socket vs TCP, and the host-specific address
 // forms) is the consuming service's adapter concern, not this shared
 // workspace package's policy.
-func NewClient(conn net.Conn) *Client {
+func NewClient(conn net.Conn, capability string) (*Client, error) {
+	if capability == "" {
+		_ = conn.Close()
+		return nil, errors.New("roomfs capability required")
+	}
+	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 	c := &Client{
-		conn:    conn,
-		rw:      bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)),
-		pending: map[uint64]chan Response{},
+		conn:          conn,
+		rw:            rw,
+		pending:       map[uint64]chan Response{},
+		capability:    capability,
+		handshakeDone: make(chan struct{}),
 	}
 	go c.pump()
-	return c
+	go c.sendCapability()
+	return c, nil
+}
+
+func (c *Client) sendCapability() {
+	c.writeMu.Lock()
+	err := WriteFrame(c.rw.Writer, capabilityHello{Type: capabilityHelloType, Token: c.capability}, nil)
+	if err == nil {
+		err = c.rw.Writer.Flush()
+	}
+	c.writeMu.Unlock()
+	c.mu.Lock()
+	c.handshakeErr = err
+	close(c.handshakeDone)
+	c.mu.Unlock()
 }
 
 // call issues one request and awaits its response.
@@ -66,6 +91,22 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 			_ = dl.SetWriteDeadline(deadline)
 			defer func() { _ = dl.SetWriteDeadline(time.Time{}) }()
 		}
+	}
+	select {
+	case <-c.handshakeDone:
+		c.mu.Lock()
+		err := c.handshakeErr
+		c.mu.Unlock()
+		if err != nil {
+			if ctx.Err() != nil || isTimeout(err) {
+				c.timeout()
+				return nil, fmt.Errorf("%w: %v", ErrCallTimeout, ctx.Err())
+			}
+			return nil, err
+		}
+	case <-ctx.Done():
+		c.timeout()
+		return nil, fmt.Errorf("%w: %v", ErrCallTimeout, ctx.Err())
 	}
 	c.mu.Lock()
 	if c.closed != nil {
@@ -92,16 +133,13 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 	// The complete write+flush sequence stays under the lock: FUSE issues
 	// concurrent calls, and interleaved frames would corrupt the shared
 	// bufio writer and misframe every response.
-	if err := WriteFrame(c.rw.Writer, req, body); err != nil {
-		c.mu.Unlock()
-		c.fail(req.ID, err)
-		if ctx.Err() != nil || isTimeout(err) {
-			c.timeout()
-			return nil, fmt.Errorf("%w: %v", ErrCallTimeout, ctx.Err())
-		}
-		return nil, err
+	c.writeMu.Lock()
+	err := WriteFrame(c.rw.Writer, req, body)
+	if err == nil {
+		err = c.rw.Writer.Flush()
 	}
-	if err := c.rw.Writer.Flush(); err != nil {
+	c.writeMu.Unlock()
+	if err != nil {
 		c.mu.Unlock()
 		c.fail(req.ID, err)
 		if ctx.Err() != nil || isTimeout(err) {

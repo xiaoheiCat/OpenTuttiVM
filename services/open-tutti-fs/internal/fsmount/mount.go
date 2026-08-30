@@ -25,9 +25,9 @@ func roomErrno(err error) syscall.Errno {
 	if errors.Is(err, roomfs.ErrRejected) {
 		return syscall.EAGAIN
 	}
-	if errors.Is(err, roomfs.ErrCallTimeout) {
-		return syscall.EIO
-	}
+	// Only a stable room decision is retryable. Timeouts, EOFs, transport
+	// failures, and CAS/fetch errors are not evidence that the caller's data
+	// conflicted and must not be turned into an unsafe retry signal.
 	for _, item := range []struct {
 		code  string
 		errno syscall.Errno
@@ -632,9 +632,7 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	}
 	newBase, err := f.client.WriteContext(ctx, p, content, base)
 	if err != nil {
-		// Room-level rejections (base mismatch, barrier fencing) map to
-		// EAGAIN so editors retry against the fresh revision.
-		return syscall.EAGAIN
+		return roomErrno(err)
 	}
 	f.mu.Lock()
 	if newBase != "" {
@@ -745,7 +743,7 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		if fh == nil {
 			newBase, err := f.client.WriteContext(ctx, tp, content, base)
 			if err != nil {
-				return syscall.EAGAIN
+				return roomErrno(err)
 			}
 			f.mu.Lock()
 			if newBase != "" {

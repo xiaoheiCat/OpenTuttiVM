@@ -904,6 +904,38 @@ func (r *Repo) CollectUnreferencedCAS(ctx context.Context, hashes []string, del 
 	return nil
 }
 
+// CASObjectBatch returns committed object metadata in bounded pages. Callers
+// reconcile this list with the filesystem while casMu prevents publication
+// from racing the mark-and-sweep decision.
+func (r *Repo) ListCASObjects(ctx context.Context, after string, limit int) ([]store.CASObject, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT hash,size FROM cas_objects WHERE hash>? ORDER BY hash LIMIT ?`, after, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []store.CASObject
+	for rows.Next() {
+		var o store.CASObject
+		if err := rows.Scan(&o.Hash, &o.Size); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// CASObjectLive checks refs and pending reservations under casMu.
+func (r *Repo) CASObjectLive(ctx context.Context, hash string) (bool, error) {
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
+	var count int
+	err := r.db.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM cas_refs WHERE hash=?) + (SELECT COUNT(*) FROM cas_pending_refs WHERE hash=?)`, hash, hash).Scan(&count)
+	return count > 0, err
+}
+
 // RoomCASRefs lists the object hashes one room references (collection
 // input at dissolution).
 func (r *Repo) RoomCASRefs(ctx context.Context, roomID string) ([]string, error) {

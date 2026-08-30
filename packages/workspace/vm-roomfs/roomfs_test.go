@@ -1,6 +1,7 @@
 package roomfs
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -226,7 +227,7 @@ func startServer(t *testing.T, h *memHandler) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { ln.Close() })
-	srv := NewServer(h, slog.New(slog.DiscardHandler))
+	srv := NewServerWithCapability(h, slog.New(slog.DiscardHandler), "test-capability")
 	h.srv = srv
 	go srv.Serve(ln)
 	return sock
@@ -334,11 +335,14 @@ func TestRejectionSurfacesAsErrRejected(t *testing.T) {
 
 func TestCallContextTimesOutAndClosesPending(t *testing.T) {
 	left, right := net.Pipe()
-	c := NewClient(left)
+	c, err := NewClient(left, "test-capability")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer right.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	_, err := c.CallContext(ctx, Request{Type: TypeStat, Path: "blocked"}, nil)
+	_, err = c.CallContext(ctx, Request{Type: TypeStat, Path: "blocked"}, nil)
 	if !errors.Is(err, ErrCallTimeout) {
 		t.Fatalf("error = %v", err)
 	}
@@ -347,10 +351,35 @@ func TestCallContextTimesOutAndClosesPending(t *testing.T) {
 	}
 }
 
+func TestServerClosesUnauthenticatedConnection(t *testing.T) {
+	h := newMemHandler()
+	addr := startServer(t, h)
+	conn, err := net.Dial("unix", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+	if err := WriteFrame(rw.Writer, capabilityHello{Type: capabilityHelloType, Token: "wrong"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := rw.Writer.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+	var req Request
+	if _, err := ReadFrame(rw.Reader, &req); err == nil {
+		t.Fatal("unauthenticated connection remained open")
+	}
+}
+
 func TestCallContextAddsDefaultTimeoutToNonBackgroundContext(t *testing.T) {
 	left, right := net.Pipe()
 	deadlines := make(chan time.Time, 2)
-	c := NewClient(&deadlineConn{Conn: left, deadline: deadlines})
+	c, err := NewClient(&deadlineConn{Conn: left, deadline: deadlines}, "test-capability")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer right.Close()
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), struct{}{}, "fuse"))
 	defer cancel()
@@ -369,7 +398,7 @@ func TestCallContextAddsDefaultTimeoutToNonBackgroundContext(t *testing.T) {
 		t.Fatal("default write deadline was not set")
 	}
 	cancel()
-	err := <-done
+	err = <-done
 	if !errors.Is(err, ErrCallTimeout) {
 		t.Fatalf("error = %v", err)
 	}
@@ -387,6 +416,11 @@ func TestInvalidationPush(t *testing.T) {
 
 	got := make(chan string, 1)
 	watcher.OnInvalidate = func(path string) { got <- path }
+	// Complete the first-frame handshake before creating the writer; pushes
+	// are only delivered to authenticated connections.
+	if _, err := watcher.Stat("missing"); err != nil {
+		t.Fatal(err)
+	}
 
 	// A second connection writes; the watcher gets pushed.
 	writer, err := dialTest(sock)
@@ -414,5 +448,5 @@ func dialTest(addr string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewClient(conn), nil
+	return NewClient(conn, "test-capability")
 }
