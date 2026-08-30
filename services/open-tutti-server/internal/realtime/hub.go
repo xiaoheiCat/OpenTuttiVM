@@ -38,8 +38,15 @@ type ClientMessage struct {
 
 // ServerMessage is anything the server sends.
 type ServerMessage struct {
-	Type  string           `json:"type"` // "event"
-	Event vmprotocol.Event `json:"event"`
+	Type        string           `json:"type"` // "event"
+	Event       vmprotocol.Event `json:"event"`
+	borrowFence *borrowDelivery
+}
+
+type borrowDelivery struct {
+	roomID, agentID, owner string
+	approvalID             string
+	generation             uint64
 }
 
 // Conn is one authenticated device websocket.
@@ -206,6 +213,16 @@ func (h *Hub) SendTo(roomID, deviceID string, ev vmprotocol.Event) {
 	}
 }
 
+func (h *Hub) enqueueBorrow(roomID, deviceID, agentID, approvalID string, generation uint64, ev vmprotocol.Event) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if c := h.conns[roomID][deviceID]; c != nil {
+		h.deliver(c, ServerMessage{Type: "event", Event: ev, borrowFence: &borrowDelivery{
+			roomID: roomID, agentID: agentID, owner: deviceID, approvalID: approvalID, generation: generation,
+		}})
+	}
+}
+
 // Attach registers an authenticated connection.
 func (h *Hub) Attach(c *Conn, admit func() error) error {
 	h.mu.Lock()
@@ -316,6 +333,9 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			case msg, ok := <-c.send:
 				if !ok {
 					return
+				}
+				if msg.borrowFence != nil && !h.borrows.ValidateDelivery(msg.borrowFence.roomID, msg.borrowFence.agentID, msg.borrowFence.approvalID, msg.borrowFence.owner, msg.borrowFence.generation) {
+					continue
 				}
 				data, err := json.Marshal(msg)
 				if err != nil {
@@ -486,11 +506,10 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 				h.log.Warn("borrow command over limit", "room", c.RoomID, "device", c.DeviceID)
 				continue
 			}
-			var out borrowagent.BorrowCommandPayload
 			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
-				var e error
-				out, e = h.borrows.Command(c.RoomID, p)
-				return e
+				return h.borrows.DispatchCommand(c.RoomID, p, func(owner string, generation uint64, out borrowagent.BorrowCommandPayload) {
+					h.enqueueBorrow(c.RoomID, owner, p.AgentInstanceID, "", generation, vmprotocol.Event{Topic: borrowagent.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out)})
+				})
 			})
 			if err != nil {
 				// Stale or unknown lease: the borrower learns immediately
@@ -504,13 +523,6 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 				})
 				continue
 			}
-			owner, _ := h.borrows.Agent(c.RoomID, p.AgentInstanceID)
-			if owner == nil {
-				continue
-			}
-			h.SendTo(c.RoomID, owner.OwnerDeviceID, vmprotocol.Event{
-				Topic: borrowagent.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out),
-			})
 		case "command_failed":
 			if msg.CommandFailed == nil {
 				continue
@@ -559,15 +571,14 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 					"room", c.RoomID, "agent", p.AgentInstanceID, "sender", c.DeviceID)
 				continue
 			}
-			operator, err := h.borrows.OpenApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID, p.CommandID)
+			err := h.borrows.DispatchApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID, p.CommandID, func(operator string, generation uint64) {
+				p.SessionOperatorDeviceID = operator
+				h.enqueueBorrow(c.RoomID, operator, p.AgentInstanceID, p.ApprovalID, generation, vmprotocol.Event{Topic: borrowagent.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p)})
+			})
 			if err != nil {
 				h.log.Warn("approval open", "room", c.RoomID, "err", err)
 				continue
 			}
-			p.SessionOperatorDeviceID = operator
-			h.SendTo(c.RoomID, operator, vmprotocol.Event{
-				Topic: borrowagent.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p),
-			})
 		case "approval_decision":
 			if msg.ApprovalDecision == nil {
 				continue
@@ -577,19 +588,15 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			// Resolve under the admission fence: a decision frame read
 			// before a kick can otherwise resolve and forward after
 			// the membership deletion committed.
-			var owner string
 			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
-				var e error
-				owner, e = h.borrows.ResolveDecision(c.RoomID, p.AgentInstanceID, p.ApprovalID, c.DeviceID)
-				return e
+				return h.borrows.ResolveDecisionDispatch(c.RoomID, p.AgentInstanceID, p.ApprovalID, c.DeviceID, func(owner string, generation uint64) {
+					h.enqueueBorrow(c.RoomID, owner, p.AgentInstanceID, "", generation, vmprotocol.Event{Topic: borrowagent.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p)})
+				})
 			})
 			if err != nil {
 				h.log.Warn("approval decision", "room", c.RoomID, "err", err)
 				continue
 			}
-			h.SendTo(c.RoomID, owner, vmprotocol.Event{
-				Topic: borrowagent.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p),
-			})
 		case "policy":
 			if msg.Policy != nil {
 				// Succession readiness: only members reporting a full

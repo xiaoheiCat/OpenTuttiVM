@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -433,11 +434,25 @@ func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, _ 
 			writeErr(w, http.StatusConflict, "room already dissolved")
 			return fmt.Errorf("room dissolved during upload")
 		}
+		existed, err := s.cas.Has(hash)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return err
+		}
 		if err := s.cas.Put(hash, body); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return err
 		}
 		if err := s.repo.AddCASRefsSized(r.Context(), roomID, []store.CASObject{{Hash: hash, Size: int64(len(body))}}, s.cfg.CASRoomQuotaBytes); err != nil {
+			if !existed {
+				if delErr := s.cas.Delete(hash); delErr != nil {
+					if recordErr := s.repo.RecordCASOrphan(context.WithoutCancel(r.Context()), hash); recordErr != nil {
+						s.log.Error("cas orphan record failed", "hash", hash, "delete_error", delErr, "record_error", recordErr)
+					} else {
+						s.log.Warn("cas orphan queued for collection", "hash", hash, "err", delErr)
+					}
+				}
+			}
 			if strings.Contains(err.Error(), "quota exceeded") {
 				writeErr(w, http.StatusRequestEntityTooLarge, err.Error())
 			} else {

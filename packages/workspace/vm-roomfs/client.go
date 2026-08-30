@@ -2,15 +2,18 @@ package roomfs
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"sync"
+	"time"
 )
 
 // ErrRejected reports a room-level rejection (base mismatch, barrier
 // fencing); the mount surfaces it as EAGAIN so editors retry.
 var ErrRejected = errors.New("room rejected the operation")
+var ErrCallTimeout = errors.New("roomfs call timed out")
 
 // Client is the mount's connection to room-sync.
 type Client struct {
@@ -44,6 +47,24 @@ func NewClient(conn net.Conn) *Client {
 
 // call issues one request and awaits its response.
 func (c *Client) call(req Request, body []byte) (*Response, error) {
+	return c.callContext(context.Background(), req, body)
+}
+
+// callContext bounds a single FUSE request. The default wrapper remains
+// compatible, while callers with a request deadline can fail a half-open
+// connection without waiting for the peer forever.
+func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Response, error) {
+	if ctx == context.Background() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 30*time.Minute)
+		defer cancel()
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		if dl, ok := c.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
+			_ = dl.SetWriteDeadline(deadline)
+			defer func() { _ = dl.SetWriteDeadline(time.Time{}) }()
+		}
+	}
 	c.mu.Lock()
 	if c.closed != nil {
 		err := c.closed
@@ -60,16 +81,31 @@ func (c *Client) call(req Request, body []byte) (*Response, error) {
 	if err := WriteFrame(c.rw.Writer, req, body); err != nil {
 		c.mu.Unlock()
 		c.fail(req.ID, err)
+		if ctx.Err() != nil || isTimeout(err) {
+			_ = c.conn.Close()
+			return nil, fmt.Errorf("%w: %v", ErrCallTimeout, ctx.Err())
+		}
 		return nil, err
 	}
 	if err := c.rw.Writer.Flush(); err != nil {
 		c.mu.Unlock()
 		c.fail(req.ID, err)
+		if ctx.Err() != nil || isTimeout(err) {
+			_ = c.conn.Close()
+			return nil, fmt.Errorf("%w: %v", ErrCallTimeout, ctx.Err())
+		}
 		return nil, err
 	}
 	c.mu.Unlock()
 
-	res := <-ch
+	var res Response
+	select {
+	case res = <-ch:
+	case <-ctx.Done():
+		c.shutdown(ErrCallTimeout)
+		_ = c.conn.Close()
+		return nil, fmt.Errorf("%w: %v", ErrCallTimeout, ctx.Err())
+	}
 	if !res.OK {
 		if res.ErrorCode == "EAGAIN" || res.Error == "rejected" {
 			return &res, fmt.Errorf("%w: %s", ErrRejected, res.Error)
@@ -77,6 +113,17 @@ func (c *Client) call(req Request, body []byte) (*Response, error) {
 		return &res, fmt.Errorf("roomfs: %s", res.Error)
 	}
 	return &res, nil
+}
+
+func isTimeout(err error) bool {
+	var timeout net.Error
+	return errors.As(err, &timeout) && timeout.Timeout()
+}
+
+// CallContext is the context-aware form for integrations that need a
+// per-operation deadline. Existing operation methods retain their API.
+func (c *Client) CallContext(ctx context.Context, req Request, body []byte) (*Response, error) {
+	return c.callContext(ctx, req, body)
 }
 
 func (c *Client) fail(id uint64, err error) {

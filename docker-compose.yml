@@ -10,19 +10,27 @@ services:
     #   context: .
     #   dockerfile: services/open-tutti-server/Dockerfile
     restart: unless-stopped
-    # Host networking makes the documented loopback listener bind the host's
-    # loopback too. A bridge port publish would target the container eth0 and
-    # cannot reach a server bound only to 127.0.0.1 inside the container.
-    network_mode: host
+    networks:
+      - open-tutti
+    # Bridge networking is portable across Docker Desktop and Linux. Keep the
+    # host-side publication loopback-only; remote access needs an explicit TLS
+    # reverse-proxy override.
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      OPEN_TUTTI_LISTEN_ADDR: 0.0.0.0:8080
+      # Docker forwards to the container listener, so the server needs a
+      # narrow, Compose-only exception to its plain-HTTP loopback check.
+      OPEN_TUTTI_COMPOSE_LOCAL_MODE: "1"
     env_file:
-      - path: ./services/open-tutti-server/.env
+      - path: ./.env
         required: false
-    # The service .env is the sole deployment override source. Its default
-    # listener is loopback, matching the host-only port publication below.
-    # Remote deployments should use a separate compose override and HTTPS
-    # reverse proxy with an explicit non-loopback listener.
     volumes:
       - open-tutti-data:/data
 
 volumes:
   open-tutti-data:
+
+networks:
+  open-tutti:
+    driver: bridge

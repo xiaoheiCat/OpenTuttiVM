@@ -10,7 +10,7 @@ See `docs/architecture/open-tutti-vm.md` for the full model.
 ## Run
 
 ```bash
-cp .env.example .env      # set OPEN_TUTTI_SECRET at minimum
+cp .env.example .env      # from the repository root; set OPEN_TUTTI_SECRET
 docker compose up -d      # from the repository root
 ```
 
@@ -20,9 +20,17 @@ Or from source:
 go run . # reads .env and OPEN_TUTTI_* environment variables
 ```
 
-Remote deployment requires TLS termination in a reverse proxy. The server
-fails closed when a plain `http://` public URL is paired with a non-loopback
-listen address; loopback HTTP remains available for local development.
+The default Compose deployment uses an explicit bridge network. The container
+listens on `0.0.0.0:8080`, while Docker publishes it only on the host loopback
+at `127.0.0.1:8080`. This is consistent on Docker Desktop macOS/Windows and
+Linux without host networking. Compose injects
+`OPEN_TUTTI_COMPOSE_LOCAL_MODE=1` outside `.env` to identify this exact local
+topology. The server accepts that marker only together with
+`0.0.0.0:8080` and `http://localhost:8080`; a user-configured localhost URL
+alone cannot bypass the plain-HTTP check. Remote deployment must use a
+separate Compose override with an HTTPS reverse proxy and an `https://`
+`OPEN_TUTTI_PUBLIC_URL`; plain HTTP on a non-loopback listener is rejected.
+Do not publish the server port or the `/data` volume to an untrusted network.
 
 ## Configuration
 

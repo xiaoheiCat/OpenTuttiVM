@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS cas_objects (
 	 hash TEXT PRIMARY KEY,
 	 size INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS cas_orphans (hash TEXT PRIMARY KEY);
 CREATE INDEX IF NOT EXISTS idx_memberships_room ON memberships(room_id);
 CREATE INDEX IF NOT EXISTS idx_cas_refs_hash ON cas_refs(hash);
 `
@@ -626,6 +627,33 @@ func (r *Repo) HasCASRef(ctx context.Context, roomID, hash string) (bool, error)
 	return true, nil
 }
 
+func (r *Repo) RecordCASOrphan(ctx context.Context, hash string) error {
+	_, err := r.db.ExecContext(ctx, `INSERT OR IGNORE INTO cas_orphans(hash) VALUES(?)`, hash)
+	return err
+}
+
+func (r *Repo) ListCASOrphans(ctx context.Context) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT hash FROM cas_orphans`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repo) DeleteCASOrphan(ctx context.Context, hash string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM cas_orphans WHERE hash=?`, hash)
+	return err
+}
+
 // CASPublication serializes object publication (filesystem write +
 // reference insertion) with collection: both hold casMu, so a
 // collection can never observe a zero count in the gap between a
@@ -636,12 +664,10 @@ func (r *Repo) CASPublication(fn func() error) error {
 	return fn()
 }
 
-// CollectUnreferencedCAS deletes the caller-provided objects whose last
-// reference died, running the refcount check AND the deletion callback
-// inside ONE write transaction: a concurrent AddCASRefs waits on the
-// write lock and only commits afterwards, so it re-validates against
-// the post-collection refs and can never end up referencing a deleted
-// object. A failed deletion callback merely leaks the object (safe).
+// CollectUnreferencedCAS checks refs in a short transaction, then runs the
+// deletion callback outside that transaction while retaining casMu. All CAS
+// publication paths use the same fence, so a reference cannot be committed
+// between the global refcount check and filesystem deletion.
 func (r *Repo) CollectUnreferencedCAS(ctx context.Context, hashes []string, del func(hash string) error) error {
 	r.casMu.Lock()
 	defer r.casMu.Unlock()
@@ -650,18 +676,35 @@ func (r *Repo) CollectUnreferencedCAS(ctx context.Context, hashes []string, del 
 		return err
 	}
 	defer tx.Rollback()
+	seen := make(map[string]struct{}, len(hashes))
+	var candidates []string
 	for _, h := range hashes {
+		if h == "" {
+			continue
+		}
+		if _, ok := seen[h]; ok {
+			continue
+		}
+		seen[h] = struct{}{}
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM cas_refs WHERE hash=?`, h).Scan(&n); err != nil {
 			return err
 		}
-		if n == 0 && del != nil {
-			// Leak on failure is safe: a present-but-unreferenced object
-			// only costs disk; a deleted-but-referenced one corrupts.
+		if n == 0 {
+			candidates = append(candidates, h)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, h := range candidates {
+		if del != nil {
+			// Failed deletion deliberately leaks and remains eligible for a
+			// later sweep; deleting a referenced object would corrupt a room.
 			_ = del(h)
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // RoomCASRefs lists the object hashes one room references (collection

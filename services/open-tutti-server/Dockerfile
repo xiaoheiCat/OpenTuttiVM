@@ -27,7 +27,7 @@ RUN addgroup -S tutti && adduser -S tutti -G tutti \
     && mkdir -p /data && chown -R tutti:tutti /data
 COPY --from=build /out/open-tutti-server /usr/local/bin/open-tutti-server
 USER tutti
-ENV OPEN_TUTTI_LISTEN_ADDR=:8080 \
+ENV OPEN_TUTTI_LISTEN_ADDR=0.0.0.0:8080 \
     OPEN_TUTTI_DATA_DIR=/data
 VOLUME ["/data"]
 EXPOSE 8080

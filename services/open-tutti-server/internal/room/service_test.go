@@ -265,23 +265,15 @@ func TestOwnerGracePeriodAutoTransfer(t *testing.T) {
 		t.Fatalf("owner changed inside grace window: %s", room.OwnerDeviceID)
 	}
 
-	// A lazy-only room remains leaderless rather than trusting a client
-	// policy claim. A real successor must first complete server-bound
-	// transfer readiness.
+	// A lazy-only room cannot be promoted from a client policy claim. The
+	// fail-closed recovery path dissolves it rather than leaving it leaderless.
 	clock.Advance(6 * time.Minute)
 	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
 		t.Fatal(err)
 	}
 	room, _ = svc.repo.GetRoom(ctx, created.RoomID)
-	if room.OwnerDeviceID != "dev_owner" {
-		t.Fatalf("unverified successor became owner: %s", room.OwnerDeviceID)
-	}
-	bob, err := svc.repo.GetMembership(ctx, created.RoomID, "dev_bob")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bob.ReplicaPolicy != "lazy" {
-		t.Fatalf("policy report must remain diagnostic, got %s", bob.ReplicaPolicy)
+	if room.DissolvedAt == nil {
+		t.Fatal("unverified succession must dissolve the room")
 	}
 }
 

@@ -71,3 +71,19 @@ func TestVIPAllocatorExhaustionDoesNotCollide(t *testing.T) {
 		t.Fatalf("exhaustion error = %v", err)
 	}
 }
+
+func TestVIPAllocatorReleaseReusesWithoutStealingLiveHost(t *testing.T) {
+	a := NewVIPAllocator()
+	keep := vmprotocol.TuttiHost{Device: "keep"}
+	old := vmprotocol.TuttiHost{Device: "old"}
+	keepIP := a.Assign(keep)
+	oldIP := a.Assign(old)
+	a.Release(old)
+	newIP, err := a.AssignWithError(vmprotocol.TuttiHost{Device: "new"})
+	if err != nil || !newIP.Equal(oldIP) {
+		t.Fatalf("released address was not reused: %v %v", newIP, err)
+	}
+	if got := a.Assign(keep); !got.Equal(keepIP) {
+		t.Fatalf("live host changed from %s to %s", keepIP, got)
+	}
+}

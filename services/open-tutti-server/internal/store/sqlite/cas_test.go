@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/store"
 )
@@ -37,5 +38,46 @@ func TestCASRefsSizedQuotaDeduplicatesPerRoomAndRollsBack(t *testing.T) {
 	}
 	if errors.Is(err, store.ErrNotFound) {
 		t.Fatal("unexpected not found")
+	}
+}
+
+func TestCollectCASDoesNotHoldDatabaseTransactionDuringDelete(t *testing.T) {
+	r, err := Open(t.TempDir() + "/cas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	ctx := context.Background()
+	hash := "sha256:" + "c"
+	started := make(chan struct{})
+	finish := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- r.CollectUnreferencedCAS(ctx, []string{hash}, func(string) error {
+			close(started)
+			<-finish
+			return nil
+		})
+	}()
+	<-started
+	// The slow filesystem callback must not keep the SQLite transaction or
+	// connection checked out. This query would block until the callback in the
+	// old implementation returned.
+	queryDone := make(chan error, 1)
+	go func() {
+		_, err := r.ListCASRefCounts(ctx)
+		queryDone <- err
+	}()
+	select {
+	case err := <-queryDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("database query blocked by CAS deletion")
+	}
+	close(finish)
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }

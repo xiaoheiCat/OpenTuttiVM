@@ -19,6 +19,7 @@ are intentionally not part of the Tutti daemon override namespace.
 | `OPEN_TUTTI_ACTIVE_ROOM_LIMIT` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Limits active rooms, including concurrent creations in progress. |
 | `OPEN_TUTTI_LISTEN_ADDR` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | HTTP listener address; plain HTTP requires an explicit loopback address. |
 | `OPEN_TUTTI_PUBLIC_URL` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Public URL for links; remote deployments require HTTPS termination. |
+| `OPEN_TUTTI_COMPOSE_LOCAL_MODE` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Compose-only process marker for the fixed loopback-published bridge deployment; ignored when supplied through `.env`. |
 
 | Variable                      | Owner document                                                                                             | Purpose                                                                              |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |

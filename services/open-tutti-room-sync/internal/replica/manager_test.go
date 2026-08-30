@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	vmcas "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas"
@@ -110,6 +111,26 @@ func TestApplyToWorkspacePropagatesStaleDirectoryRemovalFailure(t *testing.T) {
 	// Injected filesystem failure must escape instead of being best effort.
 	if err := mgr.ApplyToWorkspace(context.Background(), target); err == nil {
 		t.Fatal("apply unexpectedly succeeded with a non-empty stale directory")
+	}
+}
+
+func TestApplyToWorkspaceRejectsRootSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated Windows privilege")
+	}
+	serverStore := vmcas.NewMemoryStore()
+	snap := buildSnapshot(t, serverStore)
+	mgr := New("dev_owner", serverStore, Full, nil)
+	if err := mgr.Bootstrap(context.Background(), snap, nil); err != nil {
+		t.Fatal(err)
+	}
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	if err := os.Symlink(t.TempDir(), root); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.ApplyToWorkspace(context.Background(), root); err == nil {
+		t.Fatal("symlink root was accepted")
 	}
 }
 

@@ -221,3 +221,33 @@ func TestCommandFailureIsBoundToOwnerBorrowerAndGeneration(t *testing.T) {
 		t.Fatalf("stale failure err = %v", err)
 	}
 }
+
+func TestDispatchCallbacksDoNotRunUnderRegistryLock(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	cmd := borrowagent.BorrowCommandPayload{
+		CommandID: "dispatch", AgentInstanceID: shared.AgentInstanceID,
+		BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration,
+	}
+	if err := r.DispatchCommand("room1", cmd, func(owner string, generation uint64, _ borrowagent.BorrowCommandPayload) {
+		if owner != "dev_alice" || generation != shared.LeaseGeneration {
+			t.Errorf("invalid command delivery fence")
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.DispatchApproval("room1", cmd.AgentInstanceID, "approval", cmd.CommandID, func(operator string, generation uint64) {
+		if operator != "dev_bob" || generation != shared.LeaseGeneration {
+			t.Errorf("invalid approval delivery: operator=%q generation=%d", operator, generation)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ResolveDecisionDispatch("room1", cmd.AgentInstanceID, "approval", "dev_bob", func(owner string, generation uint64) {
+		if owner != "dev_alice" || generation != shared.LeaseGeneration {
+			t.Errorf("invalid decision delivery: owner=%q generation=%d", owner, generation)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+}

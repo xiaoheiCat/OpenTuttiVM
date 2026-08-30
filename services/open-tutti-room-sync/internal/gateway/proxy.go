@@ -68,6 +68,7 @@ type Proxy struct {
 	deviceID string
 
 	mu        sync.Mutex
+	syncMu    sync.Mutex
 	listeners map[string]*routeBinding
 
 	// listen is injectable: dev machines may not own the synthetic block,
@@ -103,12 +104,15 @@ func NewProxy(vips *VIPAllocator, dialer TunneledDialer, routes RouteSource, loo
 // hosts onto 127.0.0.1 per port. Called on ports_changed events and
 // periodically.
 func (p *Proxy) Sync(ctx context.Context) error {
+	p.syncMu.Lock()
+	defer p.syncMu.Unlock()
 	live, err := p.routes.RoomRoutes(ctx)
 	if err != nil {
 		return err
 	}
 	sharedMode := p.vips.Shared()
 	want := map[string]*routeBinding{}
+	liveHosts := map[string]bool{}
 	addWant := func(host string, port int, t *routeTarget) {
 		var addr string
 		if sharedMode {
@@ -158,6 +162,7 @@ func (p *Proxy) Sync(ctx context.Context) error {
 			continue
 		}
 		sessHost := vmprotocol.TuttiHost{Device: p.slugOf(r), Session: strings.TrimPrefix(r.SessionID, "sess-")}
+		liveHosts[sessHost.String()] = true
 		addWant(sessHost.String(), r.Port, &routeTarget{route: r.RouteKey, host: sessHost.String()})
 
 		// Device-level short address (slug.tutti:port): re-resolve per
@@ -166,6 +171,7 @@ func (p *Proxy) Sync(ctx context.Context) error {
 		// listeners bind.
 		if p.lookup != nil {
 			devHost := vmprotocol.TuttiHost{Device: p.slugOf(r)}
+			liveHosts[devHost.String()] = true
 			addWant(devHost.String(), r.Port, &routeTarget{
 				route: r.RouteKey, host: devHost.String(), deviceLevel: true, deviceSlug: p.slugOf(r),
 			})
@@ -174,6 +180,14 @@ func (p *Proxy) Sync(ctx context.Context) error {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	for _, b := range p.listeners {
+		if b.target != nil {
+			p.releaseIfDead(b.target.host, liveHosts)
+		}
+		for host := range b.shared {
+			p.releaseIfDead(host, liveHosts)
+		}
+	}
 	for addr, b := range p.listeners {
 		if _, ok := want[addr]; !ok {
 			b.ln.Close()
@@ -202,6 +216,16 @@ func (p *Proxy) Sync(ctx context.Context) error {
 		p.log.Info("tutti route live", "addr", addr, "host", b.target.host, "session", b.target.route.SessionID, "port", b.target.route.Port)
 	}
 	return nil
+}
+
+func (p *Proxy) releaseIfDead(host string, live map[string]bool) {
+	if live[host] {
+		return
+	}
+	h, err := vmprotocol.ParseTuttiHost(host)
+	if err == nil {
+		p.vips.Release(h)
+	}
 }
 
 // Close drops every listener (room teardown).

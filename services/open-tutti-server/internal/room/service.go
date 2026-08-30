@@ -1040,13 +1040,10 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 		}
 		return true, nil
 	}
-	// Automatic succession needs a FULL replica, like explicit transfer:
-	// promoting a lazy default would hand ownership to a device whose
-	// snapshot-backed blobs exist nowhere after a server failure,
-	// breaking the owner-survival contract. Prefer the longest
-	// continuously connected FULL replica; with none online the room
-	// waits (members can still run an explicit transfer, whose
-	// readiness phase materializes the candidate) and re-checks here
+	// Automatic succession needs a server-verified FULL replica, like explicit
+	// transfer. A client policy report is not evidence. Without a verified
+	// candidate, fail closed by dissolving after the grace period rather than
+	// leaving an ownerless room that no remaining member can administer.
 	// on the next cycle.
 	full := make([]store.Membership, 0, len(online))
 	for _, m := range online {
@@ -1060,16 +1057,8 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 	if len(full) > 0 {
 		online = full
 	}
-	// With NO full replica online, waiting is NOT safe: prepare is
-	// owner-gated (the absent owner can never authorize a transfer),
-	// so a lazy-only room would sit leaderless forever — nobody could
-	// transfer, disband, or administer it. Promote the longest
-	// connected ONLINE member and persist its policy as full in the
-	// same succession step: the promoted member's room-sync watches
-	// for its IsOwner presence event and materializes every blob
-	// (PromoteToFull) before reporting readiness. Until that finishes
-	// the authoritative copy lives in server CAS — the same state any
-	// lazy member already runs in, and strictly better than limbo.
+	// With no verified candidate, the owner-gated transfer flow cannot be
+	// completed by an absent owner. Dissolution is the only safe v1 recovery.
 	// Longest continuous presence wins: earliest ConnectedAt of the current
 	// presence session, not the earliest join.
 	sort.Slice(online, func(i, j int) bool {
@@ -1092,7 +1081,10 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 	// leaderless for the next cycle, and a failed ownership write
 	// leaves a full-marked member the next cycle can promote.
 	if len(full) == 0 {
-		return false, nil
+		if err := s.dissolveLocked(ctx, roomID); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
 	room.OwnerDeviceID = successor
 	room.PendingTransferToDevice = ""

@@ -411,6 +411,11 @@ func (m *Manager) readLocked(ctx context.Context, path string) ([]byte, error) {
 func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	rootInfo, err := prepareApplyRoot(targetDir)
+	if err != nil {
+		return err
+	}
+	checkRoot := func() error { return verifyApplyRoot(targetDir, rootInfo) }
 	if err := m.materializeMissingLocked(ctx); err != nil {
 		return err
 	}
@@ -428,6 +433,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		modeSet bool
 	}
 	for _, path := range m.Replica.State.Paths() {
+		if err := checkRoot(); err != nil {
+			return err
+		}
 		roomPaths[path] = true
 		info, ok := m.Replica.State.EntryInfo(path)
 		if !ok {
@@ -529,6 +537,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 	if err := pruneRemoved(targetDir, roomPaths); err != nil {
 		return err
 	}
+	if err := checkRoot(); err != nil {
+		return err
+	}
 	// Bottom-up so children never chmod-block their parent's remaining
 	// work — deepest paths first means a restrictive parent runs after
 	// everything beneath it is already in place.
@@ -536,6 +547,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		return deferredDirs[i].dst > deferredDirs[j].dst
 	})
 	for _, d := range deferredDirs {
+		if err := checkRoot(); err != nil {
+			return err
+		}
 		if d.modeSet {
 			if err := applyMode(d.dst, d.mode); err != nil {
 				return fmt.Errorf("chmod %s: %w", d.dst, err)

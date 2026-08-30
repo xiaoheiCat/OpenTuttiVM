@@ -1,8 +1,10 @@
 package roomfs
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -314,6 +316,21 @@ func TestRejectionSurfacesAsErrRejected(t *testing.T) {
 
 	if _, err := c.Write("guarded.txt", []byte("x"), ""); err == nil || err.Error() == "" {
 		t.Fatalf("expected rejection error, got %v", err)
+	}
+}
+
+func TestCallContextTimesOutAndClosesPending(t *testing.T) {
+	left, right := net.Pipe()
+	c := NewClient(left)
+	defer right.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := c.CallContext(ctx, Request{Type: TypeStat, Path: "blocked"}, nil)
+	if !errors.Is(err, ErrCallTimeout) {
+		t.Fatalf("error = %v", err)
+	}
+	if _, err := c.Stat("after-timeout"); err == nil {
+		t.Fatal("closed client accepted a call")
 	}
 }
 

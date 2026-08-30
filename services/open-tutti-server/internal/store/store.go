@@ -147,9 +147,9 @@ type Repository interface {
 	ListCASRefCounts(ctx context.Context) (map[string]int, error)
 	// RoomCASRefs lists one room's referenced object hashes.
 	RoomCASRefs(ctx context.Context, roomID string) ([]string, error)
-	// CollectUnreferencedCAS deletes objects whose last reference died,
-	// with the refcount check and deletion serialized in one write
-	// transaction against concurrent reference acquisition.
+	// CollectUnreferencedCAS checks global refs in a short transaction and runs
+	// the deletion callback outside that transaction. The repository's CAS
+	// publication fence remains held across both steps.
 	CollectUnreferencedCAS(ctx context.Context, hashes []string, del func(hash string) error) error
 	// CASPublication serializes a CAS object's publication (filesystem
 	// write plus reference insertion) with collection.
@@ -165,6 +165,9 @@ type Repository interface {
 	// HasCASRef reports whether the room references the object hash;
 	// CAS reads are authorized per room, not by global object existence.
 	HasCASRef(ctx context.Context, roomID, hash string) (bool, error)
+	RecordCASOrphan(ctx context.Context, hash string) error
+	ListCASOrphans(ctx context.Context) ([]string, error)
+	DeleteCASOrphan(ctx context.Context, hash string) error
 
 	// Dissolution cleanup
 	// DissolveRoomFenced dissolves under the CAS publication lock and

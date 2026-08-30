@@ -42,6 +42,40 @@ func TestLoadHTTPSAllowsWildcard(t *testing.T) {
 	}
 }
 
+func TestLoadComposeLocalModeAllowsDockerBridgeListener(t *testing.T) {
+	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080")
+	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
+	t.Setenv("OPEN_TUTTI_COMPOSE_LOCAL_MODE", "1")
+	if _, err := Load(""); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadComposeLocalModeDoesNotAllowArbitraryLocalURL(t *testing.T) {
+	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080")
+	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:9999")
+	t.Setenv("OPEN_TUTTI_COMPOSE_LOCAL_MODE", "1")
+	if _, err := Load(""); err == nil {
+		t.Fatal("expected non-default localhost URL to be rejected")
+	}
+}
+
+func TestLoadEnvFileCannotEnableComposeLocalMode(t *testing.T) {
+	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080")
+	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
+	t.Setenv("OPEN_TUTTI_COMPOSE_LOCAL_MODE", "")
+	envFile := t.TempDir() + "/.env"
+	if err := os.WriteFile(envFile, []byte("OPEN_TUTTI_COMPOSE_LOCAL_MODE=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(envFile); err == nil {
+		t.Fatal("expected .env mode marker to be ignored")
+	}
+}
+
 func TestLoadCASQuotaOverride(t *testing.T) {
 	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
 	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "127.0.0.1:8080")

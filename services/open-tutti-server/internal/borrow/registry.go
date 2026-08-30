@@ -64,6 +64,7 @@ type openApproval struct {
 	agentOwner string
 	agentID    string
 	operator   string
+	generation uint64
 	openedAt   time.Time
 }
 
@@ -211,6 +212,10 @@ func (r *Registry) Revoke(roomID, ownerDeviceID, agentInstanceID string) (borrow
 func (r *Registry) Command(roomID string, p borrowagent.BorrowCommandPayload) (borrowagent.BorrowCommandPayload, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.commandLocked(roomID, p)
+}
+
+func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPayload) (borrowagent.BorrowCommandPayload, error) {
 	room := r.agents[roomID]
 	inst := room[p.AgentInstanceID]
 	if inst == nil {
@@ -249,6 +254,22 @@ func (r *Registry) Command(roomID string, p borrowagent.BorrowCommandPayload) (b
 		r.commandBorrowers[key] = p.BorrowerDeviceID
 	}
 	return p, nil
+}
+
+// DispatchCommand validates and records a command while holding the lease
+// lock, then invokes the bounded enqueue callback before releasing it. The
+// callback must not perform socket I/O; its generation is the final delivery
+// fence used by the writer.
+func (r *Registry) DispatchCommand(roomID string, p borrowagent.BorrowCommandPayload, deliver func(string, uint64, borrowagent.BorrowCommandPayload)) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out, err := r.commandLocked(roomID, p)
+	if err != nil {
+		return err
+	}
+	inst := r.agents[roomID][p.AgentInstanceID]
+	deliver(inst.OwnerDeviceID, inst.LeaseGeneration, out)
+	return nil
 }
 
 func (r *Registry) CommandFailed(roomID, ownerDeviceID string, p borrowagent.CommandFailedPayload) (borrowagent.CommandFailedPayload, error) {
@@ -297,6 +318,10 @@ func (r *Registry) CurrentOperator(roomID, agentInstanceID string) (string, erro
 func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID string) (operator string, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.openApprovalLocked(roomID, agentInstanceID, approvalID, commandID)
+}
+
+func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, commandID string) (operator string, err error) {
 	room := r.agents[roomID]
 	inst := room[agentInstanceID]
 	if inst == nil {
@@ -361,9 +386,24 @@ func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID s
 	}
 	r.approvals[approvalScope(roomID, agentInstanceID, approvalID)] = openApproval{
 		roomID: roomID, agentOwner: inst.OwnerDeviceID, agentID: agentInstanceID, operator: operator,
-		openedAt: now,
+		generation: inst.LeaseGeneration,
+		openedAt:   now,
 	}
 	return operator, nil
+}
+
+// DispatchApproval validates and records a prompt under the lease lock, then
+// invokes a bounded enqueue callback carrying its generation. The callback
+// must not perform socket I/O.
+func (r *Registry) DispatchApproval(roomID, agentInstanceID, approvalID, commandID string, deliver func(string, uint64)) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	operator, err := r.openApprovalLocked(roomID, agentInstanceID, approvalID, commandID)
+	if err != nil {
+		return err
+	}
+	deliver(operator, r.agents[roomID][agentInstanceID].LeaseGeneration)
+	return nil
 }
 
 // approvalScope keys pending approvals by room, agent instance, and the
@@ -396,6 +436,43 @@ func (r *Registry) ResolveDecision(roomID, agentInstanceID, approvalID, deciderD
 	}
 	delete(r.approvals, approvalScope(roomID, agentInstanceID, approvalID))
 	return ap.agentOwner, nil
+}
+
+// ResolveDecisionDispatch consumes a decision under the registry lock and
+// passes a generation-stamped delivery to a bounded, nonblocking enqueue.
+func (r *Registry) ResolveDecisionDispatch(roomID, agentInstanceID, approvalID, deciderDeviceID string, deliver func(string, uint64)) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ap, ok := r.approvals[approvalScope(roomID, agentInstanceID, approvalID)]
+	if !ok {
+		return errors.New("unknown or expired approval")
+	}
+	if ap.operator != deciderDeviceID {
+		return ErrNotOperator
+	}
+	delete(r.approvals, approvalScope(roomID, agentInstanceID, approvalID))
+	deliver(ap.agentOwner, ap.generation)
+	return nil
+}
+
+// ValidateDelivery is the final fence for a message admitted while the
+// registry lock was held. The writer calls it after dequeue, so revocation can
+// invalidate queued work without making the registry lock cover socket I/O.
+func (r *Registry) ValidateDelivery(roomID, agentInstanceID, approvalID, recipient string, generation uint64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	inst := r.agents[roomID][agentInstanceID]
+	if inst == nil || !inst.Shared || inst.LeaseGeneration != generation {
+		return false
+	}
+	// Approval decisions consume the pending approval before the prompt may
+	// leave a slow queue. Generation fencing is sufficient here: the queued
+	// recipient is the authenticated connection selected when the prompt was
+	// opened, while revoke/re-share always changes the generation.
+	if approvalID != "" {
+		return true
+	}
+	return inst.OwnerDeviceID == recipient
 }
 
 // Agent returns one instance (status/testing).

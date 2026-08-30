@@ -58,6 +58,10 @@ func Load(envFile string) (Config, error) {
 		}
 		return def
 	}
+	// This marker is deliberately read only from the process environment. It is
+	// injected by the checked-in Compose service and cannot be enabled through
+	// .env, which is user-controlled configuration.
+	composeLocalMode := os.Getenv("OPEN_TUTTI_COMPOSE_LOCAL_MODE") == "1"
 
 	cfg := Config{
 		ListenAddr:       get("OPEN_TUTTI_LISTEN_ADDR", "127.0.0.1:8080"),
@@ -85,7 +89,7 @@ func Load(envFile string) (Config, error) {
 		return Config{}, errors.New("OPEN_TUTTI_PUBLIC_URL must be an absolute URL")
 	}
 	if u.Scheme == "http" {
-		if !isLoopbackListenAddr(cfg.ListenAddr) {
+		if !isLoopbackListenAddr(cfg.ListenAddr) && !isComposeLocalMode(composeLocalMode, cfg) {
 			return Config{}, errors.New("plain HTTP public URL requires a loopback listen address; use a TLS reverse proxy for remote deployment")
 		}
 	}
@@ -93,6 +97,10 @@ func Load(envFile string) (Config, error) {
 		return Config{}, errors.New("grace period, ticket TTL, snapshot interval, CAS quota, and active room limit must be positive")
 	}
 	return cfg, nil
+}
+
+func isComposeLocalMode(enabled bool, cfg Config) bool {
+	return enabled && cfg.ListenAddr == "0.0.0.0:8080" && cfg.PublicURL == "http://localhost:8080"
 }
 
 func isLoopbackListenAddr(addr string) bool {

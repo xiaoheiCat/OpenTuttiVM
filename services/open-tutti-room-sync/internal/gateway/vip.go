@@ -219,6 +219,9 @@ func (a *VIPAllocator) AssignWithError(host vmprotocol.TuttiHost) (net.IP, error
 		return ip, nil
 	}
 	const poolSize = 200 * 200
+	for a.next <= poolSize && a.used[ipFromOffset(1+(a.next-1)/200, 1+(a.next-1)%200).String()] {
+		a.next++
+	}
 	if a.next > poolSize {
 		return nil, ErrVIPExhausted
 	}
@@ -226,12 +229,33 @@ func (a *VIPAllocator) AssignWithError(host vmprotocol.TuttiHost) (net.IP, error
 	index := uint32(1 + (a.next-1)%200)
 	a.next++
 	ip := ipFromOffset(device, index)
-	if a.used[ip.String()] {
-		return nil, ErrVIPExhausted
-	}
 	a.byKey[key] = ip
 	a.used[ip.String()] = true
 	return ip, nil
+}
+
+// Release returns a hostname's VIP to the pool. It is safe to call for an
+// unknown host and never releases an address still held by another key.
+func (a *VIPAllocator) Release(host vmprotocol.TuttiHost) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	key := host.String()
+	ip, ok := a.byKey[key]
+	if !ok {
+		return
+	}
+	delete(a.byKey, key)
+	delete(a.used, ip.String())
+	if a.next > 1 {
+		// Reusing the lowest returned slot bounds churn without changing
+		// addresses held by live hosts.
+		for n := uint32(1); n < a.next; n++ {
+			if !a.used[ipFromOffset(1+(n-1)/200, 1+(n-1)%200).String()] {
+				a.next = n
+				break
+			}
+		}
+	}
 }
 
 // ReleaseAll clears allocations (room teardown).

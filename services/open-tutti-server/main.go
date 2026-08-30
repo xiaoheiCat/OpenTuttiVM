@@ -77,7 +77,11 @@ func run() error {
 	// Reference-aware CAS collection: dissolution (per-room and the
 	// startup sweep) drops object-store entries whose last reference
 	// died, keeping OPEN_TUTTI_OBJECTS_DIR bounded.
-	rooms.SetCASCollector(casCollector{repo: repo, cas: cas, log: log})
+	collector := casCollector{repo: repo, cas: cas, log: log}
+	rooms.SetCASCollector(collector)
+	// Quota/reference failures can create orphans without dissolving a room.
+	// Sweep before serving requests, then retry during ordinary maintenance.
+	collector.Collect(context.Background(), nil)
 	// Token refresh (rejoin recovery) tears the device's live
 	// transports down, matching kick and leave semantics.
 	rooms.SetLeaveFence(seq.FreezeAt, seq.UnfreezeAt)
@@ -108,6 +112,7 @@ func run() error {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
+			collector.Collect(context.Background(), nil)
 			active, err := repo.ListActiveRooms(context.Background())
 			if err != nil {
 				continue
@@ -174,14 +179,21 @@ type casCollector struct {
 }
 
 func (c casCollector) Collect(ctx context.Context, hashes []string) {
-	// The check runs INSIDE the deletion transaction (repo): a room
-	// acquiring a reference to the same hash mid-collection waits on
-	// the write lock and re-validates afterwards, so a surviving room
-	// can never reference a deleted object.
+	if orphaned, err := c.repo.ListCASOrphans(ctx); err == nil {
+		hashes = append(hashes, orphaned...)
+	}
+	// The repository holds the CAS publication fence across its short global
+	// ref check and the subsequent deletes, so a surviving room can never
+	// publish a reference to an object being removed.
 	err := c.repo.CollectUnreferencedCAS(ctx, hashes, func(hash string) error {
 		delErr := c.cas.Delete(hash)
 		if delErr != nil {
 			c.log.Warn("cas collection: delete", "hash", hash, "err", delErr)
+		}
+		if delErr == nil {
+			if recordErr := c.repo.DeleteCASOrphan(ctx, hash); recordErr != nil {
+				c.log.Warn("cas orphan record cleanup", "hash", hash, "err", recordErr)
+			}
 		}
 		return delErr
 	})
