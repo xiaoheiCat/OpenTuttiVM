@@ -30,6 +30,53 @@ type memHandler struct {
 	srv      *Server
 }
 
+type blockingContextHandler struct {
+	*memHandler
+	started  chan struct{}
+	canceled chan struct{}
+}
+
+func (h *blockingContextHandler) StatContext(ctx context.Context, path string) (*Stat, error) {
+	if path != "blocked" {
+		return h.memHandler.Stat(path)
+	}
+	select {
+	case h.started <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	select {
+	case h.canceled <- struct{}{}:
+	default:
+	}
+	return nil, ctx.Err()
+}
+
+func (h *blockingContextHandler) ReadWithHashContext(ctx context.Context, path string) ([]byte, string, error) {
+	return h.memHandler.ReadWithHash(path)
+}
+func (h *blockingContextHandler) WriteGuardedContext(ctx context.Context, path string, content []byte, baseHash string) (string, error) {
+	return h.memHandler.WriteGuarded(path, content, baseHash)
+}
+func (h *blockingContextHandler) ListContext(ctx context.Context, path string) ([]DirEntry, error) {
+	return h.memHandler.List(path)
+}
+func (h *blockingContextHandler) CreateContext(ctx context.Context, path string, mode uint32) error {
+	return h.memHandler.Create(path, mode)
+}
+func (h *blockingContextHandler) MkdirContext(ctx context.Context, path string, mode uint32) error {
+	return h.memHandler.Mkdir(path, mode)
+}
+func (h *blockingContextHandler) RemoveContext(ctx context.Context, path string) error {
+	return h.memHandler.Remove(path)
+}
+func (h *blockingContextHandler) RenameContext(ctx context.Context, from, to string, noReplace bool) error {
+	return h.memHandler.Rename(from, to, noReplace)
+}
+func (h *blockingContextHandler) ChmodContext(ctx context.Context, path string, mode uint32) error {
+	return h.memHandler.Chmod(path, mode)
+}
+
 type deadlineConn struct {
 	net.Conn
 	deadline chan time.Time
@@ -209,7 +256,7 @@ func (m *memHandler) Rename(from, to string, noReplace bool) error {
 
 // startServer runs Serve on an ephemeral unix socket. macOS caps unix
 // socket paths at ~104 bytes, so tests avoid the long TMPDIR layout.
-func startServer(t *testing.T, h *memHandler) string {
+func startServer(t *testing.T, h Handler) string {
 	t.Helper()
 	// The Room FS Protocol rides unix sockets inside the Linux room
 	// containers; Windows hosts reach rooms over the network instead.
@@ -228,7 +275,9 @@ func startServer(t *testing.T, h *memHandler) string {
 	}
 	t.Cleanup(func() { ln.Close() })
 	srv := NewServerWithCapability(h, slog.New(slog.DiscardHandler), "test-capability")
-	h.srv = srv
+	if mem, ok := h.(*memHandler); ok {
+		mem.srv = srv
+	}
 	go srv.Serve(ln)
 	return sock
 }
@@ -425,6 +474,31 @@ func TestCallContextAddsDefaultTimeoutToNonBackgroundContext(t *testing.T) {
 	err = <-done
 	if !errors.Is(err, ErrCallTimeout) {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestCallContextCancelsServerRequestWithoutClosingConnection(t *testing.T) {
+	h := &blockingContextHandler{
+		memHandler: newMemHandler(), started: make(chan struct{}, 1), canceled: make(chan struct{}, 1),
+	}
+	addr := startServer(t, h)
+	c, err := dialTest(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	if _, err := c.CallContext(ctx, Request{Type: TypeStat, Path: "blocked"}, nil); !errors.Is(err, ErrCallTimeout) {
+		t.Fatalf("error = %v", err)
+	}
+	select {
+	case <-h.canceled:
+	case <-time.After(time.Second):
+		t.Fatal("server request was not canceled")
+	}
+	if _, err := c.Stat("after-cancel"); err != nil {
+		t.Fatalf("connection closed after request cancellation: %v", err)
 	}
 }
 

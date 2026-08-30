@@ -5,6 +5,7 @@ package replica
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -56,18 +57,43 @@ type Manager struct {
 	// deduplicated re-submit — same operation id — gets the original
 	// acknowledgement broadcast back, unblocking the replica's pending
 	// set (and delivering the op when it never reached the server).
-	pendingEnvs map[string]vmprotocol.Envelope
+	pendingEnvs          map[string]vmprotocol.Envelope
+	maxPendingOperations int
+	maxPendingBytes      int64
+	pendingBytes         int64
 }
+
+type Options struct {
+	MaxPendingOperations int
+	MaxPendingBytes      int64
+}
+
+const (
+	DefaultMaxPendingOperations = 128
+	DefaultMaxPendingBytes      = 64 << 20
+)
 
 // New wires a replica manager.
 func New(deviceID string, cache vmcas.Store, policy Policy, fetcher ChunkFetcher) *Manager {
+	return NewWithOptions(deviceID, cache, policy, fetcher, Options{})
+}
+
+func NewWithOptions(deviceID string, cache vmcas.Store, policy Policy, fetcher ChunkFetcher, opts Options) *Manager {
+	if opts.MaxPendingOperations <= 0 {
+		opts.MaxPendingOperations = DefaultMaxPendingOperations
+	}
+	if opts.MaxPendingBytes <= 0 {
+		opts.MaxPendingBytes = DefaultMaxPendingBytes
+	}
 	m := &Manager{
-		Replica:     vmsync.NewReplica(deviceID),
-		Cache:       cache,
-		Policy:      policy,
-		fetcher:     fetcher,
-		waiters:     map[string]chan error{},
-		pendingEnvs: map[string]vmprotocol.Envelope{},
+		Replica:              vmsync.NewReplica(deviceID),
+		Cache:                cache,
+		Policy:               policy,
+		fetcher:              fetcher,
+		waiters:              map[string]chan error{},
+		pendingEnvs:          map[string]vmprotocol.Envelope{},
+		maxPendingOperations: opts.MaxPendingOperations,
+		maxPendingBytes:      opts.MaxPendingBytes,
 	}
 	// Sequenced applies materialize CAS-referenced content through this
 	// hook: restored text before its first patch, and (per Full policy)
@@ -90,12 +116,25 @@ const ackWaitTimeout = 10 * time.Second
 // NOTHING (no live session), so the operation has no unknown fate on
 // the wire and must not be replayed by the reconnect path.
 var ErrNotSent = errors.New("operation was not sent")
+var ErrPendingLimit = errors.New("pending operation budget exceeded")
 
 // SubmitAndWait submits one operation and blocks until the server accepts
 // (broadcast ack) or rejects it. The submit function performs the actual
 // transport write; separating it keeps the manager transport-agnostic.
 func (m *Manager) SubmitAndWait(ctx context.Context, env vmprotocol.Envelope, submit func() error) error {
 	m.mu.Lock()
+	if _, exists := m.pendingEnvs[env.OperationID]; !exists {
+		size, err := json.Marshal(env)
+		if err != nil {
+			m.mu.Unlock()
+			return fmt.Errorf("pending operation size: %w", err)
+		}
+		if len(m.pendingEnvs) >= m.maxPendingOperations || m.pendingBytes+int64(len(size)) > m.maxPendingBytes {
+			m.mu.Unlock()
+			return fmt.Errorf("%w: max operations=%d max bytes=%d", ErrPendingLimit, m.maxPendingOperations, m.maxPendingBytes)
+		}
+		m.pendingBytes += int64(len(size))
+	}
 	ch := make(chan error, 1)
 	m.waiters[env.OperationID] = ch
 	m.Replica.Submit(env.OperationID)
@@ -105,7 +144,7 @@ func (m *Manager) SubmitAndWait(ctx context.Context, env vmprotocol.Envelope, su
 		m.mu.Lock()
 		delete(m.waiters, env.OperationID)
 		if !keepPending {
-			delete(m.pendingEnvs, env.OperationID)
+			m.deletePendingLocked(env.OperationID)
 			// Definite failure: the pending-ack ID dies with it (no
 			// acknowledgement is ever coming for a never-sent or
 			// rejected operation).
@@ -152,7 +191,7 @@ func (m *Manager) NotifyRejected(operationID, reason string) {
 		ch <- fmt.Errorf("operation %s rejected: %s", operationID, reason)
 		delete(m.waiters, operationID)
 	}
-	delete(m.pendingEnvs, operationID)
+	m.deletePendingLocked(operationID)
 	// The operation's fate is known (rejected): clear the pending-ack
 	// ID too, or it lingered until process exit — an ack never comes.
 	m.Replica.Reject(operationID)
@@ -176,7 +215,16 @@ func (m *Manager) PendingEnvelopes() []vmprotocol.Envelope {
 func (m *Manager) ForgetPending(operationID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.pendingEnvs, operationID)
+	m.deletePendingLocked(operationID)
+}
+
+func (m *Manager) deletePendingLocked(operationID string) {
+	if env, ok := m.pendingEnvs[operationID]; ok {
+		if size, err := json.Marshal(env); err == nil {
+			m.pendingBytes -= int64(len(size))
+		}
+		delete(m.pendingEnvs, operationID)
+	}
 }
 
 // AppliedSeq reads the replica's applied sequence UNDER the manager
@@ -271,7 +319,7 @@ func (m *Manager) ApplyServerOp(env vmprotocol.Envelope) (bool, error) {
 			ch <- nil
 			delete(m.waiters, env.OperationID)
 		}
-		delete(m.pendingEnvs, env.OperationID)
+		m.deletePendingLocked(env.OperationID)
 	}
 	m.mu.Unlock()
 	return acked, err

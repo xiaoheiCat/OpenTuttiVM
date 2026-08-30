@@ -20,6 +20,8 @@ are intentionally not part of the Tutti daemon override namespace.
 | `OPEN_TUTTI_LISTEN_ADDR` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | HTTP listener address; plain HTTP requires an explicit loopback address. |
 | `OPEN_TUTTI_PUBLIC_URL` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Public URL for links; remote deployments require HTTPS termination. |
 | `OPEN_TUTTI_COMPOSE_LOCAL_MODE` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Compose-only process marker for the fixed loopback-published bridge deployment; ignored when supplied through `.env`. |
+| `OPEN_TUTTI_MAX_PENDING_OPERATIONS` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds room-sync operations awaiting authoritative acknowledgement; default 128. |
+| `OPEN_TUTTI_MAX_PENDING_BYTES` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds cumulative JSON envelope bytes awaiting acknowledgement; default 64 MiB. |
 
 | Variable                      | Owner document                                                                                             | Purpose                                                                              |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |

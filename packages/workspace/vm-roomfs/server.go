@@ -2,6 +2,7 @@ package roomfs
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -39,6 +40,20 @@ type Handler interface {
 	Chmod(path string, mode uint32) error
 }
 
+// ContextHandler is the production request boundary. Implementations should
+// stop slow CAS and network work when the mount request is canceled.
+type ContextHandler interface {
+	StatContext(context.Context, string) (*Stat, error)
+	ReadWithHashContext(context.Context, string) ([]byte, string, error)
+	WriteGuardedContext(context.Context, string, []byte, string) (string, error)
+	ListContext(context.Context, string) ([]DirEntry, error)
+	CreateContext(context.Context, string, uint32) error
+	MkdirContext(context.Context, string, uint32) error
+	RemoveContext(context.Context, string) error
+	RenameContext(context.Context, string, string, bool) error
+	ChmodContext(context.Context, string, uint32) error
+}
+
 // Server hosts the protocol on a listener and can push invalidations to
 // every connected mount when remote operations land.
 type Server struct {
@@ -51,10 +66,14 @@ type Server struct {
 	auth  chan struct{}
 }
 
+const maxActiveRequests = 1024
+
 type serverConn struct {
-	conn   net.Conn
-	writer *bufio.Writer
-	mu     sync.Mutex
+	conn       net.Conn
+	writer     *bufio.Writer
+	mu         sync.Mutex
+	requestsMu sync.Mutex
+	requests   map[uint64]context.CancelFunc
 }
 
 // NewServer creates a protocol server over a handler. The handler may be
@@ -97,7 +116,7 @@ func (s *Server) Serve(ln net.Listener) error {
 		if err != nil {
 			return err
 		}
-		sc := &serverConn{conn: conn, writer: bufio.NewWriter(conn)}
+		sc := &serverConn{conn: conn, writer: bufio.NewWriter(conn), requests: map[uint64]context.CancelFunc{}}
 		go s.authenticateAndServe(conn, sc)
 	}
 }
@@ -129,6 +148,9 @@ func (s *Server) serveConn(conn net.Conn, sc *serverConn) {
 }
 
 func (s *Server) serveConnReader(conn net.Conn, sc *serverConn, reader *bufio.Reader) {
+	connCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer sc.cancelRequests()
 	defer conn.Close()
 	defer func() {
 		s.mu.Lock()
@@ -136,39 +158,156 @@ func (s *Server) serveConnReader(conn net.Conn, sc *serverConn, reader *bufio.Re
 		s.mu.Unlock()
 	}()
 
+	var wg sync.WaitGroup
 	for {
 		var req Request
 		body, err := ReadFrame(reader, &req)
 		if err != nil {
+			cancel()
+			wg.Wait()
 			return
 		}
-		res := s.dispatch(req, body)
-		sc.mu.Lock()
-		// Bounded response writes, same policy as pushes: a mount that
-		// stops reading while holding its socket open parked this write
-		// forever HOLDING sc.mu, so every later BroadcastInvalidate
-		// blocked acquiring the lock and stalled the device's whole WS
-		// event pump. A timed-out response drops the connection (the
-		// mount reconnects and re-reads).
-		if dl, ok := sc.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
-			_ = dl.SetWriteDeadline(time.Now().Add(30 * time.Second))
+		reqCopy := req
+		bodyCopy := append([]byte(nil), body...)
+		if req.Type == TypeCancel {
+			sc.cancelRequest(req.ID)
+			continue
 		}
-		err = WriteFrame(sc.writer, res, res.Body)
-		if err == nil {
-			err = sc.writer.Flush()
+		requestCtx, requestCancel := context.WithCancel(connCtx)
+		if !sc.addRequest(req.ID, requestCancel) {
+			requestCancel()
+			go func() {
+				if err := s.writeResponse(sc, errorResponse(req.ID, fmt.Errorf("roomfs: too many active requests"))); err != nil {
+					cancel()
+				}
+			}()
+			continue
 		}
-		if dl, ok := sc.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
-			_ = dl.SetWriteDeadline(time.Time{})
-		}
-		sc.mu.Unlock()
-		if err != nil {
-			return
-		}
+		wg.Add(1)
+		go func(req Request, body []byte, requestCtx context.Context) {
+			defer wg.Done()
+			defer sc.removeRequest(req.ID)
+			res := s.dispatch(requestCtx, req, body)
+			writeErr := s.writeResponse(sc, res)
+			if writeErr != nil {
+				cancel()
+				_ = conn.Close()
+			}
+		}(reqCopy, bodyCopy, requestCtx)
 	}
 }
 
-func (s *Server) dispatch(req Request, body []byte) Response {
+func (sc *serverConn) addRequest(id uint64, cancel context.CancelFunc) bool {
+	sc.requestsMu.Lock()
+	defer sc.requestsMu.Unlock()
+	if len(sc.requests) >= maxActiveRequests {
+		return false
+	}
+	if _, exists := sc.requests[id]; exists {
+		return false
+	}
+	sc.requests[id] = cancel
+	return true
+}
+
+func (sc *serverConn) removeRequest(id uint64) {
+	sc.requestsMu.Lock()
+	delete(sc.requests, id)
+	sc.requestsMu.Unlock()
+}
+
+func (sc *serverConn) cancelRequest(id uint64) {
+	sc.requestsMu.Lock()
+	cancel := sc.requests[id]
+	sc.requestsMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (sc *serverConn) cancelRequests() {
+	sc.requestsMu.Lock()
+	requests := sc.requests
+	sc.requests = map[uint64]context.CancelFunc{}
+	sc.requestsMu.Unlock()
+	for _, cancel := range requests {
+		cancel()
+	}
+}
+
+func (s *Server) writeResponse(sc *serverConn, res Response) error {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	if dl, ok := sc.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		_ = dl.SetWriteDeadline(time.Now().Add(30 * time.Second))
+		defer func() { _ = dl.SetWriteDeadline(time.Time{}) }()
+	}
+	err := WriteFrame(sc.writer, res, res.Body)
+	if err == nil {
+		err = sc.writer.Flush()
+	}
+	return err
+}
+
+func (s *Server) dispatch(ctx context.Context, req Request, body []byte) Response {
 	res := Response{ID: req.ID, OK: true}
+	if h, ok := s.handler.(ContextHandler); ok {
+		switch req.Type {
+		case TypeStat:
+			st, err := h.StatContext(ctx, req.Path)
+			if err != nil {
+				return errorResponse(req.ID, err)
+			}
+			if st == nil {
+				st = &Stat{}
+			}
+			res.Stat = st
+		case TypeRead:
+			content, hash, err := h.ReadWithHashContext(ctx, req.Path)
+			if err != nil {
+				return errorResponse(req.ID, err)
+			}
+			if uint64(len(content)) > MaxBodyBytes {
+				return errorResponse(req.ID, fmt.Errorf("roomfs: read of %s exceeds protocol body limit (%d bytes)", req.Path, MaxBodyBytes))
+			}
+			res.Body, res.Hash = content, hash
+		case TypeList:
+			entries, err := h.ListContext(ctx, req.Path)
+			if err != nil {
+				return errorResponse(req.ID, err)
+			}
+			res.Entries = entries
+		case TypeWrite:
+			newHash, err := h.WriteGuardedContext(ctx, req.Path, body, req.BaseHash)
+			if err != nil {
+				return errorResponse(req.ID, err)
+			}
+			res.Hash = newHash
+		case TypeCreate:
+			if err := h.CreateContext(ctx, req.Path, req.Mode); err != nil {
+				return errorResponse(req.ID, err)
+			}
+		case TypeMkdir:
+			if err := h.MkdirContext(ctx, req.Path, req.Mode); err != nil {
+				return errorResponse(req.ID, err)
+			}
+		case TypeRemove:
+			if err := h.RemoveContext(ctx, req.Path); err != nil {
+				return errorResponse(req.ID, err)
+			}
+		case TypeRename:
+			if err := h.RenameContext(ctx, req.Path, req.To, req.RenameNoReplace); err != nil {
+				return errorResponse(req.ID, err)
+			}
+		case TypeChmod:
+			if err := h.ChmodContext(ctx, req.Path, req.Mode); err != nil {
+				return errorResponse(req.ID, err)
+			}
+		default:
+			return errorResponse(req.ID, fmt.Errorf("unknown request type %q", req.Type))
+		}
+		return res
+	}
 	switch req.Type {
 	case TypeStat:
 		st, err := s.handler.Stat(req.Path)

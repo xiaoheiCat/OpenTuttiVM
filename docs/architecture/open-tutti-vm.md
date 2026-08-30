@@ -101,6 +101,14 @@ Hybrid, by content class:
   than claiming initialization.
 - Server restart ends all rooms (meeting over; durable artifacts remain in
   CAS and participants' applied workspaces).
+- If the owner is gone and no verified full/ready candidate exists, the server
+  keeps the room in explicit `needs_owner` / `needs_verified_owner` state and
+  broadcasts `owner_lost`. Any authenticated member may call the recovery
+  prepare endpoint, which creates a normal server generation and snapshot
+  fence; it never grants ownership. The candidate still needs a full replica,
+  applied/current sequence, and host readiness before the existing transfer
+  commit can succeed. A missing Host adapter therefore remains an explicit
+  recovery block rather than a false automatic takeover.
 
 ## Auth model
 

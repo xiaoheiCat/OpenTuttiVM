@@ -277,6 +277,28 @@ func TestOwnerGracePeriodAutoTransfer(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedMemberCanPrepareRecoveryWithoutOwnership(t *testing.T) {
+	svc, clock := newTestService(t, "")
+	created := createRoom(t, svc, "")
+	joinRoom(t, svc, created, memberDevice("dev_bob"))
+	clock.Advance(6 * time.Minute)
+	ctx := context.Background()
+	result, err := svc.PrepareRecoveryTransfer(ctx, created.RoomID, "dev_bob", "dev_bob", 7)
+	if err != nil {
+		t.Fatalf("recovery prepare: %v", err)
+	}
+	if result.Generation == "" || result.SnapshotSeq != 7 {
+		t.Fatalf("unexpected recovery fence: %+v", result)
+	}
+	room, err := svc.repo.GetRoom(ctx, created.RoomID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if room.OwnerDeviceID != "dev_owner" || room.PendingTransferToDevice != "dev_bob" {
+		t.Fatalf("recovery prepare changed ownership state: owner=%s candidate=%s", room.OwnerDeviceID, room.PendingTransferToDevice)
+	}
+}
+
 func TestOwnerGracePeriodNobodyOnlineDissolves(t *testing.T) {
 	svc, clock := newTestService(t, "")
 	created := createRoom(t, svc, "")
@@ -397,6 +419,62 @@ func TestOwnershipTransferAcceptsEmptyWorkspaceSequences(t *testing.T) {
 	}
 	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_empty", prepared.Generation, 0); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRecoveryTransferAcceptsEmptyWorkspaceSequences(t *testing.T) {
+	svc, clock := newTestService(t, "")
+	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
+	svc.SetCurrentSequence(func(string) (uint64, error) { return 0, nil })
+	created := createRoom(t, svc, "")
+	joinRoom(t, svc, created, memberDevice("dev_empty"))
+	clock.Advance(6 * time.Minute)
+	ctx := context.Background()
+	prepared, err := svc.PrepareRecoveryTransfer(ctx, created.RoomID, "dev_empty", "dev_empty", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_empty", prepared.Generation, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CommitRecoveryTransfer(ctx, created.RoomID, "dev_empty", prepared.Generation, 0); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAutomaticSuccessionAcceptsEmptyWorkspaceSequences(t *testing.T) {
+	svc, clock := newTestService(t, "")
+	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
+	svc.SetCurrentSequence(func(string) (uint64, error) { return 0, nil })
+	created := createRoom(t, svc, "")
+	joinRoom(t, svc, created, memberDevice("dev_empty"))
+	ctx := context.Background()
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_empty"); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := svc.PrepareTransferWithSnapshot(ctx, created.RoomID, "dev_owner", "dev_empty", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_empty", prepared.Generation, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.MarkOffline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(6 * time.Minute)
+	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
+		t.Fatal(err)
+	}
+	room, err := svc.repo.GetRoom(ctx, created.RoomID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if room.OwnerDeviceID != "dev_empty" {
+		t.Fatalf("owner = %s", room.OwnerDeviceID)
 	}
 }
 

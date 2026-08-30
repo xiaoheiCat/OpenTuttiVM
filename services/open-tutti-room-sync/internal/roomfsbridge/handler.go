@@ -135,6 +135,13 @@ func (h *Handler) nextOpID() string {
 
 // Stat implements roomfs.Handler.
 func (h *Handler) Stat(path string) (*roomfs.Stat, error) {
+	return h.StatContext(context.Background(), path)
+}
+
+func (h *Handler) StatContext(ctx context.Context, path string) (*roomfs.Stat, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var info vmsync.EntryInfo
 	var stat roomfs.Stat
 	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
@@ -171,11 +178,22 @@ func (h *Handler) Stat(path string) (*roomfs.Stat, error) {
 
 // Read implements roomfs.Handler.
 func (h *Handler) Read(path string) ([]byte, error) {
-	return h.mgr.Read(context.Background(), path)
+	return h.ReadContext(context.Background(), path)
+}
+
+func (h *Handler) ReadContext(ctx context.Context, path string) ([]byte, error) {
+	return h.mgr.Read(ctx, path)
 }
 
 // List implements roomfs.Handler.
 func (h *Handler) List(path string) ([]roomfs.DirEntry, error) {
+	return h.ListContext(context.Background(), path)
+}
+
+func (h *Handler) ListContext(ctx context.Context, path string) ([]roomfs.DirEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	prefix := ""
 	if path != "" {
 		prefix = path + "/"
@@ -225,6 +243,13 @@ func (h *Handler) List(path string) ([]roomfs.DirEntry, error) {
 // Write implements roomfs.Handler: whole-file write → File Operation.
 // ReadWithHash returns content and its hash from ONE replica snapshot.
 func (h *Handler) ReadWithHash(path string) ([]byte, string, error) {
+	return h.ReadWithHashContext(context.Background(), path)
+}
+
+func (h *Handler) ReadWithHashContext(ctx context.Context, path string) ([]byte, string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
 	var content []byte
 	var hash string
 	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
@@ -239,7 +264,7 @@ func (h *Handler) ReadWithHash(path string) ([]byte, string, error) {
 		// hash in a second snapshot so the pair is consistent (the
 		// first flush of an untouched lazy-restored file otherwise
 		// fails EAGAIN against its own baseline).
-		c, err := h.Read(path)
+		c, err := h.ReadContext(ctx, path)
 		if err != nil {
 			return nil, "", err
 		}
@@ -258,7 +283,11 @@ func (h *Handler) ReadWithHash(path string) ([]byte, string, error) {
 // ONE critical section, then submits; the returned hash is the
 // post-write content hash for the mount's next baseline.
 func (h *Handler) WriteGuarded(path string, content []byte, baseHash string) (string, error) {
-	old, base, baseSeq, err := h.mgr.PrepareWriteGuarded(context.Background(), path, baseHash)
+	return h.WriteGuardedContext(context.Background(), path, content, baseHash)
+}
+
+func (h *Handler) WriteGuardedContext(ctx context.Context, path string, content []byte, baseHash string) (string, error) {
+	old, base, baseSeq, err := h.mgr.PrepareWriteGuarded(ctx, path, baseHash)
 	if err != nil {
 		if errors.Is(err, replica.ErrStaleBase) {
 			return "", fmt.Errorf("%s: stale base for %s; re-read and retry", roomfs.ErrorAgain, path)
@@ -270,12 +299,12 @@ func (h *Handler) WriteGuarded(path string, content []byte, baseHash string) (st
 			if h.uploader == nil {
 				return fmt.Errorf("no chunk uploader configured")
 			}
-			return h.uploader.EnsureChunks(context.Background(), manifest, chunks)
+			return h.uploader.EnsureChunks(ctx, manifest, chunks)
 		})
 	if convErr != nil {
 		return "", classifyRoomError(convErr)
 	}
-	if err := h.submitAtSeq(op, baseSeq); err != nil {
+	if err := h.submitAtSeq(ctx, op, baseSeq); err != nil {
 		return "", classifyRoomError(err)
 	}
 	// Post-write baseline for the mount's next flush: the manifest for
@@ -302,26 +331,33 @@ func classifyRoomError(err error) error {
 }
 
 func (h *Handler) Write(path string, content []byte) error {
+	return h.WriteContext(context.Background(), path, content)
+}
+
+func (h *Handler) WriteContext(ctx context.Context, path string, content []byte) error {
 	// Old content, tracked base hash, and base sequence come from ONE
 	// locked snapshot: a remote operation landing between separate reads
 	// would splice stale offsets onto a fresh revision's hash and seq.
-	old, base, baseSeq, _ := h.mgr.PrepareWrite(context.Background(), path)
+	old, base, baseSeq, _ := h.mgr.PrepareWrite(ctx, path)
 	op, err := vmsync.ConvertChange(h.nextOpID(), path, base, h.mgr.TrackedAsBlob(path), old, content,
 		func(manifest vmcas.Manifest, chunks [][]byte) error {
 			if h.uploader == nil {
 				return fmt.Errorf("no chunk uploader configured")
 			}
-			return h.uploader.EnsureChunks(context.Background(), manifest, chunks)
+			return h.uploader.EnsureChunks(ctx, manifest, chunks)
 		})
 	if err != nil {
 		return err
 	}
-	return h.submitAtSeq(op, baseSeq)
+	return h.submitAtSeq(ctx, op, baseSeq)
 }
 
 // Create implements roomfs.Handler.
 func (h *Handler) Create(path string, mode uint32) error {
-	return h.submit(vmprotocol.FileOperation{
+	return h.CreateContext(context.Background(), path, mode)
+}
+func (h *Handler) CreateContext(ctx context.Context, path string, mode uint32) error {
+	return h.submitContext(ctx, vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: path, Kind: vmprotocol.OpCreate,
 		Mode: &vmprotocol.MetadataChange{Mode: mode},
 	})
@@ -329,7 +365,10 @@ func (h *Handler) Create(path string, mode uint32) error {
 
 // Mkdir implements roomfs.Handler.
 func (h *Handler) Mkdir(path string, mode uint32) error {
-	return h.submit(vmprotocol.FileOperation{
+	return h.MkdirContext(context.Background(), path, mode)
+}
+func (h *Handler) MkdirContext(ctx context.Context, path string, mode uint32) error {
+	return h.submitContext(ctx, vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: path, Kind: vmprotocol.OpMkdir, IsDir: true,
 		Mode: &vmprotocol.MetadataChange{Mode: mode},
 	})
@@ -338,10 +377,13 @@ func (h *Handler) Mkdir(path string, mode uint32) error {
 // Remove implements roomfs.Handler. Directory intent comes from replica
 // state so the authoritative remove matches the target's kind.
 func (h *Handler) Remove(path string) error {
+	return h.RemoveContext(context.Background(), path)
+}
+func (h *Handler) RemoveContext(ctx context.Context, path string) error {
 	op := vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: path, Kind: vmprotocol.OpRemove,
 	}
-	return h.submitObserved(&op, func(state *vmsync.WorkspaceState, op *vmprotocol.FileOperation) {
+	return h.submitObserved(ctx, &op, func(state *vmsync.WorkspaceState, op *vmprotocol.FileOperation) {
 		if info, ok := state.EntryInfo(path); ok && info.IsDir {
 			op.IsDir = true
 		}
@@ -350,11 +392,14 @@ func (h *Handler) Remove(path string) error {
 
 // Rename implements roomfs.Handler.
 func (h *Handler) Rename(from, to string, noReplace bool) error {
+	return h.RenameContext(context.Background(), from, to, noReplace)
+}
+func (h *Handler) RenameContext(ctx context.Context, from, to string, noReplace bool) error {
 	op := vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: from, Kind: vmprotocol.OpRename,
 		Rename: &vmprotocol.Rename{OldPath: from, NewPath: to, NoReplace: noReplace},
 	}
-	return h.submitObserved(&op, func(state *vmsync.WorkspaceState, op *vmprotocol.FileOperation) {
+	return h.submitObserved(ctx, &op, func(state *vmsync.WorkspaceState, op *vmprotocol.FileOperation) {
 		if info, ok := state.EntryInfo(from); ok && info.IsDir {
 			op.IsDir = true
 		}
@@ -371,7 +416,7 @@ func (h *Handler) Rename(from, to string, noReplace bool) error {
 // POINTER: observing directory intent must reach the envelope that is
 // actually submitted (a by-value copy silently dropped it, and every
 // rmdir failed EIO against the authoritative directory).
-func (h *Handler) submitObserved(op *vmprotocol.FileOperation, observe func(state *vmsync.WorkspaceState, op *vmprotocol.FileOperation)) error {
+func (h *Handler) submitObserved(ctx context.Context, op *vmprotocol.FileOperation, observe func(state *vmsync.WorkspaceState, op *vmprotocol.FileOperation)) error {
 	var baseSeq uint64
 	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
 		observe(state, op)
@@ -380,14 +425,17 @@ func (h *Handler) submitObserved(op *vmprotocol.FileOperation, observe func(stat
 		// would self-deadlock).
 		baseSeq = h.mgr.Replica.AppliedSeq
 	})
-	return classifyRoomError(h.submitAtSeq(*op, baseSeq))
+	return classifyRoomError(h.submitAtSeq(ctx, *op, baseSeq))
 }
 
 // Chmod submits a permission-bit change to the authoritative workspace:
 // a local-only assignment would revert on the next invalidation and
 // never reach other participants.
 func (h *Handler) Chmod(path string, mode uint32) error {
-	return classifyRoomError(h.submit(vmprotocol.FileOperation{
+	return h.ChmodContext(context.Background(), path, mode)
+}
+func (h *Handler) ChmodContext(ctx context.Context, path string, mode uint32) error {
+	return classifyRoomError(h.submitContext(ctx, vmprotocol.FileOperation{
 		ID: h.nextOpID(), Path: path, Kind: vmprotocol.OpMetadataChange,
 		Mode: &vmprotocol.MetadataChange{Mode: mode & 0o7777},
 	}))
@@ -396,19 +444,23 @@ func (h *Handler) Chmod(path string, mode uint32) error {
 // submit sends one operation and reports success only after the server
 // accepted it (broadcast acknowledgement); rejections surface as errors.
 func (h *Handler) submit(op vmprotocol.FileOperation) error {
-	return h.submitAtSeq(op, h.mgr.AppliedSeq())
+	return h.submitContext(context.Background(), op)
+}
+
+func (h *Handler) submitContext(ctx context.Context, op vmprotocol.FileOperation) error {
+	return h.submitAtSeq(ctx, op, h.mgr.AppliedSeq())
 }
 
 // submitAtSeq is submit with an explicit base sequence (write path: the
 // sequence captured atomically with the content the splice offsets were
 // derived from).
-func (h *Handler) submitAtSeq(op vmprotocol.FileOperation, baseSeq uint64) error {
+func (h *Handler) submitAtSeq(ctx context.Context, op vmprotocol.FileOperation, baseSeq uint64) error {
 	env := vmprotocol.Envelope{
 		OperationID: op.ID, Operation: op,
 		AuthorDeviceID: h.deviceID, AgentSessionID: h.sessionID,
 		BaseSeq: baseSeq,
 	}
-	err := h.mgr.SubmitAndWait(context.Background(), env, func() error {
+	err := h.mgr.SubmitAndWait(ctx, env, func() error {
 		return h.submitter.Submit(env)
 	})
 	if err != nil {

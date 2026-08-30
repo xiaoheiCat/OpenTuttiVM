@@ -2,6 +2,7 @@ package replica
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +12,37 @@ import (
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
 )
+
+func TestSubmitAndWaitFailsClosedAtPendingBudget(t *testing.T) {
+	store := vmcas.NewMemoryStore()
+	mgr := NewWithOptions("dev", store, Lazy, nil, Options{MaxPendingOperations: 1, MaxPendingBytes: 1 << 20})
+	first := vmprotocol.Envelope{OperationID: "first", Operation: vmprotocol.FileOperation{ID: "first", Path: "a", Kind: vmprotocol.OpCreate}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := mgr.SubmitAndWait(ctx, first, func() error { return nil }); err == nil {
+		t.Fatal("first operation unexpectedly acknowledged")
+	}
+	second := first
+	second.OperationID, second.Operation.ID = "second", "second"
+	if err := mgr.SubmitAndWait(context.Background(), second, func() error { return nil }); !errors.Is(err, ErrPendingLimit) {
+		t.Fatalf("error = %v", err)
+	}
+	if got := len(mgr.PendingEnvelopes()); got != 1 {
+		t.Fatalf("pending = %d", got)
+	}
+}
+
+func TestSubmitAndWaitFailsClosedAtPendingByteBudget(t *testing.T) {
+	store := vmcas.NewMemoryStore()
+	env := vmprotocol.Envelope{OperationID: "large", Operation: vmprotocol.FileOperation{ID: "large", Path: "a", Kind: vmprotocol.OpCreate}}
+	mgr := NewWithOptions("dev", store, Lazy, nil, Options{MaxPendingOperations: 10, MaxPendingBytes: 1})
+	if err := mgr.SubmitAndWait(context.Background(), env, func() error { return nil }); !errors.Is(err, ErrPendingLimit) {
+		t.Fatalf("error = %v", err)
+	}
+	if got := len(mgr.PendingEnvelopes()); got != 0 {
+		t.Fatalf("pending = %d", got)
+	}
+}
 
 // buildSnapshot builds a snapshot of a tiny workspace through the real
 // sequencer so tree entries and CAS objects are authentic.

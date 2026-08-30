@@ -123,13 +123,15 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 		select {
 		case <-ctx.Done():
 			// A blocked net.Conn write does not observe context cancellation;
-			// close the single shared connection so it unblocks and all pending
-			// callers are failed together.
-			_ = c.conn.Close()
+			// close only if this request has not finished writing.
+			select {
+			case <-writeDone:
+			default:
+				_ = c.conn.Close()
+			}
 		case <-writeDone:
 		}
 	}()
-	defer close(writeDone)
 	// The complete write+flush sequence stays under the lock: FUSE issues
 	// concurrent calls, and interleaved frames would corrupt the shared
 	// bufio writer and misframe every response.
@@ -139,6 +141,7 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 		err = c.rw.Writer.Flush()
 	}
 	c.writeMu.Unlock()
+	close(writeDone)
 	if err != nil {
 		c.mu.Unlock()
 		c.fail(req.ID, err)
@@ -154,7 +157,7 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 	select {
 	case res = <-ch:
 	case <-ctx.Done():
-		c.timeout()
+		c.cancelCall(req.ID)
 		return nil, fmt.Errorf("%w: %v", ErrCallTimeout, ctx.Err())
 	}
 	if !res.OK {
@@ -170,6 +173,26 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 		return &res, fmt.Errorf("roomfs: %s", res.Error)
 	}
 	return &res, nil
+}
+
+func (c *Client) cancelCall(id uint64) {
+	c.mu.Lock()
+	delete(c.pending, id)
+	closed := c.closed != nil
+	c.mu.Unlock()
+	if closed {
+		return
+	}
+	// Best effort: the local caller is released immediately, while the
+	// control frame lets the server stop CAS/HTTP work for this request.
+	c.writeMu.Lock()
+	if dl, ok := c.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		_ = dl.SetWriteDeadline(time.Now().Add(time.Second))
+		defer func() { _ = dl.SetWriteDeadline(time.Time{}) }()
+	}
+	_ = WriteFrame(c.rw.Writer, Request{ID: id, Type: TypeCancel}, nil)
+	_ = c.rw.Writer.Flush()
+	c.writeMu.Unlock()
 }
 
 // timeout fences the connection before closing it. Closing alone would leave

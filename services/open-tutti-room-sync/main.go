@@ -31,6 +31,10 @@
 //	                         (default "main"; id is "sess-"+label)
 //	OPEN_TUTTI_SESSION_PORTS  comma list of session ports to advertise,
 //	                         e.g. "3000:http,5432:tcp" (default none)
+//	OPEN_TUTTI_MAX_PENDING_OPERATIONS maximum in-flight operation envelopes
+//	                         (default 128)
+//	OPEN_TUTTI_MAX_PENDING_BYTES cumulative in-flight envelope JSON budget
+//	                         (default 64 MiB)
 package main
 
 import (
@@ -121,7 +125,10 @@ func run() error {
 	if os.Getenv("OPEN_TUTTI_POLICY") == "" && isOwner {
 		policy = replica.Full
 	}
-	mgr := replica.New(deviceID, cache, policy, c)
+	mgr := replica.NewWithOptions(deviceID, cache, policy, c, replica.Options{
+		MaxPendingOperations: positiveEnvInt("OPEN_TUTTI_MAX_PENDING_OPERATIONS", replica.DefaultMaxPendingOperations),
+		MaxPendingBytes:      positiveEnvInt64("OPEN_TUTTI_MAX_PENDING_BYTES", replica.DefaultMaxPendingBytes),
+	})
 	// Apply-to-Workspace lifecycle hook: the server requires owners to
 	// assert workspace_applied before leaving, and this process owns the
 	// authoritative replica on the owner device — the assertion must run
@@ -353,7 +360,11 @@ func run() error {
 	// state): the replica recognizes it and clears the pending entry. When
 	// the operation never reached the server, this delivers it for real.
 	resubmitPending := func(sess *client.Session) {
-		for _, env := range mgr.PendingEnvelopes() {
+		pending := mgr.PendingEnvelopes()
+		for i, env := range pending {
+			if i >= replica.DefaultMaxPendingOperations {
+				return
+			}
 			if err := sess.Submit(env); err != nil {
 				fmt.Fprintf(os.Stderr, "room-sync: pending resubmit %s: %v\n", env.OperationID, err)
 				return // socket is dying; the next session retries
@@ -852,6 +863,22 @@ func minDuration(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
+}
+
+func positiveEnvInt(key string, fallback int) int {
+	v, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key)))
+	if err != nil || v <= 0 {
+		return fallback
+	}
+	return v
+}
+
+func positiveEnvInt64(key string, fallback int64) int64 {
+	v, err := strconv.ParseInt(strings.TrimSpace(os.Getenv(key)), 10, 64)
+	if err != nil || v <= 0 {
+		return fallback
+	}
+	return v
 }
 
 // listenRoomFS binds the unix socket (or TCP) for mounts.

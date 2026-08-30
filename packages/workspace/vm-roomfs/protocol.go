@@ -115,6 +115,7 @@ const (
 	TypeRemove = "remove"
 	TypeRename = "rename"
 	TypeChmod  = "chmod" // permission-bit change; replica submits a metadata op
+	TypeCancel = "cancel"
 )
 
 // Frame wire format: 4-byte big-endian header length, JSON header, then a

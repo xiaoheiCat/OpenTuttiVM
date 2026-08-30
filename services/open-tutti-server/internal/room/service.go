@@ -850,6 +850,45 @@ func (s *Service) PrepareTransferWithSnapshot(ctx context.Context, roomID, owner
 	return PrepareTransferResult{Generation: generation, SnapshotSeq: snapshotSeq}, nil
 }
 
+// PrepareRecoveryTransfer lets an authenticated member create the same
+// server-issued transfer fence when the owner is unavailable. It never grants
+// ownership: the candidate must still report full, current, host-ready state
+// and a later authenticated commit must pass all normal transfer checks.
+func (s *Service) PrepareRecoveryTransfer(ctx context.Context, roomID, requesterDeviceID, candidateDeviceID string, snapshotSeq uint64) (PrepareTransferResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	room, err := s.repo.GetRoom(ctx, roomID)
+	if err != nil {
+		return PrepareTransferResult{}, err
+	}
+	if room.OwnerDeviceID != "" {
+		owner, ownerErr := s.repo.GetMembership(ctx, roomID, room.OwnerDeviceID)
+		if ownerErr == nil {
+			if owner.Online {
+				return PrepareTransferResult{}, errors.New("owner is still online")
+			}
+			if s.clock.Now().Sub(owner.LastSeenAt) < s.cfg.OwnerGracePeriod {
+				return PrepareTransferResult{}, errors.New("owner grace period has not elapsed")
+			}
+		}
+	}
+	if _, err := s.repo.GetMembership(ctx, roomID, requesterDeviceID); err != nil {
+		return PrepareTransferResult{}, err
+	}
+	if _, err := s.repo.GetMembership(ctx, roomID, candidateDeviceID); err != nil {
+		return PrepareTransferResult{}, errors.New("transfer candidate is not a room member")
+	}
+	generation := randomToken(16)
+	room.PendingTransferToDevice = candidateDeviceID
+	room.PendingTransferGeneration = generation
+	room.PendingTransferSnapshotSeq = snapshotSeq
+	if err := s.repo.UpdateRoom(ctx, room); err != nil {
+		return PrepareTransferResult{}, err
+	}
+	s.broadcast(roomID, vmprotocol.Event{Topic: vmprotocol.TopicOwnerLost, RoomID: roomID, Payload: mustJSON(map[string]string{"reason": "recovery_prepare", "status": "needs_verified_owner", "candidate_device_id": candidateDeviceID})})
+	return PrepareTransferResult{Generation: generation, SnapshotSeq: snapshotSeq}, nil
+}
+
 // CommitTransfer finishes the transfer once the candidate reports a full
 // replica and an initialized host workspace (phases 1–2 done client-side).
 func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, candidateDeviceID, generation string, snapshotSeq uint64) error {
@@ -887,6 +926,42 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 		Topic: vmprotocol.TopicPresence, RoomID: roomID,
 		Payload: mustJSON(vmprotocol.PresenceDevice{DeviceID: candidateDeviceID, Online: true, IsOwner: true}),
 	})
+	return nil
+}
+
+// CommitRecoveryTransfer is the member-driven counterpart to owner commit.
+// It is deliberately the same readiness-fenced transition, with the extra
+// requirement that the caller is the prepared candidate.
+func (s *Service) CommitRecoveryTransfer(ctx context.Context, roomID, requesterDeviceID, generation string, snapshotSeq uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	room, err := s.repo.GetRoom(ctx, roomID)
+	if err != nil {
+		return err
+	}
+	if room.PendingTransferGeneration != generation || room.PendingTransferSnapshotSeq != snapshotSeq || room.PendingTransferToDevice == "" || room.PendingTransferToDevice != requesterDeviceID {
+		return ErrTransferIncomplete
+	}
+	membership, err := s.repo.GetMembership(ctx, roomID, requesterDeviceID)
+	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq {
+		return ErrTransferIncomplete
+	}
+	if s.currentSeq == nil {
+		return ErrTransferIncomplete
+	}
+	currentSeq, err := s.currentSeq(roomID)
+	if err != nil || currentSeq != membership.TransferAppliedSeq {
+		return ErrTransferIncomplete
+	}
+	if s.hostReady == nil || !s.hostReady(ctx, roomID, requesterDeviceID) {
+		return ErrTransferIncomplete
+	}
+	room.OwnerDeviceID = requesterDeviceID
+	room.PendingTransferToDevice = ""
+	if err := s.repo.UpdateRoom(ctx, room); err != nil {
+		return err
+	}
+	s.broadcast(roomID, vmprotocol.Event{Topic: vmprotocol.TopicPresence, RoomID: roomID, Payload: mustJSON(vmprotocol.PresenceDevice{DeviceID: requesterDeviceID, Online: true, IsOwner: true})})
 	return nil
 }
 
@@ -1044,7 +1119,7 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 	// transfer. A client policy report is not evidence.
 	full := make([]store.Membership, 0, len(online))
 	for _, m := range online {
-		if m.TransferReady && m.TransferGeneration != "" && m.TransferAppliedSeq > 0 && s.currentSeq != nil {
+		if m.TransferReady && m.TransferGeneration != "" && s.currentSeq != nil {
 			seq, err := s.currentSeq(roomID)
 			if err == nil && m.TransferAppliedSeq == seq {
 				full = append(full, m)

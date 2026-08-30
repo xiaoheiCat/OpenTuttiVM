@@ -79,6 +79,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/rooms/{roomID}/cas/{hash}", s.authRoom(s.handleCASGet))
 	mux.HandleFunc("GET /api/rooms/{roomID}/routes", s.authRoom(s.handleRoutes))
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/prepare", s.authRoomOwner(s.handleTransferPrepare))
+	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/recovery-prepare", s.authRoom(s.handleRecoveryTransferPrepare))
+	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/recovery-commit", s.authRoom(s.handleRecoveryTransferCommit))
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/commit", s.authRoomOwner(s.handleTransferCommit))
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/ready", s.authRoom(s.handleTransferReady))
 	mux.HandleFunc("GET /api/rooms/{roomID}/transfer/status", s.authRoom(s.handleTransferStatus))
@@ -342,6 +344,41 @@ func (s *Server) handleTransferPrepare(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "prepared", "generation": prepared.Generation, "snapshot_seq": prepared.SnapshotSeq, "candidate_device_id": req.To})
+}
+
+func (s *Server) handleRecoveryTransferPrepare(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
+	var req transferPrepareRequest
+	if err := readJSON(r, &req); err != nil || req.To == "" {
+		writeErr(w, http.StatusBadRequest, "to_device_id required")
+		return
+	}
+	snap, err := s.seq.SnapshotForTransfer(r.Context(), roomID)
+	if err != nil {
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	prepared, err := s.rooms.PrepareRecoveryTransfer(r.Context(), roomID, deviceID, req.To, snap.ServerSeq)
+	if err != nil {
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "recovery_prepared", "generation": prepared.Generation, "snapshot_seq": prepared.SnapshotSeq, "candidate_device_id": req.To})
+}
+
+func (s *Server) handleRecoveryTransferCommit(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
+	var req struct {
+		Generation  string  `json:"generation"`
+		SnapshotSeq *uint64 `json:"snapshot_seq"`
+	}
+	if err := readJSON(r, &req); err != nil || req.Generation == "" || req.SnapshotSeq == nil {
+		writeErr(w, http.StatusBadRequest, "generation and snapshot_seq required")
+		return
+	}
+	if err := s.rooms.CommitRecoveryTransfer(r.Context(), roomID, deviceID, req.Generation, *req.SnapshotSeq); err != nil {
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "recovered"})
 }
 
 type transferCommitRequest struct {
