@@ -46,6 +46,8 @@ type MemoryStore struct {
 func NewMemoryStore() *MemoryStore { return &MemoryStore{objects: map[string][]byte{}} }
 
 func (s *MemoryStore) Has(hash string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_, ok := s.objects[hash]
 	return ok, nil
 }
@@ -56,11 +58,15 @@ func (s *MemoryStore) Put(hash string, content []byte) error {
 	if got != hash {
 		return fmt.Errorf("content hash mismatch: key %s content %s", hash, got)
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.objects[hash] = append([]byte(nil), content...)
 	return nil
 }
 
 func (s *MemoryStore) Get(hash string) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	c, ok := s.objects[hash]
 	if !ok {
 		return nil, ErrObjectNotFound
@@ -77,9 +83,11 @@ func (s *MemoryStore) Delete(hash string) error {
 }
 
 func (s *MemoryStore) Missing(hashes []string) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var out []string
 	for _, h := range hashes {
-		if ok, _ := s.Has(h); !ok {
+		if _, ok := s.objects[h]; !ok {
 			out = append(out, h)
 		}
 	}

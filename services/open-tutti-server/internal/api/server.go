@@ -173,7 +173,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request, roomID, _ st
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	joinedRoom, token, err := s.rooms.JoinRedeem(r.Context(), req.Ticket, req.Device)
+	joinedRoom, token, err := s.rooms.JoinRedeem(r.Context(), roomID, req.Ticket, req.Device)
 	if err != nil {
 		writeErr(w, http.StatusUnauthorized, err.Error())
 		return

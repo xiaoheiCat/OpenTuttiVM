@@ -192,6 +192,40 @@ func TestShareToJoinJourney(t *testing.T) {
 	}
 }
 
+func TestJoinRejectsTicketForDifferentURLRoom(t *testing.T) {
+	stack := newTestStack(t)
+	first := stack.createRoom(t, "dev_first")
+	second := stack.createRoom(t, "dev_second")
+
+	var ticketRes struct {
+		Ticket string `json:"ticket"`
+	}
+	res := stack.post(t, "/api/share/"+first.ShareID+"/join-ticket", map[string]string{"password": first.Password}, &ticketRes)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("ticket status %d", res.StatusCode)
+	}
+	res.Body.Close()
+
+	res = stack.post(t, "/api/rooms/"+second.RoomID+"/join", map[string]any{
+		"ticket": ticketRes.Ticket,
+		"device": map[string]string{"id": "dev_wrong", "display_name": "Wrong", "hostname": "wrong", "public_key": testKeyPEM()},
+	}, nil)
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("cross-room ticket status %d", res.StatusCode)
+	}
+	res.Body.Close()
+
+	// Rejecting the mismatched URL must not consume the ticket or enroll the device.
+	res = stack.post(t, "/api/rooms/"+first.RoomID+"/join", map[string]any{
+		"ticket": ticketRes.Ticket,
+		"device": map[string]string{"id": "dev_right", "display_name": "Right", "hostname": "right", "public_key": testKeyPEM()},
+	}, nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("ticket after mismatched URL status %d", res.StatusCode)
+	}
+	res.Body.Close()
+}
+
 func TestWorkspaceOperationRoundTripOverWS(t *testing.T) {
 	stack := newTestStack(t)
 	created := stack.createRoom(t, "dev_anna")

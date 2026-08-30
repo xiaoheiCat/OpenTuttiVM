@@ -508,7 +508,7 @@ func (s *Service) clearShareAttempts(shareID string) {
 
 // JoinRedeem redeems a one-time ticket, enrolls the device, and returns a
 // membership session token. Tickets bind to one redemption and expire.
-func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceInput) (roomID, sessionToken string, err error) {
+func (s *Service) JoinRedeem(ctx context.Context, expectedRoomID, ticket string, device DeviceInput) (roomID, sessionToken string, err error) {
 	rec, err := s.repo.GetJoinTicket(ctx, hashToken(ticket))
 	if err != nil {
 		return "", "", err
@@ -518,6 +518,9 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	}
 	if s.clock.Now().After(rec.ExpiresAt) {
 		return "", "", errors.New("join ticket expired")
+	}
+	if rec.RoomID != expectedRoomID {
+		return "", "", errors.New("join ticket is for a different room")
 	}
 	// Serialize with every lifecycle mutation (dissolution and transfer
 	// run under s.mu) AND re-run the identity decision inside the lock:
@@ -555,6 +558,9 @@ func (s *Service) JoinRedeem(ctx context.Context, ticket string, device DeviceIn
 	}
 	if room.DissolvedAt != nil {
 		return "", "", errors.New("room already dissolved")
+	}
+	if room.ID != expectedRoomID {
+		return "", "", errors.New("join ticket is for a different room")
 	}
 	// A ticket minted before the owner revoked the share does not
 	// outlive the revocation: the documented contract is that revoke

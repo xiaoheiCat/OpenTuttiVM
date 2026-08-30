@@ -85,7 +85,7 @@ func joinRoom(t *testing.T, svc *Service, created CreatedRoom, dev DeviceInput) 
 	if err != nil {
 		t.Fatalf("issue ticket: %v", err)
 	}
-	_, token, err := svc.JoinRedeem(context.Background(), ticket, dev)
+	_, token, err := svc.JoinRedeem(context.Background(), created.RoomID, ticket, dev)
 	if err != nil {
 		t.Fatalf("join: %v", err)
 	}
@@ -126,11 +126,11 @@ func TestJoinTicketSingleUseAndPasswordBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := svc.JoinRedeem(ctx, ticket, memberDevice("dev_bob")); err != nil {
+	if _, _, err := svc.JoinRedeem(ctx, created.RoomID, ticket, memberDevice("dev_bob")); err != nil {
 		t.Fatalf("first redeem: %v", err)
 	}
 	// Single use: a second redeem of the same ticket fails.
-	if _, _, err := svc.JoinRedeem(ctx, ticket, memberDevice("dev_carol")); err == nil {
+	if _, _, err := svc.JoinRedeem(ctx, created.RoomID, ticket, memberDevice("dev_carol")); err == nil {
 		t.Fatal("ticket reuse must fail")
 	}
 	_ = expires
@@ -144,7 +144,7 @@ func TestJoinTicketExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 	clock.Advance(61 * time.Second)
-	if _, _, err := svc.JoinRedeem(context.Background(), ticket, memberDevice("dev_late")); err == nil {
+	if _, _, err := svc.JoinRedeem(context.Background(), created.RoomID, ticket, memberDevice("dev_late")); err == nil {
 		t.Fatal("expired ticket must fail")
 	}
 }
@@ -387,7 +387,7 @@ func TestRoomPasswordRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rotated password rejected: %v", err)
 	}
-	if _, _, err := svc.JoinRedeem(ctx, ticket, memberDevice("dev_carol")); err != nil {
+	if _, _, err := svc.JoinRedeem(ctx, created.RoomID, ticket, memberDevice("dev_carol")); err != nil {
 		t.Fatal(err)
 	}
 }
