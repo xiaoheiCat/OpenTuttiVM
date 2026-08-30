@@ -381,6 +381,25 @@ func TestOwnershipTransferThreePhases(t *testing.T) {
 	}
 }
 
+func TestOwnershipTransferAcceptsEmptyWorkspaceSequences(t *testing.T) {
+	svc, _ := newTestService(t, "")
+	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
+	svc.SetCurrentSequence(func(string) (uint64, error) { return 0, nil })
+	created := createRoom(t, svc, "")
+	joinRoom(t, svc, created, memberDevice("dev_empty"))
+	ctx := context.Background()
+	prepared, err := svc.PrepareTransferWithSnapshot(ctx, created.RoomID, "dev_owner", "dev_empty", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_empty", prepared.Generation, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_empty", prepared.Generation, 0); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSessionTokenValidation(t *testing.T) {
 	svc, _ := newTestService(t, "")
 	created := createRoom(t, svc, "")

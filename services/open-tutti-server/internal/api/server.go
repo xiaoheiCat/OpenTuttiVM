@@ -345,9 +345,9 @@ func (s *Server) handleTransferPrepare(w http.ResponseWriter, r *http.Request, r
 }
 
 type transferCommitRequest struct {
-	To          string `json:"to_device_id"`
-	Generation  string `json:"generation"`
-	SnapshotSeq uint64 `json:"snapshot_seq"`
+	To          string  `json:"to_device_id"`
+	Generation  string  `json:"generation"`
+	SnapshotSeq *uint64 `json:"snapshot_seq"`
 }
 
 func (s *Server) handleTransferCommit(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
@@ -356,11 +356,11 @@ func (s *Server) handleTransferCommit(w http.ResponseWriter, r *http.Request, ro
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if req.To == "" || req.Generation == "" || req.SnapshotSeq == 0 {
+	if req.To == "" || req.Generation == "" || req.SnapshotSeq == nil {
 		writeErr(w, http.StatusBadRequest, "to_device_id, generation, and snapshot_seq required")
 		return
 	}
-	if err := s.rooms.CommitTransfer(r.Context(), roomID, deviceID, req.To, req.Generation, req.SnapshotSeq); err != nil {
+	if err := s.rooms.CommitTransfer(r.Context(), roomID, deviceID, req.To, req.Generation, *req.SnapshotSeq); err != nil {
 		writeErr(w, http.StatusConflict, err.Error())
 		return
 	}
@@ -369,15 +369,15 @@ func (s *Server) handleTransferCommit(w http.ResponseWriter, r *http.Request, ro
 
 func (s *Server) handleTransferReady(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
 	var req struct {
-		Generation  string `json:"generation"`
-		SnapshotSeq uint64 `json:"snapshot_seq"`
-		AppliedSeq  uint64 `json:"applied_seq"`
+		Generation  string  `json:"generation"`
+		SnapshotSeq *uint64 `json:"snapshot_seq"`
+		AppliedSeq  *uint64 `json:"applied_seq"`
 	}
-	if err := readJSON(r, &req); err != nil || req.Generation == "" || req.SnapshotSeq == 0 || req.AppliedSeq == 0 {
+	if err := readJSON(r, &req); err != nil || req.Generation == "" || req.SnapshotSeq == nil || req.AppliedSeq == nil {
 		writeErr(w, http.StatusBadRequest, "generation, snapshot_seq, and applied_seq required")
 		return
 	}
-	if err := s.rooms.ReportTransferReady(r.Context(), roomID, deviceID, req.Generation, req.SnapshotSeq, req.AppliedSeq); err != nil {
+	if err := s.rooms.ReportTransferReady(r.Context(), roomID, deviceID, req.Generation, *req.SnapshotSeq, *req.AppliedSeq); err != nil {
 		writeErr(w, http.StatusConflict, err.Error())
 		return
 	}

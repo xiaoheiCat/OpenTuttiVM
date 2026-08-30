@@ -896,9 +896,30 @@ func (r *Repo) CollectUnreferencedCAS(ctx context.Context, hashes []string, del 
 	}
 	for _, h := range candidates {
 		if del != nil {
-			// Failed deletion deliberately leaks and remains eligible for a
-			// later sweep; deleting a referenced object would corrupt a room.
-			_ = del(h)
+			// Failed deletion deliberately retains metadata/orphan state and
+			// remains eligible for a later sweep.
+			if err := del(h); err != nil {
+				if recordErr := r.RecordCASOrphan(ctx, h); recordErr != nil {
+					return fmt.Errorf("record CAS orphan %s: %w (delete: %v)", h, recordErr, err)
+				}
+				continue
+			}
+			tx, err := r.db.BeginTx(ctx, nil)
+			if err != nil {
+				return err
+			}
+			_, err = tx.ExecContext(ctx, `DELETE FROM cas_objects WHERE hash=? AND NOT EXISTS (SELECT 1 FROM cas_refs WHERE hash=?) AND NOT EXISTS (SELECT 1 FROM cas_pending_refs WHERE hash=?)`, h, h, h)
+			if err == nil {
+				err = tx.Commit()
+			} else {
+				_ = tx.Rollback()
+			}
+			if err != nil {
+				return err
+			}
+			if err := r.DeleteCASOrphan(ctx, h); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -1018,17 +1018,26 @@ func (w *WorkspaceState) Snapshot(roomID string, reason vmprotocol.SnapshotReaso
 // lazy replicas load the tree without CAS reads; callers materialize
 // content from CAS according to their policy.
 func (w *WorkspaceState) RestoreSnapshot(snap vmprotocol.WorkspaceSnapshot) error {
+	for _, e := range snap.Entries {
+		if !vmprotocol.ValidWorkspacePath(e.Path) {
+			return fmt.Errorf("snapshot entry %q: invalid workspace path", e.Path)
+		}
+	}
 	w.seq = snap.ServerSeq
 	w.files = map[string]*fileState{}
+	w.history = map[string][]appliedPatch{}
+	w.hashLog = map[string][]seqHash{}
+	w.barriers = map[string]*barrier{}
+	w.ops = nil
+	w.accepted = map[string]int{}
+	w.dedupStubs = map[string]uint64{}
+	w.structSeqs = map[string]uint64{}
 	// Rebuild the case-insensitive identity index alongside the entries
 	// (snapshots taken before the collision rule keep working; the
 	// first entry wins and later case-variant entries overwrite it in
 	// files but cannot fork the identity).
 	w.ciPaths = map[string]string{}
 	for _, e := range snap.Entries {
-		if !vmprotocol.ValidWorkspacePath(e.Path) {
-			return fmt.Errorf("snapshot entry %q: invalid workspace path", e.Path)
-		}
 		w.trackPath(e.Path)
 		if e.Kind == vmprotocol.TreeEntryDir {
 			w.files[e.Path] = &fileState{IsDir: true, Mode: e.Mode, ModeSet: true}

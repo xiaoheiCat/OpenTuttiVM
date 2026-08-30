@@ -378,6 +378,9 @@ func (m *Manager) ResolveConflict(roomID, path, deviceID, agentSessionID string)
 	if err != nil {
 		return err
 	}
+	if _, locked, _ := eng.state.BarrierInfo(path); !locked {
+		return nil
+	}
 	if !eng.state.BarrierResolverMatches(path, deviceID, agentSessionID) {
 		return errors.New("only the assigned resolver may resolve this barrier")
 	}

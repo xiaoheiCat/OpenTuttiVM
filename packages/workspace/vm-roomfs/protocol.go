@@ -190,3 +190,30 @@ func ReadFrame(r *bufio.Reader, header any) ([]byte, error) {
 	}
 	return body, nil
 }
+
+// ReadCapabilityHello reads only the fixed, body-less authentication frame.
+// Authentication must never allocate the normal 256 MiB request body.
+func ReadCapabilityHello(r *bufio.Reader, hello any) error {
+	var lenBuf [4]byte
+	if _, err := io.ReadFull(r, lenBuf[:]); err != nil {
+		return err
+	}
+	n := binary.BigEndian.Uint32(lenBuf[:])
+	if n == 0 || n > 4<<10 {
+		return fmt.Errorf("capability hello header too large: %d", n)
+	}
+	header := make([]byte, n)
+	if _, err := io.ReadFull(r, header); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(header, hello); err != nil {
+		return err
+	}
+	if _, err := io.ReadFull(r, lenBuf[:]); err != nil {
+		return err
+	}
+	if n := binary.BigEndian.Uint32(lenBuf[:]); n != 0 {
+		return fmt.Errorf("capability hello body must be empty: %d", n)
+	}
+	return nil
+}

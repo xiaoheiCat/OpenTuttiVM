@@ -233,11 +233,6 @@ func (c *casCollector) Collect(ctx context.Context, hashes []string) {
 		if delErr != nil {
 			c.log.Warn("cas collection: delete", "hash", hash, "err", delErr)
 		}
-		if delErr == nil {
-			if recordErr := c.repo.DeleteCASOrphan(ctx, hash); recordErr != nil {
-				c.log.Warn("cas orphan record cleanup", "hash", hash, "err", recordErr)
-			}
-		}
 		return delErr
 	})
 	if err != nil {

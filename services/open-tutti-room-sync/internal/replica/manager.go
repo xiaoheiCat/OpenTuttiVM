@@ -451,19 +451,34 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		// clear only the conflicting entry (RemoveAll for a superseded
 		// subtree) before creating the authoritative one.
 		if fi, err := os.Lstat(dst); err == nil {
+			if fi.Mode()&fs.ModeSymlink != 0 || isApplyReparsePoint(dst) {
+				return fmt.Errorf("symlink descendant %s would escape the workspace", dst)
+			}
 			if info.IsDir && !fi.IsDir() {
+				if err := checkRoot(); err != nil {
+					return err
+				}
+				if err := ensureUnder(targetDir, filepath.Dir(dst)); err != nil {
+					return err
+				}
 				if err := os.Remove(dst); err != nil {
 					return fmt.Errorf("clear file replaced by dir %s: %w", dst, err)
 				}
+				if err := checkRoot(); err != nil {
+					return err
+				}
 			} else if !info.IsDir && fi.IsDir() {
+				if err := checkRoot(); err != nil {
+					return err
+				}
+				if err := ensureUnder(targetDir, filepath.Dir(dst)); err != nil {
+					return err
+				}
 				if err := os.RemoveAll(dst); err != nil {
 					return fmt.Errorf("clear dir replaced by file %s: %w", dst, err)
 				}
-			} else if !info.IsDir && !fi.IsDir() && fi.Mode()&fs.ModeSymlink != 0 {
-				// A host symlink at a room-file path is a conflicting
-				// entry too: the mirror must not write through it.
-				if err := os.Remove(dst); err != nil {
-					return fmt.Errorf("clear symlink replaced by file %s: %w", dst, err)
+				if err := checkRoot(); err != nil {
+					return err
 				}
 			}
 		}
@@ -483,6 +498,12 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 				// exists.
 				if err := os.Chmod(dst, fi.Mode().Perm()|0o700); err != nil {
 					return fmt.Errorf("widen %s: %w", dst, err)
+				}
+				if err := checkRoot(); err != nil {
+					return err
+				}
+				if err := ensureUnder(targetDir, dst); err != nil {
+					return err
 				}
 				if !info.ModeSet {
 					// No authoritative mode for this dir: restore
@@ -528,7 +549,7 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		if err := ensureUnder(targetDir, filepath.Dir(dst)); err != nil {
 			return err
 		}
-		if err := atomicWrite(dst, content); err != nil {
+		if err := atomicWrite(targetDir, dst, content, checkRoot); err != nil {
 			return err
 		}
 		// Executability and other synchronized permission bits survive
@@ -544,6 +565,12 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			}
 			if err := applyMode(dst, info.Mode); err != nil {
 				return fmt.Errorf("chmod %s: %w", dst, err)
+			}
+			if err := checkRoot(); err != nil {
+				return err
+			}
+			if err := ensureUnder(targetDir, filepath.Dir(dst)); err != nil {
+				return err
 			}
 		}
 	}
@@ -569,8 +596,17 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			return err
 		}
 		if d.modeSet {
+			if err := ensureUnder(targetDir, d.dst); err != nil {
+				return err
+			}
 			if err := applyMode(d.dst, d.mode); err != nil {
 				return fmt.Errorf("chmod %s: %w", d.dst, err)
+			}
+			if err := checkRoot(); err != nil {
+				return err
+			}
+			if err := ensureUnder(targetDir, d.dst); err != nil {
+				return err
 			}
 		}
 	}
@@ -599,12 +635,18 @@ func ensureUnder(root, dir string) error {
 		if errors.Is(err, fs.ErrNotExist) {
 			// Nothing exists below the first missing component, so
 			// creating the chain cannot traverse a link.
-			return os.MkdirAll(cur, 0o755)
+			if err := os.MkdirAll(cur, 0o755); err != nil {
+				return err
+			}
+			if fi, err := os.Lstat(cur); err != nil || isApplyReparsePoint(cur) || !fi.IsDir() {
+				return fmt.Errorf("invalid workspace ancestor %s", cur)
+			}
+			continue
 		}
 		if err != nil {
 			return err
 		}
-		if fi.Mode()&fs.ModeSymlink != 0 {
+		if fi.Mode()&fs.ModeSymlink != 0 || isApplyReparsePoint(cur) {
 			return fmt.Errorf("symlink ancestor %s would escape the workspace", cur)
 		}
 		if !fi.IsDir() {
@@ -628,17 +670,37 @@ func applyMode(dst string, mode uint32) error {
 	return os.Chmod(dst, fs.FileMode(mode&0o7777))
 }
 
-func atomicWrite(dst string, content []byte) error {
+func atomicWrite(root, dst string, content []byte, checkRoot func() error) error {
+	if err := checkRoot(); err != nil {
+		return err
+	}
+	if err := ensureUnder(root, filepath.Dir(dst)); err != nil {
+		return err
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(dst), ".apply-*")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmp.Name())
+	if err := checkRoot(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := ensureUnder(root, filepath.Dir(tmp.Name())); err != nil {
+		tmp.Close()
+		return err
+	}
 	if _, err := tmp.Write(content); err != nil {
 		tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := checkRoot(); err != nil {
+		return err
+	}
+	if err := ensureUnder(root, filepath.Dir(dst)); err != nil {
 		return err
 	}
 	// replaceFile keeps the swap atomic on BOTH platforms: Windows
@@ -648,7 +710,13 @@ func atomicWrite(dst string, content []byte) error {
 	// left the workspace with NEITHER version. The Windows adapter
 	// uses MoveFileEx(REPLACE_EXISTING); POSIX rename(2) already
 	// replaces atomically.
-	return replaceFile(tmp.Name(), dst)
+	if err := replaceFile(tmp.Name(), dst); err != nil {
+		return err
+	}
+	if err := checkRoot(); err != nil {
+		return err
+	}
+	return ensureUnder(root, filepath.Dir(dst))
 }
 
 var removePath = os.Remove
@@ -668,13 +736,13 @@ func pruneRemoved(root string, roomPaths map[string]bool, checkRoot func() error
 			return nil
 		}
 		if d.IsDir() {
-			if d.Type()&fs.ModeSymlink != 0 {
+			if d.Type()&fs.ModeSymlink != 0 || isApplyReparsePoint(p) {
 				return fmt.Errorf("symlink descendant %s would escape the workspace", p)
 			}
 			dirs = append(dirs, p)
 			return nil
 		}
-		if d.Type()&fs.ModeSymlink != 0 {
+		if d.Type()&fs.ModeSymlink != 0 || isApplyReparsePoint(p) {
 			return fmt.Errorf("symlink descendant %s would escape the workspace", p)
 		}
 		if !roomPaths[rel] {
@@ -688,7 +756,13 @@ func pruneRemoved(root string, roomPaths map[string]bool, checkRoot func() error
 			// FILE_ATTRIBUTE_READONLY and the delete fails ACCESS_DENIED,
 			// failing the whole apply. Clear it first (POSIX no-op).
 			clearReadOnly(p)
-			return removePath(p)
+			if err := removePath(p); err != nil {
+				return err
+			}
+			if err := checkRoot(); err != nil {
+				return err
+			}
+			return ensureUnder(root, filepath.Dir(p))
 		}
 		return nil
 	})
@@ -708,6 +782,12 @@ func pruneRemoved(root string, roomPaths map[string]bool, checkRoot func() error
 			}
 			if err := removePath(d); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("remove stale directory %s: %w", d, err)
+			}
+			if err := checkRoot(); err != nil {
+				return err
+			}
+			if err := ensureUnder(root, filepath.Dir(d)); err != nil {
+				return err
 			}
 		}
 	}

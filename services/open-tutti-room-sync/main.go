@@ -329,6 +329,7 @@ func run() error {
 		if err := mgr.Bootstrap(ctx, boot.Snapshot, boot.Ops); err != nil {
 			return err
 		}
+		bridge.RevalidateResolverDuties()
 		// Ownership reconciliation on EVERY bootstrap: succession may
 		// have promoted THIS device while its socket could not receive
 		// events, and the missed live IsOwner broadcast would leave the

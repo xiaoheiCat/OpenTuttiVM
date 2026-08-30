@@ -134,6 +134,25 @@ func TestApplyToWorkspaceRejectsRootSymlink(t *testing.T) {
 	}
 }
 
+func TestApplyToWorkspaceRejectsSymlinkDescendant(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated Windows privilege")
+	}
+	serverStore := vmcas.NewMemoryStore()
+	snap := buildSnapshot(t, serverStore)
+	mgr := New("dev_owner", serverStore, Full, nil)
+	if err := mgr.Bootstrap(context.Background(), snap, nil); err != nil {
+		t.Fatal(err)
+	}
+	target := t.TempDir()
+	if err := os.Symlink(t.TempDir(), filepath.Join(target, "src")); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.ApplyToWorkspace(context.Background(), target); err == nil {
+		t.Fatal("symlink descendant was accepted")
+	}
+}
+
 func TestLazyPolicyDefersContentUntilRead(t *testing.T) {
 	serverStore := vmcas.NewMemoryStore()
 	snap := buildSnapshot(t, serverStore)

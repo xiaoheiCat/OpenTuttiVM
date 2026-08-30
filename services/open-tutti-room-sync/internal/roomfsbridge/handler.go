@@ -521,6 +521,32 @@ func (h *Handler) OnConflictResolved(path string) {
 	h.mu.Unlock()
 }
 
+// RevalidateResolverDuties drops duties whose authoritative barrier was
+// replaced by a bootstrap snapshot or was already resolved on the server.
+func (h *Handler) RevalidateResolverDuties() {
+	h.mu.Lock()
+	paths := make([]string, 0, len(h.resolverDuty))
+	for p := range h.resolverDuty {
+		paths = append(paths, p)
+	}
+	h.mu.Unlock()
+	locked := map[string]bool{}
+	h.mgr.WithState(func(state *vmsync.WorkspaceState) {
+		for _, p := range paths {
+			if state.IsBarriered(p) {
+				locked[p] = true
+			}
+		}
+	})
+	h.mu.Lock()
+	for p := range h.resolverDuty {
+		if !locked[p] {
+			delete(h.resolverDuty, p)
+		}
+	}
+	h.mu.Unlock()
+}
+
 // RetryDuties re-attempts barrier resolutions whose confirmation never
 // reached the server (socket dropped mid-send): the authoritative fence
 // is still locked and only the assigned resolver can lift it.

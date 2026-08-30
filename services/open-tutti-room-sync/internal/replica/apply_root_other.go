@@ -7,6 +7,8 @@ import (
 	"os"
 )
 
+func isApplyReparsePoint(string) bool { return false }
+
 func prepareApplyRoot(path string) (os.FileInfo, error) {
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {

@@ -373,6 +373,30 @@ func TestServerClosesUnauthenticatedConnection(t *testing.T) {
 	}
 }
 
+func TestServerDoesNotReadLargeUnauthenticatedBody(t *testing.T) {
+	h := newMemHandler()
+	addr := startServer(t, h)
+	conn, err := net.Dial("unix", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	hello := []byte(`{"type":"roomfs_capability","token":"test-capability"}`)
+	frame := make([]byte, 0, 8+len(hello))
+	frame = append(frame, byte(len(hello)>>24), byte(len(hello)>>16), byte(len(hello)>>8), byte(len(hello)))
+	frame = append(frame, hello...)
+	bodyLen := uint32(MaxBodyBytes + 1)
+	frame = append(frame, byte(bodyLen>>24), byte(bodyLen>>16), byte(bodyLen>>8), byte(bodyLen))
+	if _, err := conn.Write(frame); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+	var one [1]byte
+	if _, err := conn.Read(one[:]); err == nil {
+		t.Fatal("oversized unauthenticated hello remained open")
+	}
+}
+
 func TestCallContextAddsDefaultTimeoutToNonBackgroundContext(t *testing.T) {
 	left, right := net.Pipe()
 	deadlines := make(chan time.Time, 2)

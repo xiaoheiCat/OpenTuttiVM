@@ -153,3 +153,29 @@ func TestCollectCASDoesNotHoldDatabaseTransactionDuringDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCollectCASDeletesMetadataOnlyAfterObjectDelete(t *testing.T) {
+	r, err := Open(t.TempDir() + "/cas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	ctx := context.Background()
+	hash := "sha256:" + strings.Repeat("f", 64)
+	if err := r.AddCASRefsSized(ctx, "room-a", []store.CASObject{{Hash: hash, Size: 1}}, 10); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.DeleteRoomCASRefs(ctx, "room-a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.CollectUnreferencedCAS(ctx, []string{hash}, func(string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM cas_objects WHERE hash=?`, hash).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("unreferenced CAS metadata was retained")
+	}
+}

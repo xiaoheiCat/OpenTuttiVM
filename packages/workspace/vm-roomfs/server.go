@@ -48,6 +48,7 @@ type Server struct {
 
 	mu    sync.Mutex
 	conns map[*serverConn]struct{}
+	auth  chan struct{}
 }
 
 type serverConn struct {
@@ -67,7 +68,7 @@ func NewServer(h Handler, log *slog.Logger) *Server {
 	if _, err := rand.Read(raw[:]); err != nil {
 		panic(fmt.Sprintf("roomfs capability generation: %v", err))
 	}
-	return &Server{handler: h, log: log, capability: hex.EncodeToString(raw[:]), conns: map[*serverConn]struct{}{}}
+	return &Server{handler: h, log: log, capability: hex.EncodeToString(raw[:]), conns: map[*serverConn]struct{}{}, auth: make(chan struct{}, 64)}
 }
 
 // NewServerWithCapability provisions a capability at the process boundary so
@@ -76,7 +77,7 @@ func NewServerWithCapability(h Handler, log *slog.Logger, capability string) *Se
 	if capability == "" {
 		panic("roomfs capability required")
 	}
-	return &Server{handler: h, log: log, capability: capability, conns: map[*serverConn]struct{}{}}
+	return &Server{handler: h, log: log, capability: capability, conns: map[*serverConn]struct{}{}, auth: make(chan struct{}, 64)}
 }
 
 // Capability is the per-process secret required by every mount connection.
@@ -102,12 +103,21 @@ func (s *Server) Serve(ln net.Listener) error {
 }
 
 func (s *Server) authenticateAndServe(conn net.Conn, sc *serverConn) {
-	reader := bufio.NewReader(conn)
-	var hello capabilityHello
-	if _, err := ReadFrame(reader, &hello); err != nil || hello.Type != capabilityHelloType || hello.Token == "" || hello.Token != s.capability {
+	select {
+	case s.auth <- struct{}{}:
+	default:
 		_ = conn.Close()
 		return
 	}
+	defer func() { <-s.auth }()
+	reader := bufio.NewReader(conn)
+	var hello capabilityHello
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if err := ReadCapabilityHello(reader, &hello); err != nil || hello.Type != capabilityHelloType || hello.Token == "" || hello.Token != s.capability {
+		_ = conn.Close()
+		return
+	}
+	_ = conn.SetReadDeadline(time.Time{})
 	s.mu.Lock()
 	s.conns[sc] = struct{}{}
 	s.mu.Unlock()
