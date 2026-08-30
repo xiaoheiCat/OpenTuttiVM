@@ -33,6 +33,9 @@ Environment > `.env` > defaults. Every variable is documented in
 bytes. Repeated references to the same hash count once per room; the same hash
 is counted independently for different rooms.
 
+`OPEN_TUTTI_ACTIVE_ROOM_LIMIT` bounds active rooms, including room creations in
+progress. Creation returns `429` when the limit is reached.
+
 ## API surface (summary)
 
 - `GET  /api/info` — server info

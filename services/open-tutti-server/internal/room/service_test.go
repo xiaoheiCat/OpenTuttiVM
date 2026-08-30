@@ -36,7 +36,7 @@ func testConfig(invite string) config.Config {
 	return config.Config{
 		Secret: "test-secret", ServerInviteCode: invite,
 		OwnerGracePeriod: 5 * time.Minute, JoinTicketTTL: 60 * time.Second,
-		SnapshotIntervalOps: 512, PublicURL: "http://server.example",
+		SnapshotIntervalOps: 512, PublicURL: "http://server.example", ActiveRoomLimit: 100,
 	}
 }
 
@@ -111,6 +111,27 @@ func TestCreateRoomInviteCodeEnforced(t *testing.T) {
 	}
 	if created.SessionToken == "" {
 		t.Fatal("creator must receive a session token")
+	}
+}
+
+func TestCreateRoomActiveLimitAndCancelledArgonWait(t *testing.T) {
+	svc, _ := newTestService(t, "")
+	svc.cfg.ActiveRoomLimit = 1
+	createRoom(t, svc, "")
+	if _, err := svc.CreateRoom(context.Background(), CreateRoomInput{Device: ownerDevice("dev_two")}); !errors.Is(err, ErrActiveRoomLimit) {
+		t.Fatalf("active room limit error = %v", err)
+	}
+	svc.cfg.ActiveRoomLimit = 100
+	for i := 0; i < cap(svc.argonSem); i++ {
+		svc.argonSem <- struct{}{}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := svc.CreateRoom(ctx, CreateRoomInput{Device: ownerDevice("dev_three")}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Argon wait error = %v", err)
+	}
+	for i := 0; i < cap(svc.argonSem); i++ {
+		<-svc.argonSem
 	}
 }
 
@@ -244,36 +265,23 @@ func TestOwnerGracePeriodAutoTransfer(t *testing.T) {
 		t.Fatalf("owner changed inside grace window: %s", room.OwnerDeviceID)
 	}
 
-	// After the grace period a lazy-only room still promotes its
-	// longest-connected online member: waiting is an unrecoverable
-	// limbo because prepare/transfer is owner-gated and the absent
-	// owner can never authorize one. The successor is recorded with
-	// the full policy; its room-sync materializes on the IsOwner
-	// event.
+	// A lazy-only room remains leaderless rather than trusting a client
+	// policy claim. A real successor must first complete server-bound
+	// transfer readiness.
 	clock.Advance(6 * time.Minute)
 	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
 		t.Fatal(err)
 	}
 	room, _ = svc.repo.GetRoom(ctx, created.RoomID)
-	if room.OwnerDeviceID != "dev_bob" {
-		t.Fatalf("lazy-only room left leaderless or promoted %s, want dev_bob", room.OwnerDeviceID)
+	if room.OwnerDeviceID != "dev_owner" {
+		t.Fatalf("unverified successor became owner: %s", room.OwnerDeviceID)
 	}
 	bob, err := svc.repo.GetMembership(ctx, created.RoomID, "dev_bob")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bob.ReplicaPolicy != "full" {
-		t.Fatalf("successor policy = %s, want full", bob.ReplicaPolicy)
-	}
-	// The promoted owner stays owner while it remains online: a later
-	// full-replica report by another member does not depose a live
-	// successor mid-meeting.
-	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
-		t.Fatal(err)
-	}
-	room, _ = svc.repo.GetRoom(ctx, created.RoomID)
-	if room.OwnerDeviceID != "dev_bob" {
-		t.Fatalf("live successor deposed: owner = %s want dev_bob", room.OwnerDeviceID)
+	if bob.ReplicaPolicy != "lazy" {
+		t.Fatalf("policy report must remain diagnostic, got %s", bob.ReplicaPolicy)
 	}
 }
 
@@ -300,9 +308,41 @@ func TestOwnerGracePeriodNobodyOnlineDissolves(t *testing.T) {
 	}
 }
 
+func TestReportedFullPolicyCannotSuccedeLazyMember(t *testing.T) {
+	svc, clock := newTestService(t, "")
+	created := createRoom(t, svc, "")
+	joinRoom(t, svc, created, memberDevice("dev_lazy"))
+	ctx := context.Background()
+	if err := svc.ReportReplicaPolicy(ctx, created.RoomID, "dev_lazy", "full"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_lazy"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.MarkOffline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(6 * time.Minute)
+	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
+		t.Fatal(err)
+	}
+	room, err := svc.repo.GetRoom(ctx, created.RoomID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if room.OwnerDeviceID != "dev_owner" {
+		t.Fatalf("forged policy changed owner to %s", room.OwnerDeviceID)
+	}
+}
+
 func TestOwnershipTransferThreePhases(t *testing.T) {
 	svc, _ := newTestService(t, "")
 	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
+	currentSeq := uint64(1)
+	svc.SetCurrentSequence(func(string) (uint64, error) { return currentSeq, nil })
 	created := createRoom(t, svc, "")
 	joinRoom(t, svc, created, memberDevice("dev_leo"))
 	ctx := context.Background()
@@ -324,9 +364,14 @@ func TestOwnershipTransferThreePhases(t *testing.T) {
 	if !errors.Is(err, ErrTransferIncomplete) {
 		t.Fatalf("expected ErrTransferIncomplete, got %v", err)
 	}
-	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_leo", prepared.Generation, prepared.SnapshotSeq); err != nil {
+	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_leo", prepared.Generation, prepared.SnapshotSeq, prepared.SnapshotSeq); err != nil {
 		t.Fatalf("ready: %v", err)
 	}
+	currentSeq = 2
+	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_leo", prepared.Generation, prepared.SnapshotSeq); !errors.Is(err, ErrTransferIncomplete) {
+		t.Fatalf("stale transfer commit error = %v", err)
+	}
+	currentSeq = 1
 	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_leo", prepared.Generation, prepared.SnapshotSeq); err != nil {
 		t.Fatalf("commit: %v", err)
 	}

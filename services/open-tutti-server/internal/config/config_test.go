@@ -55,3 +55,14 @@ func TestLoadCASQuotaOverride(t *testing.T) {
 		t.Fatal("test environment was not set")
 	}
 }
+
+func TestLoadActiveRoomLimitOverride(t *testing.T) {
+	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "127.0.0.1:8080")
+	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
+	t.Setenv("OPEN_TUTTI_ACTIVE_ROOM_LIMIT", "7")
+	cfg, err := Load("")
+	if err != nil || cfg.ActiveRoomLimit != 7 {
+		t.Fatalf("cfg=%+v err=%v", cfg, err)
+	}
+}

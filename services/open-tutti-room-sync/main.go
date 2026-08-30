@@ -353,7 +353,7 @@ func run() error {
 			fmt.Fprintln(os.Stderr, "room-sync: transfer readiness refused: replica is not full")
 			return
 		}
-		if err := c.ReportTransferReady(ctx, status.Generation, status.SnapshotSeq); err != nil {
+		if err := c.ReportTransferReady(ctx, status.Generation, status.SnapshotSeq, mgr.AppliedSeq()); err != nil {
 			fmt.Fprintf(os.Stderr, "room-sync: transfer host readiness unavailable: %v\n", err)
 		}
 	}

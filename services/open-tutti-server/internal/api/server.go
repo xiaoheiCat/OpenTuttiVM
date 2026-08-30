@@ -113,6 +113,8 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, room.ErrInviteRequired), errors.Is(err, room.ErrInviteWrong):
 			status = http.StatusForbidden
+		case errors.Is(err, room.ErrActiveRoomLimit):
+			status = http.StatusTooManyRequests
 		case strings.Contains(err.Error(), "required"):
 			status = http.StatusBadRequest
 		}
@@ -367,12 +369,13 @@ func (s *Server) handleTransferReady(w http.ResponseWriter, r *http.Request, roo
 	var req struct {
 		Generation  string `json:"generation"`
 		SnapshotSeq uint64 `json:"snapshot_seq"`
+		AppliedSeq  uint64 `json:"applied_seq"`
 	}
-	if err := readJSON(r, &req); err != nil || req.Generation == "" || req.SnapshotSeq == 0 {
-		writeErr(w, http.StatusBadRequest, "generation and snapshot_seq required")
+	if err := readJSON(r, &req); err != nil || req.Generation == "" || req.SnapshotSeq == 0 || req.AppliedSeq == 0 {
+		writeErr(w, http.StatusBadRequest, "generation, snapshot_seq, and applied_seq required")
 		return
 	}
-	if err := s.rooms.ReportTransferReady(r.Context(), roomID, deviceID, req.Generation, req.SnapshotSeq); err != nil {
+	if err := s.rooms.ReportTransferReady(r.Context(), roomID, deviceID, req.Generation, req.SnapshotSeq, req.AppliedSeq); err != nil {
 		writeErr(w, http.StatusConflict, err.Error())
 		return
 	}

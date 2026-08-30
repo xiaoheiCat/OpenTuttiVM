@@ -84,6 +84,35 @@ func TestApplyToWorkspaceMirrorsRoomFinalState(t *testing.T) {
 	}
 }
 
+func TestApplyToWorkspacePropagatesStaleDirectoryRemovalFailure(t *testing.T) {
+	serverStore := vmcas.NewMemoryStore()
+	snap := buildSnapshot(t, serverStore)
+	mgr := New("dev_owner", serverStore, Full, nil)
+	if err := mgr.Bootstrap(context.Background(), snap, nil); err != nil {
+		t.Fatal(err)
+	}
+	target := t.TempDir()
+	staleDir := filepath.Join(target, "stale")
+	if err := os.Mkdir(staleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staleDir, "child"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldRemove := removePath
+	removePath = func(path string) error {
+		if path == staleDir || path == filepath.Join(target, "stale", "child") {
+			return os.ErrPermission
+		}
+		return oldRemove(path)
+	}
+	t.Cleanup(func() { removePath = oldRemove })
+	// Injected filesystem failure must escape instead of being best effort.
+	if err := mgr.ApplyToWorkspace(context.Background(), target); err == nil {
+		t.Fatal("apply unexpectedly succeeded with a non-empty stale directory")
+	}
+}
+
 func TestLazyPolicyDefersContentUntilRead(t *testing.T) {
 	serverStore := vmcas.NewMemoryStore()
 	snap := buildSnapshot(t, serverStore)

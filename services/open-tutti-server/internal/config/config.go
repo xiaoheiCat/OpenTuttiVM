@@ -39,6 +39,7 @@ type Config struct {
 	// SnapshotIntervalOps triggers a checkpoint after this many operations.
 	SnapshotIntervalOps int
 	CASRoomQuotaBytes   int64
+	ActiveRoomLimit     int
 }
 
 // Load resolves configuration from env, then envFile (.env), then defaults.
@@ -70,6 +71,7 @@ func Load(envFile string) (Config, error) {
 		// An operation count, not a duration.
 		SnapshotIntervalOps: intOrDefault(get("OPEN_TUTTI_SNAPSHOT_INTERVAL_OPS", ""), 512),
 		CASRoomQuotaBytes:   int64OrDefault(get("OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES", ""), 1<<30),
+		ActiveRoomLimit:     intOrDefault(get("OPEN_TUTTI_ACTIVE_ROOM_LIMIT", ""), 100),
 	}
 
 	cfg.DatabasePath = get("OPEN_TUTTI_DATABASE_PATH", filepath.Join(cfg.DataDir, "open-tutti.db"))
@@ -87,8 +89,8 @@ func Load(envFile string) (Config, error) {
 			return Config{}, errors.New("plain HTTP public URL requires a loopback listen address; use a TLS reverse proxy for remote deployment")
 		}
 	}
-	if cfg.OwnerGracePeriod <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 {
-		return Config{}, errors.New("grace period, ticket TTL, and snapshot interval must be positive")
+	if cfg.OwnerGracePeriod <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 || cfg.ActiveRoomLimit <= 0 {
+		return Config{}, errors.New("grace period, ticket TTL, snapshot interval, CAS quota, and active room limit must be positive")
 	}
 	return cfg, nil
 }

@@ -81,6 +81,7 @@ func run() error {
 	// Token refresh (rejoin recovery) tears the device's live
 	// transports down, matching kick and leave semantics.
 	rooms.SetLeaveFence(seq.FreezeAt, seq.UnfreezeAt)
+	rooms.SetCurrentSequence(seq.CurrentSequence)
 	rooms.SetBarrierClean(seq.ClearBarriersOf)
 	rooms.SetMembershipGuard(seq.MembershipMutation)
 	rooms.SetConnectionDropper(func(roomID, deviceID string) {

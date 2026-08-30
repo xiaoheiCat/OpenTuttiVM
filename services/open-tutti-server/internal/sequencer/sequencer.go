@@ -392,6 +392,17 @@ func (m *Manager) SnapshotForTransfer(ctx context.Context, roomID string) (vmpro
 	return m.snapshotLocked(roomID, vmprotocol.SnapshotOwnerTransfer)
 }
 
+// CurrentSequence returns the authoritative applied sequence for a live room.
+func (m *Manager) CurrentSequence(roomID string) (uint64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	eng, err := m.engine(roomID)
+	if err != nil {
+		return 0, err
+	}
+	return eng.state.Seq(), nil
+}
+
 func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason) (vmprotocol.WorkspaceSnapshot, error) {
 	eng, err := m.engine(roomID)
 	if err != nil {

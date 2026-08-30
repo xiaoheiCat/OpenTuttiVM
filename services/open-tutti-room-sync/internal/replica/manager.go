@@ -619,6 +619,8 @@ func atomicWrite(dst string, content []byte) error {
 	return replaceFile(tmp.Name(), dst)
 }
 
+var removePath = os.Remove
+
 func pruneRemoved(root string, roomPaths map[string]bool) error {
 	var dirs []string
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
@@ -642,7 +644,7 @@ func pruneRemoved(root string, roomPaths map[string]bool) error {
 			// FILE_ATTRIBUTE_READONLY and the delete fails ACCESS_DENIED,
 			// failing the whole apply. Clear it first (POSIX no-op).
 			clearReadOnly(p)
-			return os.Remove(p)
+			return removePath(p)
 		}
 		return nil
 	})
@@ -654,7 +656,9 @@ func pruneRemoved(root string, roomPaths map[string]bool) error {
 	for _, d := range dirs {
 		rel, _ := filepath.Rel(root, d)
 		if !roomPaths[filepath.ToSlash(rel)] {
-			_ = os.Remove(d) // best effort; non-empty dirs stay
+			if err := removePath(d); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("remove stale directory %s: %w", d, err)
+			}
 		}
 	}
 	return nil

@@ -84,8 +84,10 @@ Hybrid, by content class:
   continuously-connected participant, or the room dissolves.
 - Transfer is three-phase: prepare issues a server generation and snapshot
   sequence → the candidate builds a full replica and initializes the host
-  workspace, then reports readiness on its authenticated room connection →
-  commit. Partial transfers never land.
+  workspace, then reports readiness on its authenticated room connection with
+  its applied sequence → commit. The server requires that sequence to cover
+  the prepare snapshot and equal authoritative state at readiness and commit.
+  Partial or stale transfers never land.
 - Transfer readiness is not a client boolean: room-sync materializes the
   candidate's full replica before calling `ReportTransferReady`, and the
   server accepts that report only for the authenticated prepared candidate and

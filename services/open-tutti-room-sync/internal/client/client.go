@@ -422,12 +422,12 @@ func (s *Session) ReportPolicy(policy string) error {
 // ReportTransferReady proves readiness from the candidate's authenticated
 // room connection. The server accepts it only for the currently prepared
 // generation and snapshot sequence.
-func (c *Client) ReportTransferReady(ctx context.Context, generation string, snapshotSeq uint64) error {
+func (c *Client) ReportTransferReady(ctx context.Context, generation string, snapshotSeq, appliedSeq uint64) error {
 	c.mu.Lock()
 	token, roomID := c.token, c.roomID
 	c.mu.Unlock()
 	return postJSON(ctx, c.http, c.server.BaseURL+"/api/rooms/"+roomID+"/transfer/ready", map[string]any{
-		"generation": generation, "snapshot_seq": snapshotSeq,
+		"generation": generation, "snapshot_seq": snapshotSeq, "applied_seq": appliedSeq,
 	}, nil, authHeader(token))
 }
 

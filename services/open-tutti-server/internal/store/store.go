@@ -58,6 +58,7 @@ type Membership struct {
 	ReplicaPolicy       string
 	TransferGeneration  string
 	TransferSnapshotSeq uint64
+	TransferAppliedSeq  uint64
 	TransferReady       bool
 }
 
@@ -117,7 +118,7 @@ type Repository interface {
 	UpdatePresence(ctx context.Context, roomID, deviceID string, online bool, now time.Time) error
 	// UpdateMembershipPolicy records a member replica policy report.
 	UpdateMembershipPolicy(ctx context.Context, roomID, deviceID, policy string) error
-	UpdateTransferReadiness(ctx context.Context, roomID, deviceID, generation string, snapshotSeq uint64) error
+	UpdateTransferReadiness(ctx context.Context, roomID, deviceID, generation string, snapshotSeq, appliedSeq uint64) error
 	ListActiveRooms(ctx context.Context) ([]Room, error)
 
 	// Devices

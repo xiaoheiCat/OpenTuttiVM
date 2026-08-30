@@ -16,6 +16,10 @@ Use the owner documents linked below for detailed behavior. This file exists to 
 OpenTuttiVM server overrides are documented in the service `.env.example` and
 are intentionally not part of the Tutti daemon override namespace.
 
+| `OPEN_TUTTI_ACTIVE_ROOM_LIMIT` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Limits active rooms, including concurrent creations in progress. |
+| `OPEN_TUTTI_LISTEN_ADDR` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | HTTP listener address; plain HTTP requires an explicit loopback address. |
+| `OPEN_TUTTI_PUBLIC_URL` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Public URL for links; remote deployments require HTTPS termination. |
+
 | Variable                      | Owner document                                                                                             | Purpose                                                                              |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `TUTTI_ENV`                   | [Local State Storage](./local-state-storage.md)                                                            | Selects production or development default state roots.                               |

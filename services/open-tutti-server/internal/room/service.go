@@ -57,6 +57,8 @@ var (
 	ErrOwnerMustDisbandOrTransfer = errors.New("owner must disband the room or complete an ownership transfer before leaving")
 	// ErrTransferIncomplete: the 3-phase transfer has not finished.
 	ErrTransferIncomplete = errors.New("ownership transfer incomplete: candidate needs a full replica and an initialized host workspace")
+	// ErrActiveRoomLimit rejects creation when the configured room capacity is full.
+	ErrActiveRoomLimit = errors.New("active room limit reached")
 )
 
 // Service implements room lifecycle.
@@ -72,6 +74,7 @@ type Service struct {
 	memberMutate func(roomID, deviceID string, fn func() error) error
 	barrierClean func(roomID, deviceID string)
 	hostReady    func(context.Context, string, string) bool
+	currentSeq   func(string) (uint64, error)
 	tokens       *tokenMinter
 
 	mu sync.Mutex
@@ -85,7 +88,17 @@ type Service struct {
 	// (each costs ~64 MiB): unbounded parallel verification of wrong
 	// passwords is a denial-of-service amplifier on a directly exposed
 	// server, independent of the per-share window.
-	argonSem chan struct{}
+	argonSem      chan struct{}
+	creatingRooms int
+}
+
+func acquire(ctx context.Context, sem chan struct{}) error {
+	select {
+	case sem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Password attempt policy for the public share endpoint.
@@ -98,6 +111,9 @@ const (
 // NewService wires the lifecycle service. The broadcaster can be attached
 // later to break the hub/sequencer construction cycle.
 func NewService(repo store.Repository, cfg config.Config, clock Clock, bcast Broadcaster) *Service {
+	if cfg.ActiveRoomLimit <= 0 {
+		cfg.ActiveRoomLimit = 100
+	}
 	return &Service{
 		repo: repo, cfg: cfg, clock: clock, bcast: bcast, tokens: newTokenMinter(cfg.Secret),
 		shareAttempts: map[string][]time.Time{},
@@ -172,6 +188,10 @@ func (s *Service) SetTransferHostReadiness(f func(context.Context, string, strin
 	s.hostReady = f
 }
 
+// SetCurrentSequence attaches the authoritative sequence probe used to bind
+// transfer readiness to the state the candidate actually materialized.
+func (s *Service) SetCurrentSequence(f func(string) (uint64, error)) { s.currentSeq = f }
+
 // broadcast is nil-safe so lifecycle tests can run without a hub.
 func (s *Service) broadcast(roomID string, ev vmprotocol.Event) {
 	if s.bcast != nil {
@@ -233,18 +253,33 @@ func (s *Service) CreateRoom(ctx context.Context, in CreateRoomInput) (CreatedRo
 	// unbounded pile of 64 MiB derivations ran under s.mu — a memory
 	// amplifier that also stalled every lifecycle operation (joins,
 	// leaves, kicks, presence, grace) process-wide.
+	s.mu.Lock()
+	active, err := s.repo.ListActiveRooms(ctx)
+	if err != nil {
+		s.mu.Unlock()
+		return CreatedRoom{}, err
+	}
+	if len(active)+s.creatingRooms >= s.cfg.ActiveRoomLimit {
+		s.mu.Unlock()
+		return CreatedRoom{}, ErrActiveRoomLimit
+	}
+	s.creatingRooms++
+	s.mu.Unlock()
+	defer func() { s.mu.Lock(); s.creatingRooms--; s.mu.Unlock() }()
 	roomID := "room_" + randomToken(16)
 	shareID := "r_" + randomToken(24)
 	password := sixDigitPassword()
-	s.argonSem <- struct{}{}
+	if err := acquire(ctx, s.argonSem); err != nil {
+		return CreatedRoom{}, err
+	}
 	hash, hashErr := HashRoomPassword(password)
 	<-s.argonSem
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if hashErr != nil {
 		return CreatedRoom{}, hashErr
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if existing, err := s.repo.GetDevice(ctx, in.Device.ID); err == nil {
 		if in.Device.Proof == "" || existing.PublicKeyPEM == "" {
 			return CreatedRoom{}, errors.New("device identity proof required")
@@ -299,7 +334,9 @@ func (s *Service) RotatePassword(ctx context.Context, roomID, deviceID string) (
 	// The 64 MiB Argon2id derivation stays inside the process-wide
 	// semaphore: concurrent rotations by one owner would otherwise
 	// multiply memory use beyond the intended ceiling.
-	s.argonSem <- struct{}{}
+	if err := acquire(ctx, s.argonSem); err != nil {
+		return "", err
+	}
 	hash, err := HashRoomPassword(password)
 	<-s.argonSem
 	if err != nil {
@@ -440,7 +477,9 @@ func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string)
 		return "", time.Time{}, errors.New("too many attempts: wait a minute")
 	}
 	// Bound concurrent Argon2 work before deriving.
-	s.argonSem <- struct{}{}
+	if err := acquire(ctx, s.argonSem); err != nil {
+		return "", time.Time{}, err
+	}
 	ok := VerifyRoomPassword(password, room.PasswordHash)
 	<-s.argonSem
 	if !ok {
@@ -469,7 +508,9 @@ func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string)
 	if current.ShareRevokedAt != nil {
 		return "", time.Time{}, errors.New("share link revoked")
 	}
-	s.argonSem <- struct{}{}
+	if err := acquire(ctx, s.argonSem); err != nil {
+		return "", time.Time{}, err
+	}
 	revalidated := VerifyRoomPassword(password, current.PasswordHash)
 	<-s.argonSem
 	if !revalidated {
@@ -827,7 +868,14 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 	// handling intervenes. The caller-supplied readiness booleans say
 	// nothing about membership.
 	membership, err := s.repo.GetMembership(ctx, roomID, candidateDeviceID)
-	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq {
+	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq {
+		return ErrTransferIncomplete
+	}
+	if s.currentSeq == nil {
+		return ErrTransferIncomplete
+	}
+	currentSeq, err := s.currentSeq(roomID)
+	if err != nil || currentSeq != membership.TransferAppliedSeq {
 		return ErrTransferIncomplete
 	}
 	room.OwnerDeviceID = candidateDeviceID
@@ -843,7 +891,7 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 }
 
 // ReportTransferReady records readiness from the candidate's authenticated connection.
-func (s *Service) ReportTransferReady(ctx context.Context, roomID, deviceID, generation string, snapshotSeq uint64) error {
+func (s *Service) ReportTransferReady(ctx context.Context, roomID, deviceID, generation string, snapshotSeq, appliedSeq uint64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	room, err := s.repo.GetRoom(ctx, roomID)
@@ -853,10 +901,17 @@ func (s *Service) ReportTransferReady(ctx context.Context, roomID, deviceID, gen
 	if _, err := s.repo.GetMembership(ctx, roomID, deviceID); err != nil {
 		return err
 	}
+	if appliedSeq < snapshotSeq || s.currentSeq == nil {
+		return ErrTransferIncomplete
+	}
+	currentSeq, err := s.currentSeq(roomID)
+	if err != nil || appliedSeq != currentSeq {
+		return ErrTransferIncomplete
+	}
 	if s.hostReady == nil || !s.hostReady(ctx, roomID, deviceID) {
 		return ErrTransferIncomplete
 	}
-	return s.repo.UpdateTransferReadiness(ctx, roomID, deviceID, generation, snapshotSeq)
+	return s.repo.UpdateTransferReadiness(ctx, roomID, deviceID, generation, snapshotSeq, appliedSeq)
 }
 
 // AbortTransfer cancels an in-flight transfer; the original owner keeps the
@@ -874,8 +929,8 @@ func (s *Service) AbortTransfer(ctx context.Context, roomID, ownerDeviceID strin
 
 // MarkOnline records a realtime connection. The first connection time of
 // the current presence session decides grace-period succession order.
-// ReportReplicaPolicy records a member's self-reported replica policy:
-// automatic succession promotes only full replicas (owner-survival).
+// ReportReplicaPolicy records diagnostic information only. It is never used
+// as evidence for ownership succession because an ordinary client can forge it.
 func (s *Service) ReportReplicaPolicy(ctx context.Context, roomID, deviceID, policy string) error {
 	switch policy {
 	case "full", "lazy":
@@ -995,8 +1050,11 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 	// on the next cycle.
 	full := make([]store.Membership, 0, len(online))
 	for _, m := range online {
-		if m.ReplicaPolicy == "full" {
-			full = append(full, m)
+		if m.TransferReady && m.TransferGeneration != "" && m.TransferAppliedSeq > 0 && s.currentSeq != nil {
+			seq, err := s.currentSeq(roomID)
+			if err == nil && m.TransferAppliedSeq == seq {
+				full = append(full, m)
+			}
 		}
 	}
 	if len(full) > 0 {
@@ -1033,10 +1091,8 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 	// recoverable: a failed policy write leaves the room still
 	// leaderless for the next cycle, and a failed ownership write
 	// leaves a full-marked member the next cycle can promote.
-	if online[0].ReplicaPolicy != "full" {
-		if err := s.repo.UpdateMembershipPolicy(ctx, roomID, successor, "full"); err != nil {
-			return false, err
-		}
+	if len(full) == 0 {
+		return false, nil
 	}
 	room.OwnerDeviceID = successor
 	room.PendingTransferToDevice = ""
