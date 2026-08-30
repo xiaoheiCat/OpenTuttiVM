@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/coder/websocket"
 	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
@@ -408,7 +409,7 @@ func (s *Server) handleTransferAbort(w http.ResponseWriter, r *http.Request, roo
 	writeJSON(w, http.StatusOK, map[string]string{"status": "aborted"})
 }
 
-func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, _ string) {
+func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
 	hash := r.PathValue("hash")
 	body, err := io.ReadAll(io.LimitReader(r.Body, vmcas.ChunkSize+1))
 	if err != nil {
@@ -419,11 +420,26 @@ func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, _ 
 		writeErr(w, http.StatusRequestEntityTooLarge, "chunk exceeds 4 MiB")
 		return
 	}
-	// Publication (object write + reference insertion) is serialized
-	// with dissolution collection: running unlocked, a collector could
-	// observe zero references in the gap between the fresh object and
-	// its ref row, delete the object, and leave this room holding a
-	// durable reference to missing content.
+	// Validate before reserving metadata: malformed content is a client error
+	// and must not consume a pending slot or create a zero-lifetime reference.
+	if vmcas.ChunkHash(body) != hash {
+		writeErr(w, http.StatusBadRequest, "content hash mismatch")
+		return
+	}
+	// Reserve before filesystem IO. The collector treats a reserved object as
+	// live, while the repository transaction itself remains short.
+	if room, err := s.rooms.GetRoom(r.Context(), roomID); err != nil || room.DissolvedAt != nil {
+		writeErr(w, http.StatusConflict, "room already dissolved")
+		return
+	}
+	if err := s.repo.ReserveCASPending(r.Context(), store.CASPendingRef{RoomID: roomID, DeviceID: deviceID, Hash: hash, Size: int64(len(body)), ExpiresAt: time.Now().Add(s.cfg.CASPendingTTL)}, s.cfg.CASPendingQuotaBytes); err != nil {
+		if strings.Contains(err.Error(), "quota exceeded") {
+			writeErr(w, http.StatusRequestEntityTooLarge, err.Error())
+		} else {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
 	if err := s.repo.CASPublication(func() error {
 		// Room liveness recheck INSIDE the fence: an upload that
 		// authenticated before dissolution but reaches reference
@@ -431,37 +447,16 @@ func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, _ 
 		// whose refs were already collected — the object then stays
 		// durably uncollectable while the request reports success.
 		if room, err := s.rooms.GetRoom(r.Context(), roomID); err != nil || room.DissolvedAt != nil {
-			writeErr(w, http.StatusConflict, "room already dissolved")
 			return fmt.Errorf("room dissolved during upload")
 		}
-		existed, err := s.cas.Has(hash)
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return err
-		}
-		if err := s.cas.Put(hash, body); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
-			return err
-		}
-		if err := s.repo.AddCASRefsSized(r.Context(), roomID, []store.CASObject{{Hash: hash, Size: int64(len(body))}}, s.cfg.CASRoomQuotaBytes); err != nil {
-			if !existed {
-				if delErr := s.cas.Delete(hash); delErr != nil {
-					if recordErr := s.repo.RecordCASOrphan(context.WithoutCancel(r.Context()), hash); recordErr != nil {
-						s.log.Error("cas orphan record failed", "hash", hash, "delete_error", delErr, "record_error", recordErr)
-					} else {
-						s.log.Warn("cas orphan queued for collection", "hash", hash, "err", delErr)
-					}
-				}
-			}
-			if strings.Contains(err.Error(), "quota exceeded") {
-				writeErr(w, http.StatusRequestEntityTooLarge, err.Error())
-			} else {
-				writeErr(w, http.StatusInternalServerError, err.Error())
-			}
-			return err
-		}
-		return nil
+		return s.cas.Put(hash, body)
 	}); err != nil {
+		_ = s.repo.DeleteCASPending(context.WithoutCancel(r.Context()), roomID, deviceID, []string{hash})
+		if strings.Contains(err.Error(), "dissolved") {
+			writeErr(w, http.StatusConflict, err.Error())
+		} else {
+			writeErr(w, http.StatusBadRequest, err.Error())
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"hash": hash})

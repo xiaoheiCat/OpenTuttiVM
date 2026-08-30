@@ -112,6 +112,7 @@ func run() error {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
+			_ = repo.SweepCASPending(context.Background(), time.Now())
 			collector.Collect(context.Background(), nil)
 			active, err := repo.ListActiveRooms(context.Background())
 			if err != nil {

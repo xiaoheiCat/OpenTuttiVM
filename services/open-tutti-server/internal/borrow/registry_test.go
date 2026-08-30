@@ -229,24 +229,27 @@ func TestDispatchCallbacksDoNotRunUnderRegistryLock(t *testing.T) {
 		CommandID: "dispatch", AgentInstanceID: shared.AgentInstanceID,
 		BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration,
 	}
-	if err := r.DispatchCommand("room1", cmd, func(owner string, generation uint64, _ borrowagent.BorrowCommandPayload) {
+	if err := r.DispatchCommand("room1", cmd, func(owner string, generation uint64, _ borrowagent.BorrowCommandPayload) bool {
 		if owner != "dev_alice" || generation != shared.LeaseGeneration {
 			t.Errorf("invalid command delivery fence")
 		}
+		return true
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.DispatchApproval("room1", cmd.AgentInstanceID, "approval", cmd.CommandID, func(operator string, generation uint64) {
+	if err := r.DispatchApproval("room1", cmd.AgentInstanceID, "approval", cmd.CommandID, func(operator string, generation uint64) bool {
 		if operator != "dev_bob" || generation != shared.LeaseGeneration {
 			t.Errorf("invalid approval delivery: operator=%q generation=%d", operator, generation)
 		}
+		return true
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.ResolveDecisionDispatch("room1", cmd.AgentInstanceID, "approval", "dev_bob", func(owner string, generation uint64) {
+	if err := r.ResolveDecisionDispatch("room1", cmd.AgentInstanceID, "approval", "dev_bob", func(owner string, generation uint64) bool {
 		if owner != "dev_alice" || generation != shared.LeaseGeneration {
 			t.Errorf("invalid decision delivery: owner=%q generation=%d", owner, generation)
 		}
+		return true
 	}); err != nil {
 		t.Fatal(err)
 	}

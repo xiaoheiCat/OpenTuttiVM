@@ -15,6 +15,8 @@ import (
 var ErrRejected = errors.New("room rejected the operation")
 var ErrCallTimeout = errors.New("roomfs call timed out")
 
+const defaultCallTimeout = 30 * time.Minute
+
 // Client is the mount's connection to room-sync.
 type Client struct {
 	conn net.Conn
@@ -54,9 +56,9 @@ func (c *Client) call(req Request, body []byte) (*Response, error) {
 // compatible, while callers with a request deadline can fail a half-open
 // connection without waiting for the peer forever.
 func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Response, error) {
-	if ctx == context.Background() {
+	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 30*time.Minute)
+		ctx, cancel = context.WithTimeout(ctx, defaultCallTimeout)
 		defer cancel()
 	}
 	if deadline, ok := ctx.Deadline(); ok {
@@ -75,6 +77,18 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 	req.ID = c.next
 	ch := make(chan Response, 1)
 	c.pending[req.ID] = ch
+	writeDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			// A blocked net.Conn write does not observe context cancellation;
+			// close the single shared connection so it unblocks and all pending
+			// callers are failed together.
+			_ = c.conn.Close()
+		case <-writeDone:
+		}
+	}()
+	defer close(writeDone)
 	// The complete write+flush sequence stays under the lock: FUSE issues
 	// concurrent calls, and interleaved frames would corrupt the shared
 	// bufio writer and misframe every response.
@@ -82,7 +96,7 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 		c.mu.Unlock()
 		c.fail(req.ID, err)
 		if ctx.Err() != nil || isTimeout(err) {
-			_ = c.conn.Close()
+			c.timeout()
 			return nil, fmt.Errorf("%w: %v", ErrCallTimeout, ctx.Err())
 		}
 		return nil, err
@@ -91,7 +105,7 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 		c.mu.Unlock()
 		c.fail(req.ID, err)
 		if ctx.Err() != nil || isTimeout(err) {
-			_ = c.conn.Close()
+			c.timeout()
 			return nil, fmt.Errorf("%w: %v", ErrCallTimeout, ctx.Err())
 		}
 		return nil, err
@@ -102,17 +116,27 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 	select {
 	case res = <-ch:
 	case <-ctx.Done():
-		c.shutdown(ErrCallTimeout)
-		_ = c.conn.Close()
+		c.timeout()
 		return nil, fmt.Errorf("%w: %v", ErrCallTimeout, ctx.Err())
 	}
 	if !res.OK {
+		if res.Error == ErrCallTimeout.Error() {
+			return &res, ErrCallTimeout
+		}
 		if res.ErrorCode == "EAGAIN" || res.Error == "rejected" {
 			return &res, fmt.Errorf("%w: %s", ErrRejected, res.Error)
 		}
 		return &res, fmt.Errorf("roomfs: %s", res.Error)
 	}
 	return &res, nil
+}
+
+// timeout fences the connection before closing it. Closing alone would leave
+// concurrent callers waiting until pump observes EOF, and could briefly let a
+// new request reuse a connection that has already timed out.
+func (c *Client) timeout() {
+	c.shutdown(ErrCallTimeout)
+	_ = c.conn.Close()
 }
 
 func isTimeout(err error) bool {
@@ -184,7 +208,10 @@ func (c *Client) shutdown(err error) {
 
 // Stat fetches one path's metadata.
 func (c *Client) Stat(path string) (*Stat, error) {
-	res, err := c.call(Request{Type: TypeStat, Path: path}, nil)
+	return c.StatContext(context.Background(), path)
+}
+func (c *Client) StatContext(ctx context.Context, path string) (*Stat, error) {
+	res, err := c.callContext(ctx, Request{Type: TypeStat, Path: path}, nil)
 	if err != nil && !errors.Is(err, ErrRejected) {
 		return nil, err
 	}
@@ -203,7 +230,10 @@ func (c *Client) Read(path string) ([]byte, error) {
 // ReadWithHash also returns the content hash the read observed (flush
 // baselines for optimistic-concurrency writes).
 func (c *Client) ReadWithHash(path string) ([]byte, string, error) {
-	res, err := c.call(Request{Type: TypeRead, Path: path}, nil)
+	return c.ReadWithHashContext(context.Background(), path)
+}
+func (c *Client) ReadWithHashContext(ctx context.Context, path string) ([]byte, string, error) {
+	res, err := c.callContext(ctx, Request{Type: TypeRead, Path: path}, nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -212,7 +242,10 @@ func (c *Client) ReadWithHash(path string) ([]byte, string, error) {
 
 // List returns one directory's children.
 func (c *Client) List(path string) ([]DirEntry, error) {
-	res, err := c.call(Request{Type: TypeList, Path: path}, nil)
+	return c.ListContext(context.Background(), path)
+}
+func (c *Client) ListContext(ctx context.Context, path string) ([]DirEntry, error) {
+	res, err := c.callContext(ctx, Request{Type: TypeList, Path: path}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +255,9 @@ func (c *Client) List(path string) ([]DirEntry, error) {
 // Write submits a whole-file write; room-sync converts it into an
 // operation against its local replica.
 func (c *Client) Write(path string, content []byte, baseHash string) (string, error) {
+	return c.WriteContext(context.Background(), path, content, baseHash)
+}
+func (c *Client) WriteContext(ctx context.Context, path string, content []byte, baseHash string) (string, error) {
 	// Preflight the protocol bound: sending an oversized frame would
 	// have the server reject the body length and close the stream,
 	// poisoning the mount's single shared connection for every later
@@ -229,7 +265,7 @@ func (c *Client) Write(path string, content []byte, baseHash string) (string, er
 	if uint64(len(content)) > MaxBodyBytes {
 		return "", fmt.Errorf("roomfs: write of %s exceeds protocol body limit (%d bytes)", path, MaxBodyBytes)
 	}
-	res, err := c.call(Request{Type: TypeWrite, Path: path, BaseHash: baseHash}, content)
+	res, err := c.callContext(ctx, Request{Type: TypeWrite, Path: path, BaseHash: baseHash}, content)
 	if err != nil {
 		return "", err
 	}
@@ -238,31 +274,46 @@ func (c *Client) Write(path string, content []byte, baseHash string) (string, er
 
 // Create adds an empty file.
 func (c *Client) Create(path string, mode uint32) error {
-	_, err := c.call(Request{Type: TypeCreate, Path: path, Mode: mode}, nil)
+	return c.CreateContext(context.Background(), path, mode)
+}
+func (c *Client) CreateContext(ctx context.Context, path string, mode uint32) error {
+	_, err := c.callContext(ctx, Request{Type: TypeCreate, Path: path, Mode: mode}, nil)
 	return err
 }
 
 // Mkdir adds a directory.
 func (c *Client) Mkdir(path string, mode uint32) error {
-	_, err := c.call(Request{Type: TypeMkdir, Path: path, Mode: mode}, nil)
+	return c.MkdirContext(context.Background(), path, mode)
+}
+func (c *Client) MkdirContext(ctx context.Context, path string, mode uint32) error {
+	_, err := c.callContext(ctx, Request{Type: TypeMkdir, Path: path, Mode: mode}, nil)
 	return err
 }
 
 // Remove deletes a file or empty directory.
 func (c *Client) Remove(path string) error {
-	_, err := c.call(Request{Type: TypeRemove, Path: path}, nil)
+	return c.RemoveContext(context.Background(), path)
+}
+func (c *Client) RemoveContext(ctx context.Context, path string) error {
+	_, err := c.callContext(ctx, Request{Type: TypeRemove, Path: path}, nil)
 	return err
 }
 
 // Rename moves a path within the workspace.
 func (c *Client) Rename(from, to string, noReplace bool) error {
-	_, err := c.call(Request{Type: TypeRename, Path: from, To: to, RenameNoReplace: noReplace}, nil)
+	return c.RenameContext(context.Background(), from, to, noReplace)
+}
+func (c *Client) RenameContext(ctx context.Context, from, to string, noReplace bool) error {
+	_, err := c.callContext(ctx, Request{Type: TypeRename, Path: from, To: to, RenameNoReplace: noReplace}, nil)
 	return err
 }
 
 // Chmod submits a permission-bit change.
 func (c *Client) Chmod(path string, mode uint32) error {
-	_, err := c.call(Request{Type: TypeChmod, Path: path, Mode: mode}, nil)
+	return c.ChmodContext(context.Background(), path, mode)
+}
+func (c *Client) ChmodContext(ctx context.Context, path string, mode uint32) error {
+	_, err := c.callContext(ctx, Request{Type: TypeChmod, Path: path, Mode: mode}, nil)
 	return err
 }
 

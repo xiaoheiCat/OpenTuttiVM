@@ -106,12 +106,17 @@ func IsEnvironmentPath(path string) bool { return EnvironmentPaths[path] }
 // CAS. Per the no-recovery failure model it is memory-only; snapshots are
 // the persistence layer.
 type WorkspaceState struct {
-	seq      uint64
-	files    map[string]*fileState
-	history  map[string][]appliedPatch
-	hashLog  map[string][]seqHash
-	barriers map[string]*barrier
-	ops      []vmprotocol.Envelope
+	// Admission limits prevent empty structural entries and compacted
+	// operation identities from becoming unbounded memory allocations.
+	MaxEntries    int
+	MaxPathBytes  int64
+	MaxIdentities int
+	seq           uint64
+	files         map[string]*fileState
+	history       map[string][]appliedPatch
+	hashLog       map[string][]seqHash
+	barriers      map[string]*barrier
+	ops           []vmprotocol.Envelope
 	// accepted deduplicates (AuthorDeviceID, OperationID): a retry after
 	// a lost broadcast/ack must return the original acknowledgement, not
 	// sequence the same edit twice (a re-applied insert duplicates user
@@ -186,6 +191,51 @@ func (w *WorkspaceState) untrackPath(path string) {
 // Seq returns the current server sequence.
 func (w *WorkspaceState) Seq() uint64 { return w.seq }
 
+// Clone returns an independent working copy for an application prepare step.
+// The sequencer uses this before durable side effects so a later publication
+// failure cannot leave the authoritative state half-applied.
+func (w *WorkspaceState) Clone() *WorkspaceState {
+	c := *w
+	c.files = make(map[string]*fileState, len(w.files))
+	for path, f := range w.files {
+		copyFile := *f
+		copyFile.Content = append([]byte(nil), f.Content...)
+		c.files[path] = &copyFile
+	}
+	c.history = make(map[string][]appliedPatch, len(w.history))
+	for path, history := range w.history {
+		c.history[path] = append([]appliedPatch(nil), history...)
+	}
+	c.hashLog = make(map[string][]seqHash, len(w.hashLog))
+	for path, hashes := range w.hashLog {
+		c.hashLog[path] = append([]seqHash(nil), hashes...)
+	}
+	c.barriers = make(map[string]*barrier, len(w.barriers))
+	for path, b := range w.barriers {
+		copyBarrier := *b
+		copyBarrier.Notified = append([]string(nil), b.Notified...)
+		c.barriers[path] = &copyBarrier
+	}
+	c.ops = append([]vmprotocol.Envelope(nil), w.ops...)
+	c.accepted = make(map[string]int, len(w.accepted))
+	for key, index := range w.accepted {
+		c.accepted[key] = index
+	}
+	c.dedupStubs = make(map[string]uint64, len(w.dedupStubs))
+	for key, seq := range w.dedupStubs {
+		c.dedupStubs[key] = seq
+	}
+	c.ciPaths = make(map[string]string, len(w.ciPaths))
+	for key, path := range w.ciPaths {
+		c.ciPaths[key] = path
+	}
+	c.structSeqs = make(map[string]uint64, len(w.structSeqs))
+	for path, seq := range w.structSeqs {
+		c.structSeqs[path] = seq
+	}
+	return &c
+}
+
 // CurrentBaseHash returns the hash the authoritative state expects as the
 // base for a whole-file rewrite of path: the manifest hash while the file
 // is blob-tracked, the raw content hash while it is text-tracked.
@@ -254,6 +304,25 @@ func (w *WorkspaceState) fenced(env *vmprotocol.Envelope) *barrier {
 // to broadcast. On conflict it may open a barrier and returns a
 // *RejectionError.
 func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, error) {
+	if w.MaxEntries > 0 && len(w.files) >= w.MaxEntries && (env.Operation.Kind == vmprotocol.OpCreate || env.Operation.Kind == vmprotocol.OpMkdir) {
+		return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "workspace entry limit exceeded"}
+	}
+	if w.MaxPathBytes > 0 {
+		pathBytes := int64(len(env.Operation.Path))
+		if env.Operation.Rename != nil {
+			pathBytes += int64(len(env.Operation.Rename.NewPath))
+		}
+		if pathBytes > w.MaxPathBytes {
+			return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "workspace path budget exceeded"}
+		}
+	}
+	if w.MaxIdentities > 0 && len(w.accepted)+len(w.dedupStubs) >= w.MaxIdentities {
+		if _, exists := w.accepted[env.AuthorDeviceID+"\x00"+env.OperationID]; !exists {
+			if _, exists := w.dedupStubs[env.AuthorDeviceID+"\x00"+env.OperationID]; !exists {
+				return env, &RejectionError{Reason: RejectTooComplex, CurrentHash: "operation identity budget exceeded"}
+			}
+		}
+	}
 	// At-least-once retries: the operation identity is
 	// (AuthorDeviceID, OperationID). A duplicate returns the ORIGINAL
 	// acknowledgement — re-sequencing would apply a text insert twice.

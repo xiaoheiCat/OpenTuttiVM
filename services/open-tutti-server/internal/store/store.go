@@ -95,6 +95,16 @@ type CASObject struct {
 	Size int64
 }
 
+// CASPendingRef is an upload reservation. It grants no read or durable room
+// reference until the sequencer promotes it as part of an accepted operation.
+type CASPendingRef struct {
+	RoomID    string
+	DeviceID  string
+	Hash      string
+	Size      int64
+	ExpiresAt time.Time
+}
+
 // Repository is the durable metadata store.
 // ErrTicketUsed reports a lost redemption race.
 var ErrTicketUsed = errors.New("join ticket already used")
@@ -144,6 +154,14 @@ type Repository interface {
 	// CAS references
 	AddCASRefs(ctx context.Context, roomID string, hashes []string) error
 	AddCASRefsSized(ctx context.Context, roomID string, objects []CASObject, quotaBytes int64) error
+	ReserveCASPending(ctx context.Context, ref CASPendingRef, quotaBytes int64) error
+	PromoteCASPending(ctx context.Context, roomID, deviceID string, hashes []string, quotaBytes int64) error
+	// PublishCASPending promotes reservations and runs fn before committing
+	// the same transaction. If fn or the commit fails, no promotion is visible.
+	PublishCASPending(ctx context.Context, roomID, deviceID string, hashes []string, quotaBytes int64, fn func() error) error
+	CanPromoteCASPending(ctx context.Context, roomID, deviceID string, hashes []string, quotaBytes int64) error
+	DeleteCASPending(ctx context.Context, roomID, deviceID string, hashes []string) error
+	SweepCASPending(ctx context.Context, now time.Time) error
 	ListCASRefCounts(ctx context.Context) (map[string]int, error)
 	// RoomCASRefs lists one room's referenced object hashes.
 	RoomCASRefs(ctx context.Context, roomID string) ([]string, error)

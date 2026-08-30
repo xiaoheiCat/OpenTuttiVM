@@ -102,8 +102,17 @@ CREATE TABLE IF NOT EXISTS cas_objects (
 	 size INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS cas_orphans (hash TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS cas_pending_refs (
+ room_id TEXT NOT NULL,
+ device_id TEXT NOT NULL,
+ hash TEXT NOT NULL,
+ size INTEGER NOT NULL,
+ expires_at INTEGER NOT NULL,
+ PRIMARY KEY (room_id, device_id, hash)
+);
 CREATE INDEX IF NOT EXISTS idx_memberships_room ON memberships(room_id);
 CREATE INDEX IF NOT EXISTS idx_cas_refs_hash ON cas_refs(hash);
+CREATE INDEX IF NOT EXISTS idx_cas_pending_expiry ON cas_pending_refs(expires_at);
 `
 	_, err := db.Exec(schema)
 	if err != nil {
@@ -578,6 +587,13 @@ func (r *Repo) AddCASRefs(ctx context.Context, roomID string, hashes []string) e
 }
 
 func (r *Repo) AddCASRefsSized(ctx context.Context, roomID string, objects []store.CASObject, quotaBytes int64) error {
+	// Publication callers hold CASPublication across filesystem writes and
+	// this metadata transaction. Locking again here would deadlock because the
+	// publication fence is intentionally non-reentrant.
+	return r.addCASRefsSized(ctx, roomID, objects, quotaBytes)
+}
+
+func (r *Repo) addCASRefsSized(ctx context.Context, roomID string, objects []store.CASObject, quotaBytes int64) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -609,6 +625,187 @@ func (r *Repo) AddCASRefsSized(ctx context.Context, roomID string, objects []sto
 	// the API's configured limit; callers pass the limit through the context.
 	if quotaBytes > 0 && used > quotaBytes {
 		return fmt.Errorf("CAS room quota exceeded: %d > %d bytes", used, quotaBytes)
+	}
+	return tx.Commit()
+}
+
+// ReserveCASPending records an upload without making it a durable room ref.
+// The per-device quota prevents any member from filling a room's durable
+// quota with abandoned chunk PUTs.
+func (r *Repo) ReserveCASPending(ctx context.Context, ref store.CASPendingRef, quotaBytes int64) error {
+	if ref.RoomID == "" || ref.DeviceID == "" || ref.Hash == "" || ref.Size < 0 {
+		return errors.New("invalid pending CAS reference")
+	}
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
+	// The PUT handler reserves before entering the filesystem publication
+	// section, so this transaction never spans file IO.
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cas_pending_refs(room_id,device_id,hash,size,expires_at) VALUES(?,?,?,?,?) ON CONFLICT(room_id,device_id,hash) DO UPDATE SET size=excluded.size,expires_at=excluded.expires_at`, ref.RoomID, ref.DeviceID, ref.Hash, ref.Size, ref.ExpiresAt.Unix()); err != nil {
+		return err
+	}
+	var existingSize int64
+	if err := tx.QueryRowContext(ctx, `SELECT size FROM cas_objects WHERE hash=?`, ref.Hash).Scan(&existingSize); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	} else if err == nil && existingSize != ref.Size {
+		return fmt.Errorf("CAS object %s size mismatch: have %d, got %d", ref.Hash, existingSize, ref.Size)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cas_objects(hash,size) VALUES(?,?) ON CONFLICT(hash) DO NOTHING`, ref.Hash, ref.Size); err != nil {
+		return err
+	}
+	var used int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(size),0) FROM cas_pending_refs WHERE room_id=? AND device_id=? AND expires_at>=?`, ref.RoomID, ref.DeviceID, time.Now().Unix()).Scan(&used); err != nil {
+		return err
+	}
+	if quotaBytes > 0 && used > quotaBytes {
+		return fmt.Errorf("CAS pending device quota exceeded: %d > %d bytes", used, quotaBytes)
+	}
+	return tx.Commit()
+}
+
+// PromoteCASPending atomically turns reservations into live references after
+// the sequencer accepted the operation. Missing reservations are allowed for
+// objects already live in the room or snapshot-created objects.
+func (r *Repo) PromoteCASPending(ctx context.Context, roomID, deviceID string, hashes []string, quotaBytes int64) error {
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := r.promoteCASPendingTx(ctx, tx, roomID, deviceID, hashes, quotaBytes); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// PublishCASPending makes pending promotion and the caller's prepare step one
+// atomic publication. The callback must only mutate a private prepare copy:
+// its result becomes authoritative only after the transaction commits.
+func (r *Repo) PublishCASPending(ctx context.Context, roomID, deviceID string, hashes []string, quotaBytes int64, fn func() error) error {
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := r.promoteCASPendingTx(ctx, tx, roomID, deviceID, hashes, quotaBytes); err != nil {
+		return err
+	}
+	if fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *Repo) promoteCASPendingTx(ctx context.Context, tx *sql.Tx, roomID, deviceID string, hashes []string, quotaBytes int64) error {
+	for _, hash := range hashes {
+		if hash == "" {
+			continue
+		}
+		var live int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM cas_refs WHERE room_id=? AND hash=?`, roomID, hash).Scan(&live); err != nil {
+			return err
+		}
+		if live != 0 {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM cas_pending_refs WHERE room_id=? AND device_id=? AND hash=?`, roomID, deviceID, hash); err != nil {
+				return err
+			}
+			continue
+		}
+		var pending int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM cas_pending_refs WHERE room_id=? AND device_id=? AND hash=? AND expires_at > ?`, roomID, deviceID, hash, time.Now().Unix()).Scan(&pending); err != nil {
+			return err
+		}
+		if pending == 0 {
+			return fmt.Errorf("CAS object %s has no live or pending reference", hash)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO cas_refs(room_id,hash) SELECT room_id,hash FROM cas_pending_refs WHERE room_id=? AND device_id=? AND hash=?`, roomID, deviceID, hash); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM cas_pending_refs WHERE room_id=? AND device_id=? AND hash=?`, roomID, deviceID, hash); err != nil {
+			return err
+		}
+	}
+	var used int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(o.size),0) FROM cas_refs r JOIN cas_objects o ON o.hash=r.hash WHERE r.room_id=?`, roomID).Scan(&used); err != nil {
+		return err
+	}
+	if quotaBytes > 0 && used > quotaBytes {
+		return fmt.Errorf("CAS room quota exceeded: %d > %d bytes", used, quotaBytes)
+	}
+	return nil
+}
+
+func (r *Repo) CanPromoteCASPending(ctx context.Context, roomID, deviceID string, hashes []string, quotaBytes int64) error {
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
+	return r.canPromoteCASPending(ctx, roomID, deviceID, hashes, quotaBytes)
+}
+
+func (r *Repo) canPromoteCASPending(ctx context.Context, roomID, deviceID string, hashes []string, quotaBytes int64) error {
+	if quotaBytes <= 0 {
+		return nil
+	}
+	var used int64
+	if err := r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(o.size),0) FROM cas_refs r JOIN cas_objects o ON o.hash=r.hash WHERE r.room_id=?`, roomID).Scan(&used); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, hash := range hashes {
+		if hash == "" || seen[hash] {
+			continue
+		}
+		seen[hash] = true
+		var live int
+		if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM cas_refs WHERE room_id=? AND hash=?`, roomID, hash).Scan(&live); err != nil {
+			return err
+		}
+		if live != 0 {
+			continue
+		}
+		var size int64
+		if err := r.db.QueryRowContext(ctx, `SELECT size FROM cas_pending_refs WHERE room_id=? AND device_id=? AND hash=? AND expires_at > ?`, roomID, deviceID, hash, time.Now().Unix()).Scan(&size); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("CAS object %s has no pending reference", hash)
+			}
+			return err
+		}
+		used += size
+	}
+	if used > quotaBytes {
+		return fmt.Errorf("CAS room quota exceeded: %d > %d bytes", used, quotaBytes)
+	}
+	return nil
+}
+
+func (r *Repo) SweepCASPending(ctx context.Context, now time.Time) error {
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
+	_, err := r.db.ExecContext(ctx, `DELETE FROM cas_pending_refs WHERE expires_at <= ?`, now.Unix())
+	return err
+}
+
+func (r *Repo) DeleteCASPending(ctx context.Context, roomID, deviceID string, hashes []string) error {
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, hash := range hashes {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM cas_pending_refs WHERE room_id=? AND device_id=? AND hash=?`, roomID, deviceID, hash); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -687,7 +884,7 @@ func (r *Repo) CollectUnreferencedCAS(ctx context.Context, hashes []string, del 
 		}
 		seen[h] = struct{}{}
 		var n int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM cas_refs WHERE hash=?`, h).Scan(&n); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM cas_refs WHERE hash=?) + (SELECT COUNT(*) FROM cas_pending_refs WHERE hash=?)`, h, h).Scan(&n); err != nil {
 			return err
 		}
 		if n == 0 {

@@ -266,14 +266,14 @@ func TestOwnerGracePeriodAutoTransfer(t *testing.T) {
 	}
 
 	// A lazy-only room cannot be promoted from a client policy claim. The
-	// fail-closed recovery path dissolves it rather than leaving it leaderless.
+	// fail-closed recovery state remains explicitly recoverable.
 	clock.Advance(6 * time.Minute)
 	if _, err := svc.CheckGracePeriods(ctx, created.RoomID); err != nil {
 		t.Fatal(err)
 	}
 	room, _ = svc.repo.GetRoom(ctx, created.RoomID)
-	if room.DissolvedAt == nil {
-		t.Fatal("unverified succession must dissolve the room")
+	if room.DissolvedAt != nil || room.OwnerDeviceID != "dev_owner" {
+		t.Fatal("unverified succession must keep the room recoverable")
 	}
 }
 

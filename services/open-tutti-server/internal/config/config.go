@@ -37,9 +37,14 @@ type Config struct {
 	// JoinTicketTTL bounds the one-time share join tickets.
 	JoinTicketTTL time.Duration
 	// SnapshotIntervalOps triggers a checkpoint after this many operations.
-	SnapshotIntervalOps int
-	CASRoomQuotaBytes   int64
-	ActiveRoomLimit     int
+	SnapshotIntervalOps    int
+	CASRoomQuotaBytes      int64
+	CASPendingQuotaBytes   int64
+	CASPendingTTL          time.Duration
+	WorkspaceMaxEntries    int
+	WorkspaceMaxPathBytes  int64
+	WorkspaceMaxIdentities int
+	ActiveRoomLimit        int
 }
 
 // Load resolves configuration from env, then envFile (.env), then defaults.
@@ -73,9 +78,14 @@ func Load(envFile string) (Config, error) {
 		OwnerGracePeriod: secondsOrDefault(get("OPEN_TUTTI_OWNER_GRACE_SECONDS", ""), 5*time.Minute),
 		JoinTicketTTL:    secondsOrDefault(get("OPEN_TUTTI_JOIN_TICKET_TTL_SECONDS", ""), 60*time.Second),
 		// An operation count, not a duration.
-		SnapshotIntervalOps: intOrDefault(get("OPEN_TUTTI_SNAPSHOT_INTERVAL_OPS", ""), 512),
-		CASRoomQuotaBytes:   int64OrDefault(get("OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES", ""), 1<<30),
-		ActiveRoomLimit:     intOrDefault(get("OPEN_TUTTI_ACTIVE_ROOM_LIMIT", ""), 100),
+		SnapshotIntervalOps:    intOrDefault(get("OPEN_TUTTI_SNAPSHOT_INTERVAL_OPS", ""), 512),
+		CASRoomQuotaBytes:      int64OrDefault(get("OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES", ""), 1<<30),
+		CASPendingQuotaBytes:   int64OrDefault(get("OPEN_TUTTI_CAS_PENDING_QUOTA_BYTES", ""), 64<<20),
+		CASPendingTTL:          secondsOrDefault(get("OPEN_TUTTI_CAS_PENDING_TTL_SECONDS", ""), 15*time.Minute),
+		WorkspaceMaxEntries:    intOrDefault(get("OPEN_TUTTI_WORKSPACE_MAX_ENTRIES", ""), 100000),
+		WorkspaceMaxPathBytes:  int64OrDefault(get("OPEN_TUTTI_WORKSPACE_MAX_PATH_BYTES", ""), 16<<20),
+		WorkspaceMaxIdentities: intOrDefault(get("OPEN_TUTTI_WORKSPACE_MAX_IDENTITIES", ""), 200000),
+		ActiveRoomLimit:        intOrDefault(get("OPEN_TUTTI_ACTIVE_ROOM_LIMIT", ""), 100),
 	}
 
 	cfg.DatabasePath = get("OPEN_TUTTI_DATABASE_PATH", filepath.Join(cfg.DataDir, "open-tutti.db"))
@@ -93,8 +103,8 @@ func Load(envFile string) (Config, error) {
 			return Config{}, errors.New("plain HTTP public URL requires a loopback listen address; use a TLS reverse proxy for remote deployment")
 		}
 	}
-	if cfg.OwnerGracePeriod <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 || cfg.ActiveRoomLimit <= 0 {
-		return Config{}, errors.New("grace period, ticket TTL, snapshot interval, CAS quota, and active room limit must be positive")
+	if cfg.OwnerGracePeriod <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 || cfg.CASPendingQuotaBytes <= 0 || cfg.CASPendingTTL <= 0 || cfg.WorkspaceMaxEntries <= 0 || cfg.WorkspaceMaxPathBytes <= 0 || cfg.WorkspaceMaxIdentities <= 0 || cfg.ActiveRoomLimit <= 0 {
+		return Config{}, errors.New("grace period, ticket TTL, snapshot interval, CAS quotas, workspace limits, and active room limit must be positive")
 	}
 	return cfg, nil
 }

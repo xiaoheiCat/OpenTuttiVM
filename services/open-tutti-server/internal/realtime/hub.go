@@ -213,14 +213,20 @@ func (h *Hub) SendTo(roomID, deviceID string, ev vmprotocol.Event) {
 	}
 }
 
-func (h *Hub) enqueueBorrow(roomID, deviceID, agentID, approvalID string, generation uint64, ev vmprotocol.Event) {
+func (h *Hub) enqueueBorrow(roomID, deviceID, agentID, approvalID string, generation uint64, ev vmprotocol.Event) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if c := h.conns[roomID][deviceID]; c != nil {
-		h.deliver(c, ServerMessage{Type: "event", Event: ev, borrowFence: &borrowDelivery{
+		select {
+		case c.send <- ServerMessage{Type: "event", Event: ev, borrowFence: &borrowDelivery{
 			roomID: roomID, agentID: agentID, owner: deviceID, approvalID: approvalID, generation: generation,
-		}})
+		}}:
+			return true
+		default:
+			return false
+		}
 	}
+	return false
 }
 
 // Attach registers an authenticated connection.
@@ -507,19 +513,17 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 				continue
 			}
 			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
-				return h.borrows.DispatchCommand(c.RoomID, p, func(owner string, generation uint64, out borrowagent.BorrowCommandPayload) {
-					h.enqueueBorrow(c.RoomID, owner, p.AgentInstanceID, "", generation, vmprotocol.Event{Topic: borrowagent.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out)})
+				return h.borrows.DispatchCommand(c.RoomID, p, func(owner string, generation uint64, out borrowagent.BorrowCommandPayload) bool {
+					return h.enqueueBorrow(c.RoomID, owner, p.AgentInstanceID, "", generation, vmprotocol.Event{Topic: borrowagent.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out)})
 				})
 			})
 			if err != nil {
-				// Stale or unknown lease: the borrower learns immediately
-				// that their generation is dead.
+				// Admission failures are explicit. A live lease can fail because
+				// the owner is offline or its bounded queue is full; that is not
+				// a revocation and must not be reported as one.
 				h.SendTo(c.RoomID, c.DeviceID, vmprotocol.Event{
-					Topic: borrowagent.TopicBorrowRevoked, RoomID: c.RoomID,
-					Payload: mustJSON(borrowagent.BorrowRevokedPayload{
-						AgentInstanceID: p.AgentInstanceID,
-						Reason:          err.Error(),
-					}),
+					Topic: borrowagent.TopicCommandFailed, RoomID: c.RoomID,
+					Payload: mustJSON(borrowagent.CommandFailedPayload{CommandID: p.CommandID, AgentInstanceID: p.AgentInstanceID, BorrowerDeviceID: c.DeviceID, LeaseGeneration: p.LeaseGeneration, Reason: err.Error()}),
 				})
 				continue
 			}
@@ -571,12 +575,13 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 					"room", c.RoomID, "agent", p.AgentInstanceID, "sender", c.DeviceID)
 				continue
 			}
-			err := h.borrows.DispatchApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID, p.CommandID, func(operator string, generation uint64) {
+			err := h.borrows.DispatchApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID, p.CommandID, func(operator string, generation uint64) bool {
 				p.SessionOperatorDeviceID = operator
-				h.enqueueBorrow(c.RoomID, operator, p.AgentInstanceID, p.ApprovalID, generation, vmprotocol.Event{Topic: borrowagent.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p)})
+				return h.enqueueBorrow(c.RoomID, operator, p.AgentInstanceID, p.ApprovalID, generation, vmprotocol.Event{Topic: borrowagent.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p)})
 			})
 			if err != nil {
 				h.log.Warn("approval open", "room", c.RoomID, "err", err)
+				h.SendTo(c.RoomID, c.DeviceID, vmprotocol.Event{Topic: borrowagent.TopicCommandFailed, RoomID: c.RoomID, Payload: mustJSON(borrowagent.CommandFailedPayload{CommandID: p.CommandID, AgentInstanceID: p.AgentInstanceID, BorrowerDeviceID: c.DeviceID, LeaseGeneration: 0, Reason: err.Error()})})
 				continue
 			}
 		case "approval_decision":
@@ -589,12 +594,13 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			// before a kick can otherwise resolve and forward after
 			// the membership deletion committed.
 			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
-				return h.borrows.ResolveDecisionDispatch(c.RoomID, p.AgentInstanceID, p.ApprovalID, c.DeviceID, func(owner string, generation uint64) {
-					h.enqueueBorrow(c.RoomID, owner, p.AgentInstanceID, "", generation, vmprotocol.Event{Topic: borrowagent.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p)})
+				return h.borrows.ResolveDecisionDispatch(c.RoomID, p.AgentInstanceID, p.ApprovalID, c.DeviceID, func(owner string, generation uint64) bool {
+					return h.enqueueBorrow(c.RoomID, owner, p.AgentInstanceID, "", generation, vmprotocol.Event{Topic: borrowagent.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p)})
 				})
 			})
 			if err != nil {
 				h.log.Warn("approval decision", "room", c.RoomID, "err", err)
+				h.SendTo(c.RoomID, c.DeviceID, vmprotocol.Event{Topic: borrowagent.TopicCommandFailed, RoomID: c.RoomID, Payload: mustJSON(borrowagent.CommandFailedPayload{AgentInstanceID: p.AgentInstanceID, BorrowerDeviceID: c.DeviceID, Reason: err.Error()})})
 				continue
 			}
 		case "policy":

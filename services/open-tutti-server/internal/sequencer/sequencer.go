@@ -89,12 +89,27 @@ func (m *Manager) Submit(env vmprotocol.Envelope) error {
 		return fmt.Errorf("room %s is finalizing; edits rejected", env.RoomID)
 	}
 	env.TimestampMS = m.clock()
+	blobPending := env.Operation.Kind == vmprotocol.OpBlobReplace && env.Operation.Blob != nil
+	if blobPending {
+		// A rejected graph, base check, barrier, or quota admission must not
+		// leave the uploader's reservation pinned until TTL if the decision is
+		// already final.
+		defer func() {
+			if blobPending {
+				_ = m.repo.DeleteCASPending(context.Background(), env.RoomID, env.AuthorDeviceID, m.blobHashes(env.Operation.Blob.Manifest))
+			}
+		}()
+	}
 	// A blob replacement commits a manifest hash into authoritative state:
 	// the referenced object graph (manifest + every chunk) must already
 	// exist in CAS, or every replica and the final workspace apply would
 	// fail permanently on the lookup.
 	if env.Operation.Kind == vmprotocol.OpBlobReplace && env.Operation.Blob != nil {
-		if err := m.validateBlobGraph(env.RoomID, env.Operation.Blob.Manifest); err != nil {
+		if err := m.validateBlobGraph(env.RoomID, env.AuthorDeviceID, env.Operation.Blob.Manifest); err != nil {
+			m.reject(env, &vmsync.RejectionError{Reason: vmsync.RejectInvalid, CurrentHash: err.Error()})
+			return err
+		}
+		if err := m.repo.CanPromoteCASPending(context.Background(), env.RoomID, env.AuthorDeviceID, m.blobHashes(env.Operation.Blob.Manifest), m.cfg.CASRoomQuotaBytes); err != nil {
 			m.reject(env, &vmsync.RejectionError{Reason: vmsync.RejectInvalid, CurrentHash: err.Error()})
 			return err
 		}
@@ -109,10 +124,28 @@ func (m *Manager) Submit(env vmprotocol.Envelope) error {
 			}
 		}
 	}
-	accepted, err := eng.state.Accept(env)
-	if err != nil {
-		m.reject(env, err)
-		return err
+	accepted := env
+	if blobPending {
+		// Accept on an isolated copy. Promotion and this prepare are committed
+		// together; only then can the copy replace the authoritative state.
+		prepared := eng.state.Clone()
+		if err := m.repo.PublishCASPending(context.Background(), env.RoomID, env.AuthorDeviceID, m.blobHashes(env.Operation.Blob.Manifest), m.cfg.CASRoomQuotaBytes, func() error {
+			var err error
+			accepted, err = prepared.Accept(env)
+			return err
+		}); err != nil {
+			m.reject(env, err)
+			return err
+		}
+		eng.state = prepared
+		blobPending = false
+	} else {
+		var err error
+		accepted, err = eng.state.Accept(env)
+		if err != nil {
+			m.reject(env, err)
+			return err
+		}
 	}
 	eng.opsSinceSnap++
 
@@ -186,14 +219,16 @@ func (m *Manager) reject(env vmprotocol.Envelope, err error) {
 // another room, and accepting it would grant this room download access
 // through snapshot ref collection, bypassing the per-room authorization
 // the CAS endpoints enforce.
-func (m *Manager) validateBlobGraph(roomID, manifestHash string) error {
+func (m *Manager) validateBlobGraph(roomID, deviceID, manifestHash string) error {
 	if manifestHash == "" {
 		return errors.New("blob manifest hash required")
 	}
 	if ok, err := m.repo.HasCASRef(context.Background(), roomID, manifestHash); err != nil {
 		return err
 	} else if !ok {
-		return fmt.Errorf("manifest %s not referenced by this room", manifestHash)
+		if err := m.repo.CanPromoteCASPending(context.Background(), roomID, deviceID, []string{manifestHash}, m.cfg.CASRoomQuotaBytes); err != nil {
+			return fmt.Errorf("manifest %s not uploaded by this device", manifestHash)
+		}
 	}
 	data, err := m.cas.Get(manifestHash)
 	if err != nil {
@@ -235,7 +270,9 @@ func (m *Manager) validateBlobGraph(roomID, manifestHash string) error {
 		if ok, err := m.repo.HasCASRef(context.Background(), roomID, chunk); err != nil {
 			return 0, err
 		} else if !ok {
-			return 0, fmt.Errorf("chunk %s of %s not referenced by this room", chunk, manifestHash)
+			if err := m.repo.CanPromoteCASPending(context.Background(), roomID, deviceID, []string{chunk}, m.cfg.CASRoomQuotaBytes); err != nil {
+				return 0, fmt.Errorf("chunk %s of %s not uploaded by this device", chunk, manifestHash)
+			}
 		}
 		body, err := m.cas.Get(chunk)
 		if err != nil {
@@ -267,6 +304,18 @@ func (m *Manager) validateBlobGraph(roomID, manifestHash string) error {
 			manifestHash, manifest.Size, total)
 	}
 	return nil
+}
+
+func (m *Manager) blobHashes(manifestHash string) []string {
+	data, err := m.cas.Get(manifestHash)
+	if err != nil {
+		return []string{manifestHash}
+	}
+	manifest, err := vmcas.DecodeManifest(data)
+	if err != nil {
+		return []string{manifestHash}
+	}
+	return append([]string{manifestHash}, manifest.Chunks...)
 }
 
 // MembershipMutation runs fn while holding the SAME mutex that guards
@@ -446,6 +495,9 @@ func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason
 				objects = append(objects, store.CASObject{Hash: hash, Size: int64(len(data))})
 			}
 		}
+		// The outer publication fence is already held while snapshot objects
+		// are written, so use the repository's short transaction helper through
+		// the public contract only in callers that do not hold that fence.
 		return m.repo.AddCASRefsSized(context.Background(), roomID, objects, m.cfg.CASRoomQuotaBytes)
 	}); err != nil {
 		return snap, err
@@ -504,7 +556,11 @@ func (m *Manager) engine(roomID string) (*engine, error) {
 	if eng, ok := m.engines[roomID]; ok {
 		return eng, nil
 	}
-	eng := &engine{state: vmsync.NewWorkspaceState()}
+	state := vmsync.NewWorkspaceState()
+	state.MaxEntries = m.cfg.WorkspaceMaxEntries
+	state.MaxPathBytes = m.cfg.WorkspaceMaxPathBytes
+	state.MaxIdentities = m.cfg.WorkspaceMaxIdentities
+	eng := &engine{state: state}
 	m.engines[roomID] = eng
 	return eng, nil
 }

@@ -27,7 +27,11 @@ RUN addgroup -S tutti && adduser -S tutti -G tutti \
     && mkdir -p /data && chown -R tutti:tutti /data
 COPY --from=build /out/open-tutti-server /usr/local/bin/open-tutti-server
 USER tutti
-ENV OPEN_TUTTI_LISTEN_ADDR=0.0.0.0:8080 \
+# The image default is safe for direct `docker run`: a caller must explicitly
+# opt into the bridge topology below. Compose overrides both values and pins
+# the host publication to 127.0.0.1.
+ENV OPEN_TUTTI_LISTEN_ADDR=127.0.0.1:8080 \
+    OPEN_TUTTI_PUBLIC_URL=http://localhost:8080 \
     OPEN_TUTTI_DATA_DIR=/data
 VOLUME ["/data"]
 EXPOSE 8080

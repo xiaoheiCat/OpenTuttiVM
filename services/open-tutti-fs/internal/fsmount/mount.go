@@ -22,11 +22,17 @@ import (
 )
 
 func roomErrno(err error) syscall.Errno {
+	if errors.Is(err, roomfs.ErrRejected) {
+		return syscall.EAGAIN
+	}
+	if errors.Is(err, roomfs.ErrCallTimeout) {
+		return syscall.EIO
+	}
 	for _, item := range []struct {
 		code  string
 		errno syscall.Errno
 	}{{"ENOENT", syscall.ENOENT}, {"EEXIST", syscall.EEXIST}, {"ENOTEMPTY", syscall.ENOTEMPTY}, {"EAGAIN", syscall.EAGAIN}, {"EIO", syscall.EIO}} {
-		if strings.Contains(err.Error(), item.code) {
+		if strings.HasPrefix(err.Error(), item.code+":") || err.Error() == item.code {
 			return item.errno
 		}
 	}
@@ -154,7 +160,7 @@ func (n *roomNode) invalidatePath(path string) {
 			// Metadata invalidation must retire the cached directory mode too;
 			// otherwise a remote chmod (including explicit 0000) is hidden by
 			// the roomNode's old permissions after EntryNotify re-lookup.
-			if st, err := n.client.Stat(path); err == nil && st.Exists && st.Dir {
+			if st, err := n.client.StatContext(context.Background(), path); err == nil && st.Exists && st.Dir {
 				dir.mu.Lock()
 				dir.dirMode = st.Mode & 0o7777
 				dir.dirModeSet = true
@@ -233,7 +239,7 @@ func (n *roomNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 // on a directory never reached RoomFS and silently stayed local.
 func (n *roomNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
 	if mode, ok := in.GetMode(); ok {
-		if err := n.client.Chmod(n.path(""), mode); err != nil {
+		if err := n.client.ChmodContext(ctx, n.path(""), mode); err != nil {
 			return roomErrno(err)
 		}
 		n.dirMode = mode & 0o7777
@@ -257,7 +263,7 @@ func (n *roomNode) Opendir(ctx context.Context) syscall.Errno { return 0 }
 
 func (n *roomNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	path := n.path(name)
-	st, err := n.client.Stat(path)
+	st, err := n.client.StatContext(ctx, path)
 	if err != nil || !st.Exists {
 		return nil, syscall.ENOENT
 	}
@@ -279,7 +285,7 @@ func (n *roomNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 }
 
 func (n *roomNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
-	entries, err := n.client.List(n.path(""))
+	entries, err := n.client.ListContext(ctx, n.path(""))
 	if err != nil {
 		return nil, roomErrno(err)
 	}
@@ -295,7 +301,7 @@ func (n *roomNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 }
 
 func (n *roomNode) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	if err := n.client.Mkdir(n.path(name), mode); err != nil {
+	if err := n.client.MkdirContext(ctx, n.path(name), mode); err != nil {
 		return nil, roomErrno(err)
 	}
 	perms := mode & 0o7777
@@ -311,7 +317,7 @@ func (n *roomNode) Mkdir(ctx context.Context, name string, mode uint32, out *fus
 
 func (n *roomNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
 	path := n.path(name)
-	if err := n.client.Create(path, mode); err != nil {
+	if err := n.client.CreateContext(ctx, path, mode); err != nil {
 		return nil, nil, 0, roomErrno(err)
 	}
 	// Report the REQUESTED permission bits, not a widened 0644: the
@@ -324,14 +330,14 @@ func (n *roomNode) Create(ctx context.Context, name string, flags uint32, mode u
 }
 
 func (n *roomNode) Unlink(ctx context.Context, name string) syscall.Errno {
-	if err := n.client.Remove(n.path(name)); err != nil {
+	if err := n.client.RemoveContext(ctx, n.path(name)); err != nil {
 		return roomErrno(err)
 	}
 	return 0
 }
 
 func (n *roomNode) Rmdir(ctx context.Context, name string) syscall.Errno {
-	if err := n.client.Remove(n.path(name)); err != nil {
+	if err := n.client.RemoveContext(ctx, n.path(name)); err != nil {
 		return roomErrno(err)
 	}
 	return 0
@@ -363,7 +369,7 @@ func (n *roomNode) Rename(ctx context.Context, name string, newParent fs.InodeEm
 	// create at the destination between the check and the submit, and a
 	// plain rename would then replace content the caller forbade
 	// replacing.
-	if err := n.client.Rename(from, to, flags&renameNoreplace != 0); err != nil {
+	if err := n.client.RenameContext(ctx, from, to, flags&renameNoreplace != 0); err != nil {
 		return roomErrno(err)
 	}
 	// The FUSE inode survives its rename, but fileNode captured its
@@ -513,12 +519,16 @@ func (f *fileNode) invalidate() {
 }
 
 func (f *fileNode) load() syscall.Errno {
+	return f.loadContext(context.Background())
+}
+
+func (f *fileNode) loadContext(ctx context.Context) syscall.Errno {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.loaded {
 		return 0
 	}
-	content, base, err := f.client.ReadWithHash(f.path)
+	content, base, err := f.client.ReadWithHashContext(ctx, f.path)
 	if err != nil {
 		return roomErrno(err)
 	}
@@ -529,7 +539,7 @@ func (f *fileNode) load() syscall.Errno {
 }
 
 func (f *fileNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	if errno := f.load(); errno != 0 {
+	if errno := f.loadContext(ctx); errno != 0 {
 		return nil, 0, errno
 	}
 	return nil, fuse.FOPEN_KEEP_CACHE, 0
@@ -542,7 +552,7 @@ func (f *fileNode) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadR
 	// empty bytes to an already-open handle would corrupt what the
 	// caller sees after a remote edit.
 	if !f.loaded {
-		content, base, err := f.client.ReadWithHash(f.path)
+		content, base, err := f.client.ReadWithHashContext(ctx, f.path)
 		if err != nil {
 			return nil, roomErrno(err)
 		}
@@ -579,7 +589,7 @@ func (f *fileNode) Write(ctx context.Context, fh fs.FileHandle, data []byte, off
 	// written span as the whole file — silent data loss accepted by
 	// the base-hash guard (invalidations often keep the hash).
 	if !f.loaded {
-		content, base, err := f.client.ReadWithHash(f.path)
+		content, base, err := f.client.ReadWithHashContext(ctx, f.path)
 		if err != nil {
 			return 0, roomErrno(err)
 		}
@@ -620,7 +630,7 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	if !dirty {
 		return 0
 	}
-	newBase, err := f.client.Write(p, content, base)
+	newBase, err := f.client.WriteContext(ctx, p, content, base)
 	if err != nil {
 		// Room-level rejections (base mismatch, barrier fencing) map to
 		// EAGAIN so editors retry against the fresh revision.
@@ -653,7 +663,7 @@ func (f *fileNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 		// Invalidated by a remote edit: the cached size predates the
 		// edit, so ask the room now (a stat-sized round trip, but
 		// never a stale length on an accepted edit).
-		if st, err := f.client.Stat(f.path); err == nil && st != nil && st.Exists {
+		if st, err := f.client.StatContext(ctx, f.path); err == nil && st != nil && st.Exists {
 			f.srvSize = int64(st.Size)
 			// Zero IS authoritative here: the bridge resolves unset
 			// modes to readable defaults before the wire (an explicit
@@ -699,7 +709,7 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 			// Standalone truncate(2) on an unopened node: load the
 			// authoritative content first — resizing an empty buffer
 			// would fabricate zeros or drop real bytes.
-			content, base, err := f.client.ReadWithHash(f.path)
+			content, base, err := f.client.ReadWithHashContext(ctx, f.path)
 			if err != nil {
 				f.mu.Unlock()
 				return roomErrno(err)
@@ -733,7 +743,7 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		// submit the resize now or truncate(2) "succeeds" while the
 		// authoritative content never changes.
 		if fh == nil {
-			newBase, err := f.client.Write(tp, content, base)
+			newBase, err := f.client.WriteContext(ctx, tp, content, base)
 			if err != nil {
 				return syscall.EAGAIN
 			}
@@ -760,7 +770,7 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		// reaches other participants. Commit the cached mode ONLY
 		// after acceptance — caching first kept reporting uncommitted
 		// (possibly WIDENED) permissions after a rejected Chmod.
-		if err := f.client.Chmod(cp, perms); err != nil {
+		if err := f.client.ChmodContext(ctx, cp, perms); err != nil {
 			return roomErrno(err)
 		}
 		f.mu.Lock()

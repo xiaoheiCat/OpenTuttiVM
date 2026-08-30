@@ -1041,10 +1041,7 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 		return true, nil
 	}
 	// Automatic succession needs a server-verified FULL replica, like explicit
-	// transfer. A client policy report is not evidence. Without a verified
-	// candidate, fail closed by dissolving after the grace period rather than
-	// leaving an ownerless room that no remaining member can administer.
-	// on the next cycle.
+	// transfer. A client policy report is not evidence.
 	full := make([]store.Membership, 0, len(online))
 	for _, m := range online {
 		if m.TransferReady && m.TransferGeneration != "" && m.TransferAppliedSeq > 0 && s.currentSeq != nil {
@@ -1081,10 +1078,8 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 	// leaderless for the next cycle, and a failed ownership write
 	// leaves a full-marked member the next cycle can promote.
 	if len(full) == 0 {
-		if err := s.dissolveLocked(ctx, roomID); err != nil {
-			return false, err
-		}
-		return true, nil
+		s.broadcast(roomID, vmprotocol.Event{Topic: vmprotocol.TopicOwnerLost, RoomID: roomID, Payload: mustJSON(map[string]string{"reason": "needs_verified_owner", "status": "needs_owner"})})
+		return false, nil
 	}
 	room.OwnerDeviceID = successor
 	room.PendingTransferToDevice = ""

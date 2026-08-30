@@ -29,6 +29,19 @@ type memHandler struct {
 	srv      *Server
 }
 
+type deadlineConn struct {
+	net.Conn
+	deadline chan time.Time
+}
+
+func (c *deadlineConn) SetWriteDeadline(deadline time.Time) error {
+	select {
+	case c.deadline <- deadline:
+	default:
+	}
+	return c.Conn.SetWriteDeadline(deadline)
+}
+
 // testContentHash mirrors the replica's content hash format without
 // crossing the module boundary.
 func testContentHash(content []byte) string {
@@ -331,6 +344,34 @@ func TestCallContextTimesOutAndClosesPending(t *testing.T) {
 	}
 	if _, err := c.Stat("after-timeout"); err == nil {
 		t.Fatal("closed client accepted a call")
+	}
+}
+
+func TestCallContextAddsDefaultTimeoutToNonBackgroundContext(t *testing.T) {
+	left, right := net.Pipe()
+	deadlines := make(chan time.Time, 2)
+	c := NewClient(&deadlineConn{Conn: left, deadline: deadlines})
+	defer right.Close()
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), struct{}{}, "fuse"))
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.CallContext(ctx, Request{Type: TypeStat, Path: "blocked"}, nil)
+		done <- err
+	}()
+	select {
+	case deadline := <-deadlines:
+		remaining := time.Until(deadline)
+		if remaining < defaultCallTimeout-time.Second || remaining > defaultCallTimeout {
+			t.Fatalf("default deadline remaining = %v", remaining)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("default write deadline was not set")
+	}
+	cancel()
+	err := <-done
+	if !errors.Is(err, ErrCallTimeout) {
+		t.Fatalf("error = %v", err)
 	}
 }
 

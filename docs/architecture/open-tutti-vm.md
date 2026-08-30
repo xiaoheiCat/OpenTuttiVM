@@ -65,6 +65,10 @@ Hybrid, by content class:
   replacement becomes authoritative, the server verifies the manifest's
   object graph (manifest decodes, self-hash matches, every chunk is in
   CAS), so replicas never chase dangling references.
+  Chunk PUTs are pending reservations scoped to room/device/hash with a
+  bounded per-device quota and TTL. Only an accepted `blob_replace` promotes
+  the manifest and chunks to live room references; rejected or expired
+  reservations are swept and do not consume durable room quota.
 - **Semantic conflicts** (same-point edits, racing replaces) — server
   opens a **conflict barrier**: the path is fenced, the last author
   becomes resolver, everyone else is notified; the barrier resolves

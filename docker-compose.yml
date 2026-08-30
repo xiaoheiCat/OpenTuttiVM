@@ -19,6 +19,7 @@ services:
       - "127.0.0.1:8080:8080"
     environment:
       OPEN_TUTTI_LISTEN_ADDR: 0.0.0.0:8080
+      OPEN_TUTTI_PUBLIC_URL: http://localhost:8080
       # Docker forwards to the container listener, so the server needs a
       # narrow, Compose-only exception to its plain-HTTP loopback check.
       OPEN_TUTTI_COMPOSE_LOCAL_MODE: "1"

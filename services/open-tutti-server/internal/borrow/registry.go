@@ -17,12 +17,13 @@ import (
 
 // Errors surfaced to API/WS callers.
 var (
-	ErrNotOwner           = errors.New("only the agent owner may change sharing")
-	ErrNotBorrowable      = errors.New("agent does not satisfy the BorrowSafe contract")
-	ErrUnknownAgent       = errors.New("agent instance not shared in this room")
-	ErrStaleLease         = errors.New("borrowing lease revoked (stale generation)")
-	ErrNotOperator        = errors.New("only the session operator may decide approvals")
-	ErrCommandFailedOwner = errors.New("only the owning device may report command failure")
+	ErrNotOwner            = errors.New("only the agent owner may change sharing")
+	ErrNotBorrowable       = errors.New("agent does not satisfy the BorrowSafe contract")
+	ErrUnknownAgent        = errors.New("agent instance not shared in this room")
+	ErrStaleLease          = errors.New("borrowing lease revoked (stale generation)")
+	ErrNotOperator         = errors.New("only the session operator may decide approvals")
+	ErrCommandFailedOwner  = errors.New("only the owning device may report command failure")
+	ErrDeliveryUnavailable = errors.New("borrow delivery unavailable")
 )
 
 // AgentInstance is one shared agent in one room.
@@ -260,15 +261,19 @@ func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPaylo
 // lock, then invokes the bounded enqueue callback before releasing it. The
 // callback must not perform socket I/O; its generation is the final delivery
 // fence used by the writer.
-func (r *Registry) DispatchCommand(roomID string, p borrowagent.BorrowCommandPayload, deliver func(string, uint64, borrowagent.BorrowCommandPayload)) error {
+func (r *Registry) DispatchCommand(roomID string, p borrowagent.BorrowCommandPayload, deliver func(string, uint64, borrowagent.BorrowCommandPayload) bool) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	out, err := r.commandLocked(roomID, p)
 	if err != nil {
+		r.mu.Unlock()
 		return err
 	}
 	inst := r.agents[roomID][p.AgentInstanceID]
-	deliver(inst.OwnerDeviceID, inst.LeaseGeneration, out)
+	owner, generation := inst.OwnerDeviceID, inst.LeaseGeneration
+	r.mu.Unlock()
+	if !deliver(owner, generation, out) {
+		return ErrDeliveryUnavailable
+	}
 	return nil
 }
 
@@ -395,14 +400,25 @@ func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, comma
 // DispatchApproval validates and records a prompt under the lease lock, then
 // invokes a bounded enqueue callback carrying its generation. The callback
 // must not perform socket I/O.
-func (r *Registry) DispatchApproval(roomID, agentInstanceID, approvalID, commandID string, deliver func(string, uint64)) error {
+func (r *Registry) DispatchApproval(roomID, agentInstanceID, approvalID, commandID string, deliver func(string, uint64) bool) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	operator, err := r.openApprovalLocked(roomID, agentInstanceID, approvalID, commandID)
 	if err != nil {
+		r.mu.Unlock()
 		return err
 	}
-	deliver(operator, r.agents[roomID][agentInstanceID].LeaseGeneration)
+	generation := r.agents[roomID][agentInstanceID].LeaseGeneration
+	apKey := approvalScope(roomID, agentInstanceID, approvalID)
+	ap := r.approvals[apKey]
+	r.mu.Unlock()
+	if !deliver(operator, generation) {
+		r.mu.Lock()
+		if inst := r.agents[roomID][agentInstanceID]; inst != nil && inst.LeaseGeneration == generation && inst.Shared {
+			r.approvals[apKey] = ap
+		}
+		r.mu.Unlock()
+		return ErrDeliveryUnavailable
+	}
 	return nil
 }
 
@@ -440,18 +456,28 @@ func (r *Registry) ResolveDecision(roomID, agentInstanceID, approvalID, deciderD
 
 // ResolveDecisionDispatch consumes a decision under the registry lock and
 // passes a generation-stamped delivery to a bounded, nonblocking enqueue.
-func (r *Registry) ResolveDecisionDispatch(roomID, agentInstanceID, approvalID, deciderDeviceID string, deliver func(string, uint64)) error {
+func (r *Registry) ResolveDecisionDispatch(roomID, agentInstanceID, approvalID, deciderDeviceID string, deliver func(string, uint64) bool) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	ap, ok := r.approvals[approvalScope(roomID, agentInstanceID, approvalID)]
 	if !ok {
+		r.mu.Unlock()
 		return errors.New("unknown or expired approval")
 	}
 	if ap.operator != deciderDeviceID {
+		r.mu.Unlock()
 		return ErrNotOperator
 	}
 	delete(r.approvals, approvalScope(roomID, agentInstanceID, approvalID))
-	deliver(ap.agentOwner, ap.generation)
+	owner, generation := ap.agentOwner, ap.generation
+	r.mu.Unlock()
+	if !deliver(owner, generation) {
+		r.mu.Lock()
+		if inst := r.agents[roomID][agentInstanceID]; inst != nil && inst.LeaseGeneration == generation && inst.Shared {
+			r.approvals[approvalScope(roomID, agentInstanceID, approvalID)] = ap
+		}
+		r.mu.Unlock()
+		return ErrDeliveryUnavailable
+	}
 	return nil
 }
 
