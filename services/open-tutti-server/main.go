@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -77,7 +78,7 @@ func run() error {
 	// Reference-aware CAS collection: dissolution (per-room and the
 	// startup sweep) drops object-store entries whose last reference
 	// died, keeping OPEN_TUTTI_OBJECTS_DIR bounded.
-	collector := casCollector{repo: repo, cas: cas, log: log}
+	collector := &casCollector{repo: repo, cas: cas, log: log}
 	rooms.SetCASCollector(collector)
 	// Quota/reference failures can create orphans without dissolving a room.
 	// Sweep before serving requests, then retry during ordinary maintenance.
@@ -174,48 +175,51 @@ func logLevel(s string) slog.Level {
 // casCollector deletes dissolved rooms' objects once no surviving room
 // references them.
 type casCollector struct {
-	repo store.Repository
-	cas  vmcas.Store
-	log  *slog.Logger
+	repo       store.Repository
+	cas        vmcas.Store
+	log        *slog.Logger
+	mu         sync.Mutex
+	localAfter string
+	dbAfter    string
 }
 
-func (c casCollector) Collect(ctx context.Context, hashes []string) {
+const casSweepPageSize = 256
+
+func (c *casCollector) Collect(ctx context.Context, hashes []string) {
 	if len(hashes) == 0 {
 		if local, ok := c.cas.(*vmcas.LocalStore); ok {
-			after := ""
-			for page := 0; page < 16; page++ {
-				objects, err := local.List(after, 256)
-				if err != nil {
-					c.log.Warn("cas file enumeration", "err", err)
-					break
-				}
+			c.mu.Lock()
+			localAfter, dbAfter := c.localAfter, c.dbAfter
+			c.mu.Unlock()
+			objects, err := local.List(localAfter, casSweepPageSize)
+			if err != nil {
+				c.log.Warn("cas file enumeration", "err", err)
+			} else {
 				hashes = append(hashes, objects...)
 				if len(objects) > 0 {
-					after = objects[len(objects)-1]
+					localAfter = objects[len(objects)-1]
 				}
-				if len(objects) < 256 {
-					break
+				if len(objects) < casSweepPageSize {
+					localAfter = ""
 				}
 			}
-			for page := 0; page < 16; page++ {
-				objects, err := c.repo.ListCASObjects(ctx, after, 256)
-				if err != nil {
-					c.log.Warn("cas object enumeration", "err", err)
-					break
-				}
-				if len(objects) == 0 {
-					break
-				}
-				for _, object := range objects {
-					after = object.Hash
+			objectsDB, err := c.repo.ListCASObjects(ctx, dbAfter, casSweepPageSize)
+			if err != nil {
+				c.log.Warn("cas object enumeration", "err", err)
+			} else {
+				for _, object := range objectsDB {
+					dbAfter = object.Hash
 					if ok, err := local.Has(object.Hash); err == nil && ok {
 						hashes = append(hashes, object.Hash)
 					}
 				}
-				if len(objects) < 256 {
-					break
+				if len(objectsDB) < casSweepPageSize {
+					dbAfter = ""
 				}
 			}
+			c.mu.Lock()
+			c.localAfter, c.dbAfter = localAfter, dbAfter
+			c.mu.Unlock()
 		}
 	}
 	if orphaned, err := c.repo.ListCASOrphans(ctx); err == nil {

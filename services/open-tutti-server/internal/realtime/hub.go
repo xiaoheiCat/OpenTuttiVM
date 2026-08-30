@@ -575,7 +575,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 					"room", c.RoomID, "agent", p.AgentInstanceID, "sender", c.DeviceID)
 				continue
 			}
-			err := h.borrows.DispatchApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID, p.CommandID, func(operator string, generation uint64) bool {
+			err := h.borrows.DispatchApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID, p.CommandID, p.Options, func(operator string, generation uint64) bool {
 				p.SessionOperatorDeviceID = operator
 				return h.enqueueBorrow(c.RoomID, operator, p.AgentInstanceID, p.ApprovalID, generation, vmprotocol.Event{Topic: borrowagent.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p)})
 			})
@@ -594,7 +594,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			// before a kick can otherwise resolve and forward after
 			// the membership deletion committed.
 			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
-				return h.borrows.ResolveDecisionDispatch(c.RoomID, p.AgentInstanceID, p.ApprovalID, c.DeviceID, func(owner string, generation uint64) bool {
+				return h.borrows.ResolveDecisionDispatch(c.RoomID, p.AgentInstanceID, p.ApprovalID, c.DeviceID, p.Choice, func(owner string, generation uint64) bool {
 					return h.enqueueBorrow(c.RoomID, owner, p.AgentInstanceID, "", generation, vmprotocol.Event{Topic: borrowagent.TopicApprovalDecision, RoomID: c.RoomID, Payload: mustJSON(p)})
 				})
 			})

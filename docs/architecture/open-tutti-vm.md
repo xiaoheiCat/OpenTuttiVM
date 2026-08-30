@@ -226,10 +226,14 @@ permissions are `0600`; Windows uses loopback TCP plus the same first-frame
 capability. Failed room decisions return retryable `EAGAIN`, while transport,
 timeout, and CAS failures return `EIO` without discarding dirty mount buffers.
 
-This boundary does not claim that Desktop Docker project orchestration or
-durable Full Replica persistence has been implemented. Host lifecycle and
-promotion logic must provide those capabilities before they are advertised as
-product behavior.
+This boundary does not claim that Desktop Docker project orchestration,
+persistent Full Replica state across process restarts, or real Host-backed
+agent borrowing has been implemented. Full policy currently means eager
+materialization for the lifetime of the standalone room-sync process, not a
+durable replica database. Standalone borrowing uses the observation-only
+Noop host and fails closed; it is not the real `packages/agent/host` runtime.
+Host lifecycle, durable replica storage, and Desktop composition must provide
+those capabilities before they are advertised as product behavior.
 
 Go modules build and test on Linux, macOS, and Windows; the FUSE layer is
 Linux-only by design (it runs inside session containers on the Docker

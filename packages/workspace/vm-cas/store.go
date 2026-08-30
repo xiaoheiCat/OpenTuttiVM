@@ -203,10 +203,14 @@ func (s *LocalStore) Put(hash string, content []byte) error {
 		tmp.Close()
 		return fmt.Errorf("write chunk: %w", err)
 	}
+	if err := syncCASFile(tmp); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync chunk: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp.Name(), p); err != nil {
+	if err := replaceCASFile(tmp.Name(), p); err != nil {
 		// Windows cannot rename over an existing destination: two
 		// callers storing the same hash can both pass the initial Has
 		// check, and the loser's rename now fails on the winner's
@@ -218,6 +222,9 @@ func (s *LocalStore) Put(hash string, content []byte) error {
 			return nil
 		}
 		return fmt.Errorf("commit chunk: %w", err)
+	}
+	if err := syncCASDir(filepath.Dir(p)); err != nil {
+		return fmt.Errorf("sync chunk directory: %w", err)
 	}
 	return nil
 }

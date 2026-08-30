@@ -103,22 +103,22 @@ func TestApprovalsRouteToBorrowerNotOwner(t *testing.T) {
 
 	// The executing agent on dev_alice raises a permission prompt; the
 	// current borrower (dev_bob) is the operator.
-	operator, err := r.OpenApproval("room1", "agent-claude-1", "ap1", "c1")
+	operator, err := r.OpenApproval("room1", "agent-claude-1", "ap1", "c1", []string{"allow", "deny"})
 	if err != nil || operator != "dev_bob" {
 		t.Fatalf("operator = %q err = %v", operator, err)
 	}
 
 	// The owner must NOT be able to decide.
-	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_alice"); !errors.Is(err, ErrNotOperator) {
+	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_alice", 0); !errors.Is(err, ErrNotOperator) {
 		t.Fatalf("owner decision err = %v", err)
 	}
 	// The borrower decides; routing returns the owning device.
-	owner, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_bob")
+	owner, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_bob", 1)
 	if err != nil || owner != "dev_alice" {
 		t.Fatalf("borrower decision owner = %q err = %v", owner, err)
 	}
 	// Decisions are single-use.
-	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_bob"); err == nil {
+	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_bob", 1); err == nil {
 		t.Fatal("expected approval to be consumed")
 	}
 }
@@ -142,15 +142,15 @@ func TestApprovalRoutesToOriginatingCommandBorrower(t *testing.T) {
 	if _, err := r.Command("room1", carol); err != nil {
 		t.Fatal(err)
 	}
-	operator, err := r.OpenApproval("room1", "agent-claude-1", "ap-bob", "cmd-bob")
+	operator, err := r.OpenApproval("room1", "agent-claude-1", "ap-bob", "cmd-bob", []string{"yes"})
 	if err != nil || operator != "dev_bob" {
 		t.Fatalf("prompt routed to %q err = %v (want dev_bob)", operator, err)
 	}
-	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap-bob", "dev_carol"); !errors.Is(err, ErrNotOperator) {
+	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap-bob", "dev_carol", 0); !errors.Is(err, ErrNotOperator) {
 		t.Fatalf("carol deciding bob's prompt err = %v", err)
 	}
 	// Without a command id the current operator (carol) receives it.
-	operator, err = r.OpenApproval("room1", "agent-claude-1", "ap-carol", "")
+	operator, err = r.OpenApproval("room1", "agent-claude-1", "ap-carol", "", nil)
 	if err != nil || operator != "dev_carol" {
 		t.Fatalf("legacy routing operator = %q err = %v", operator, err)
 	}
@@ -174,7 +174,7 @@ func TestReShareStartsNewGenerationAndClearsOperator(t *testing.T) {
 		t.Fatalf("re-share generation = %d", second.LeaseGeneration)
 	}
 	// No operator until a new command arrives.
-	if _, err := r.OpenApproval("room1", "agent-claude-1", "ap2", ""); err == nil {
+	if _, err := r.OpenApproval("room1", "agent-claude-1", "ap2", "", nil); err == nil {
 		t.Fatal("expected no active borrowing session after re-share")
 	}
 }
@@ -189,14 +189,14 @@ func TestClearRoomDropsAgentsAndApprovals(t *testing.T) {
 	if _, err := r.Command("room1", cmd); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.OpenApproval("room1", "agent-claude-1", "ap1", "c1"); err != nil {
+	if _, err := r.OpenApproval("room1", "agent-claude-1", "ap1", "c1", nil); err != nil {
 		t.Fatal(err)
 	}
 	r.ClearRoom("room1")
 	if _, ok := r.Agent("room1", "agent-claude-1"); ok {
 		t.Fatal("agent survived ClearRoom")
 	}
-	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_bob"); err == nil {
+	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap1", "dev_bob", -1); err == nil {
 		t.Fatal("approval survived ClearRoom")
 	}
 }
@@ -237,7 +237,7 @@ func TestDispatchCallbacksDoNotRunUnderRegistryLock(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.DispatchApproval("room1", cmd.AgentInstanceID, "approval", cmd.CommandID, func(operator string, generation uint64) bool {
+	if err := r.DispatchApproval("room1", cmd.AgentInstanceID, "approval", cmd.CommandID, []string{"yes"}, func(operator string, generation uint64) bool {
 		if operator != "dev_bob" || generation != shared.LeaseGeneration {
 			t.Errorf("invalid approval delivery: operator=%q generation=%d", operator, generation)
 		}
@@ -245,12 +245,47 @@ func TestDispatchCallbacksDoNotRunUnderRegistryLock(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.ResolveDecisionDispatch("room1", cmd.AgentInstanceID, "approval", "dev_bob", func(owner string, generation uint64) bool {
+	if err := r.ResolveDecisionDispatch("room1", cmd.AgentInstanceID, "approval", "dev_bob", 0, func(owner string, generation uint64) bool {
 		if owner != "dev_alice" || generation != shared.LeaseGeneration {
 			t.Errorf("invalid decision delivery: owner=%q generation=%d", owner, generation)
 		}
 		return true
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCommandIDRetriesAreIdempotentAndPayloadBound(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "same", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration, Input: "one"}
+	if _, err := r.Command("room1", cmd); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Command("room1", cmd); err != nil {
+		t.Fatalf("same retry: %v", err)
+	}
+	changed := cmd
+	changed.Input = "two"
+	if _, err := r.Command("room1", changed); !errors.Is(err, ErrDuplicateCommand) {
+		t.Fatalf("changed retry = %v", err)
+	}
+}
+
+func TestApprovalChoiceValidationDoesNotConsume(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "choice", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+	if _, err := r.Command("room1", cmd); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.OpenApproval("room1", cmd.AgentInstanceID, "ap-choice", cmd.CommandID, []string{"yes"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.ResolveDecision("room1", cmd.AgentInstanceID, "ap-choice", "dev_bob", 2); !errors.Is(err, ErrInvalidChoice) {
+		t.Fatalf("invalid choice = %v", err)
+	}
+	if _, err := r.ResolveDecision("room1", cmd.AgentInstanceID, "ap-choice", "dev_bob", -1); err != nil {
+		t.Fatalf("approval was consumed: %v", err)
 	}
 }

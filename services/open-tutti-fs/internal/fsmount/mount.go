@@ -22,6 +22,9 @@ import (
 )
 
 func roomErrno(err error) syscall.Errno {
+	if err == nil {
+		return 0
+	}
 	if errors.Is(err, roomfs.ErrRejected) {
 		return syscall.EAGAIN
 	}
@@ -36,9 +39,12 @@ func roomErrno(err error) syscall.Errno {
 			return item.errno
 		}
 	}
-	var errno syscall.Errno
-	if errors.As(err, &errno) {
-		return errno
+	return syscall.EIO
+}
+
+func roomWriteErrno(err error) syscall.Errno {
+	if errors.Is(err, roomfs.ErrRejected) || strings.HasPrefix(err.Error(), roomfs.ErrorAgain) {
+		return syscall.EAGAIN
 	}
 	return syscall.EIO
 }
@@ -264,7 +270,10 @@ func (n *roomNode) Opendir(ctx context.Context) syscall.Errno { return 0 }
 func (n *roomNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	path := n.path(name)
 	st, err := n.client.StatContext(ctx, path)
-	if err != nil || !st.Exists {
+	if err != nil {
+		return nil, roomErrno(err)
+	}
+	if st == nil || !st.Exists {
 		return nil, syscall.ENOENT
 	}
 	if st.Dir {
@@ -632,7 +641,7 @@ func (f *fileNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	}
 	newBase, err := f.client.WriteContext(ctx, p, content, base)
 	if err != nil {
-		return roomErrno(err)
+		return roomWriteErrno(err)
 	}
 	f.mu.Lock()
 	if newBase != "" {
@@ -661,7 +670,8 @@ func (f *fileNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 		// Invalidated by a remote edit: the cached size predates the
 		// edit, so ask the room now (a stat-sized round trip, but
 		// never a stale length on an accepted edit).
-		if st, err := f.client.StatContext(ctx, f.path); err == nil && st != nil && st.Exists {
+		st, err := f.client.StatContext(ctx, f.path)
+		if err == nil && st != nil && st.Exists {
 			f.srvSize = int64(st.Size)
 			// Zero IS authoritative here: the bridge resolves unset
 			// modes to readable defaults before the wire (an explicit
@@ -671,6 +681,16 @@ func (f *fileNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 			f.srvMode = st.Mode & 0o7777
 			f.srvModeSet = true
 			out.Attr.Size = uint64(f.srvSize)
+		} else {
+			// Preserve the last useful mode/size already placed in out, but
+			// never report a successful stat for a failed refresh.
+			if err == nil {
+				if st == nil || !st.Exists {
+					return syscall.ENOENT
+				}
+				return syscall.EIO
+			}
+			return roomErrno(err)
 		}
 	}
 	switch {
@@ -743,7 +763,7 @@ func (f *fileNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAt
 		if fh == nil {
 			newBase, err := f.client.WriteContext(ctx, tp, content, base)
 			if err != nil {
-				return roomErrno(err)
+				return roomWriteErrno(err)
 			}
 			f.mu.Lock()
 			if newBase != "" {

@@ -24,6 +24,8 @@ var (
 	ErrNotOperator         = errors.New("only the session operator may decide approvals")
 	ErrCommandFailedOwner  = errors.New("only the owning device may report command failure")
 	ErrDeliveryUnavailable = errors.New("borrow delivery unavailable")
+	ErrDuplicateCommand    = errors.New("borrow command id already used with different payload")
+	ErrInvalidChoice       = errors.New("approval choice is not one of the advertised options")
 )
 
 // AgentInstance is one shared agent in one room.
@@ -52,7 +54,7 @@ type Registry struct {
 	// approval prompts route to the borrower that originated the
 	// execution even after other borrowers send their own commands.
 	// Bounded FIFO: only recent commands can still be executing.
-	commandBorrowers map[string]string
+	commandBorrowers map[string]commandRecord
 	// commandOrder bounds the tracked commands PER ROOM+AGENT: a global
 	// FIFO let 65 unrelated commands evict a still-executing command's
 	// mapping, so its later approval prompt failed closed and the
@@ -67,6 +69,12 @@ type openApproval struct {
 	operator   string
 	generation uint64
 	openedAt   time.Time
+	options    []string
+}
+
+type commandRecord struct {
+	payload  borrowagent.BorrowCommandPayload
+	borrower string
 }
 
 // maxTrackedCommandsPerAgent bounds one room+agent's tracked commands:
@@ -86,7 +94,7 @@ func NewRegistry() *Registry {
 	return &Registry{
 		agents:           map[string]map[string]*AgentInstance{},
 		approvals:        map[string]openApproval{},
-		commandBorrowers: map[string]string{},
+		commandBorrowers: map[string]commandRecord{},
 		commandOrder:     map[string][]string{},
 	}
 }
@@ -213,23 +221,33 @@ func (r *Registry) Revoke(roomID, ownerDeviceID, agentInstanceID string) (borrow
 func (r *Registry) Command(roomID string, p borrowagent.BorrowCommandPayload) (borrowagent.BorrowCommandPayload, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.commandLocked(roomID, p)
+	out, _, err := r.commandLocked(roomID, p)
+	return out, err
 }
 
-func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPayload) (borrowagent.BorrowCommandPayload, error) {
+func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPayload) (borrowagent.BorrowCommandPayload, bool, error) {
 	room := r.agents[roomID]
 	inst := room[p.AgentInstanceID]
 	if inst == nil {
-		return p, ErrUnknownAgent
+		return p, false, ErrUnknownAgent
 	}
 	// A known instance carrying a dead generation reports the revocation
 	// specifically — the borrower learns their lease is gone, not that the
 	// agent never existed.
 	if p.LeaseGeneration != inst.LeaseGeneration {
-		return p, ErrStaleLease
+		return p, false, ErrStaleLease
 	}
 	if !inst.Shared {
-		return p, ErrUnknownAgent
+		return p, false, ErrUnknownAgent
+	}
+	if p.CommandID != "" {
+		key := roomID + "\x00" + p.AgentInstanceID + "\x00" + p.CommandID
+		if previous, ok := r.commandBorrowers[key]; ok {
+			if previous.payload.Input != p.Input || previous.payload.AgentInstanceID != p.AgentInstanceID || previous.payload.LeaseGeneration != p.LeaseGeneration || previous.borrower != p.BorrowerDeviceID {
+				return p, false, ErrDuplicateCommand
+			}
+			return previous.payload, false, nil
+		}
 	}
 	// BorrowerDeviceID was stamped by the hub from the authenticated
 	// connection before this call; recording it makes this device the
@@ -252,9 +270,9 @@ func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPaylo
 			}
 			r.commandOrder[agentKey] = order
 		}
-		r.commandBorrowers[key] = p.BorrowerDeviceID
+		r.commandBorrowers[key] = commandRecord{payload: p, borrower: p.BorrowerDeviceID}
 	}
-	return p, nil
+	return p, true, nil
 }
 
 // DispatchCommand validates and records a command while holding the lease
@@ -263,7 +281,7 @@ func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPaylo
 // fence used by the writer.
 func (r *Registry) DispatchCommand(roomID string, p borrowagent.BorrowCommandPayload, deliver func(string, uint64, borrowagent.BorrowCommandPayload) bool) error {
 	r.mu.Lock()
-	out, err := r.commandLocked(roomID, p)
+	out, fresh, err := r.commandLocked(roomID, p)
 	if err != nil {
 		r.mu.Unlock()
 		return err
@@ -271,6 +289,9 @@ func (r *Registry) DispatchCommand(roomID string, p borrowagent.BorrowCommandPay
 	inst := r.agents[roomID][p.AgentInstanceID]
 	owner, generation := inst.OwnerDeviceID, inst.LeaseGeneration
 	r.mu.Unlock()
+	if !fresh {
+		return nil
+	}
 	if !deliver(owner, generation, out) {
 		return ErrDeliveryUnavailable
 	}
@@ -290,11 +311,11 @@ func (r *Registry) CommandFailed(roomID, ownerDeviceID string, p borrowagent.Com
 	if p.LeaseGeneration != inst.LeaseGeneration {
 		return p, ErrStaleLease
 	}
-	borrower, ok := r.commandBorrowers[roomID+"\x00"+p.AgentInstanceID+"\x00"+p.CommandID]
+	record, ok := r.commandBorrowers[roomID+"\x00"+p.AgentInstanceID+"\x00"+p.CommandID]
 	if !ok {
 		return p, ErrUnknownAgent
 	}
-	p.BorrowerDeviceID = borrower
+	p.BorrowerDeviceID = record.borrower
 	return p, nil
 }
 
@@ -320,13 +341,13 @@ func (r *Registry) CurrentOperator(roomID, agentInstanceID string) (string, erro
 // borrower's fresh command cannot steal the first execution's prompt; a
 // legacy empty commandID falls back to the current session operator.
 // Returns the operator device id for targeted delivery.
-func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID string) (operator string, err error) {
+func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID string, options []string) (operator string, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.openApprovalLocked(roomID, agentInstanceID, approvalID, commandID)
+	return r.openApprovalLocked(roomID, agentInstanceID, approvalID, commandID, options)
 }
 
-func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, commandID string) (operator string, err error) {
+func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, commandID string, options []string) (operator string, err error) {
 	room := r.agents[roomID]
 	inst := room[agentInstanceID]
 	if inst == nil {
@@ -334,8 +355,8 @@ func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, comma
 	}
 	operator = inst.LastBorrower
 	if commandID != "" {
-		if borrower, ok := r.commandBorrowers[roomID+"\x00"+agentInstanceID+"\x00"+commandID]; ok {
-			operator = borrower
+		if record, ok := r.commandBorrowers[roomID+"\x00"+agentInstanceID+"\x00"+commandID]; ok {
+			operator = record.borrower
 		} else {
 			// Unknown NONEMPTY command id fails closed: the mapping may
 			// have aged out of the bounded FIFO while another borrower
@@ -393,6 +414,7 @@ func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, comma
 		roomID: roomID, agentOwner: inst.OwnerDeviceID, agentID: agentInstanceID, operator: operator,
 		generation: inst.LeaseGeneration,
 		openedAt:   now,
+		options:    append([]string(nil), options...),
 	}
 	return operator, nil
 }
@@ -400,9 +422,9 @@ func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, comma
 // DispatchApproval validates and records a prompt under the lease lock, then
 // invokes a bounded enqueue callback carrying its generation. The callback
 // must not perform socket I/O.
-func (r *Registry) DispatchApproval(roomID, agentInstanceID, approvalID, commandID string, deliver func(string, uint64) bool) error {
+func (r *Registry) DispatchApproval(roomID, agentInstanceID, approvalID, commandID string, options []string, deliver func(string, uint64) bool) error {
 	r.mu.Lock()
-	operator, err := r.openApprovalLocked(roomID, agentInstanceID, approvalID, commandID)
+	operator, err := r.openApprovalLocked(roomID, agentInstanceID, approvalID, commandID, options)
 	if err != nil {
 		r.mu.Unlock()
 		return err
@@ -440,7 +462,7 @@ func keyAgent(scope string) string {
 // ResolveDecision validates that the deciding device is the session
 // operator and returns the owning device for targeted routing. The scope
 // (room, agent instance) disambiguates provider-local approval ids.
-func (r *Registry) ResolveDecision(roomID, agentInstanceID, approvalID, deciderDeviceID string) (ownerDeviceID string, err error) {
+func (r *Registry) ResolveDecision(roomID, agentInstanceID, approvalID, deciderDeviceID string, choice int) (ownerDeviceID string, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ap, ok := r.approvals[approvalScope(roomID, agentInstanceID, approvalID)]
@@ -450,13 +472,16 @@ func (r *Registry) ResolveDecision(roomID, agentInstanceID, approvalID, deciderD
 	if ap.operator != deciderDeviceID {
 		return "", ErrNotOperator
 	}
+	if choice != -1 && (choice < 0 || choice >= len(ap.options)) {
+		return "", ErrInvalidChoice
+	}
 	delete(r.approvals, approvalScope(roomID, agentInstanceID, approvalID))
 	return ap.agentOwner, nil
 }
 
 // ResolveDecisionDispatch consumes a decision under the registry lock and
 // passes a generation-stamped delivery to a bounded, nonblocking enqueue.
-func (r *Registry) ResolveDecisionDispatch(roomID, agentInstanceID, approvalID, deciderDeviceID string, deliver func(string, uint64) bool) error {
+func (r *Registry) ResolveDecisionDispatch(roomID, agentInstanceID, approvalID, deciderDeviceID string, choice int, deliver func(string, uint64) bool) error {
 	r.mu.Lock()
 	ap, ok := r.approvals[approvalScope(roomID, agentInstanceID, approvalID)]
 	if !ok {
@@ -466,6 +491,10 @@ func (r *Registry) ResolveDecisionDispatch(roomID, agentInstanceID, approvalID, 
 	if ap.operator != deciderDeviceID {
 		r.mu.Unlock()
 		return ErrNotOperator
+	}
+	if choice != -1 && (choice < 0 || choice >= len(ap.options)) {
+		r.mu.Unlock()
+		return ErrInvalidChoice
 	}
 	delete(r.approvals, approvalScope(roomID, agentInstanceID, approvalID))
 	owner, generation := ap.agentOwner, ap.generation
@@ -576,8 +605,8 @@ func (r *Registry) DropDevice(roomID, ownerDeviceID string) []borrowagent.Borrow
 		}
 	}
 	prefix := roomID + "\x00"
-	for key, borrower := range r.commandBorrowers {
-		if strings.HasPrefix(key, prefix) && borrower == ownerDeviceID {
+	for key, record := range r.commandBorrowers {
+		if strings.HasPrefix(key, prefix) && record.borrower == ownerDeviceID {
 			delete(r.commandBorrowers, key)
 		}
 	}

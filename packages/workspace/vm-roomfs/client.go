@@ -164,6 +164,9 @@ func (c *Client) callContext(ctx context.Context, req Request, body []byte) (*Re
 		if res.ErrorCode == "EAGAIN" || res.Error == "rejected" {
 			return &res, fmt.Errorf("%w: %s", ErrRejected, res.Error)
 		}
+		if res.ErrorCode == ErrorNotFound || res.Error == ErrorNotFound {
+			return &res, fmt.Errorf("%s: %s", ErrorNotFound, res.Error)
+		}
 		return &res, fmt.Errorf("roomfs: %s", res.Error)
 	}
 	return &res, nil

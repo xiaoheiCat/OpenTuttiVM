@@ -442,6 +442,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			continue
 		}
 		dst := filepath.Join(targetDir, filepath.FromSlash(path))
+		if err := ensureUnder(targetDir, filepath.Dir(dst)); err != nil {
+			return err
+		}
 		// Room history can flip a path's type (file→dir or dir→file).
 		// The host still holds the old type, and MkdirAll fails on an
 		// existing file while a rename cannot land on a directory —
@@ -494,6 +497,12 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			if err := os.MkdirAll(dst, 0o755); err != nil {
 				return err
 			}
+			if err := checkRoot(); err != nil {
+				return err
+			}
+			if err := ensureUnder(targetDir, dst); err != nil {
+				return err
+			}
 			// ModeSet, not Mode != 0: an explicitly synchronized 0000
 			// must still chmod down from MkdirAll's 0755; only an
 			// absent mode skips the deferred chmod.
@@ -510,10 +519,13 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
-		if err := ensureUnder(targetDir, filepath.Dir(dst)); err != nil {
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		if err := checkRoot(); err != nil {
+			return err
+		}
+		if err := ensureUnder(targetDir, filepath.Dir(dst)); err != nil {
 			return err
 		}
 		if err := atomicWrite(dst, content); err != nil {
@@ -524,6 +536,12 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 		// ModeSet (not the numeric value): an explicit 0000 must chmod
 		// DOWN from 0600, not skip.
 		if info.ModeSet {
+			if err := checkRoot(); err != nil {
+				return err
+			}
+			if err := ensureUnder(targetDir, filepath.Dir(dst)); err != nil {
+				return err
+			}
 			if err := applyMode(dst, info.Mode); err != nil {
 				return fmt.Errorf("chmod %s: %w", dst, err)
 			}
@@ -534,7 +552,7 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 	// parent would strip the write permission needed to delete its
 	// room-absent children, leaving Apply-to-Workspace permanently
 	// unable to complete (and Apply-and-Leave stuck).
-	if err := pruneRemoved(targetDir, roomPaths); err != nil {
+	if err := pruneRemoved(targetDir, roomPaths, checkRoot); err != nil {
 		return err
 	}
 	if err := checkRoot(); err != nil {
@@ -635,7 +653,7 @@ func atomicWrite(dst string, content []byte) error {
 
 var removePath = os.Remove
 
-func pruneRemoved(root string, roomPaths map[string]bool) error {
+func pruneRemoved(root string, roomPaths map[string]bool, checkRoot func() error) error {
 	var dirs []string
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -650,10 +668,22 @@ func pruneRemoved(root string, roomPaths map[string]bool) error {
 			return nil
 		}
 		if d.IsDir() {
+			if d.Type()&fs.ModeSymlink != 0 {
+				return fmt.Errorf("symlink descendant %s would escape the workspace", p)
+			}
 			dirs = append(dirs, p)
 			return nil
 		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("symlink descendant %s would escape the workspace", p)
+		}
 		if !roomPaths[rel] {
+			if err := checkRoot(); err != nil {
+				return err
+			}
+			if err := ensureUnder(root, filepath.Dir(p)); err != nil {
+				return err
+			}
 			// Windows: a mirrored read-only mode (no 0200 bit) sets
 			// FILE_ATTRIBUTE_READONLY and the delete fails ACCESS_DENIED,
 			// failing the whole apply. Clear it first (POSIX no-op).
@@ -670,6 +700,12 @@ func pruneRemoved(root string, roomPaths map[string]bool) error {
 	for _, d := range dirs {
 		rel, _ := filepath.Rel(root, d)
 		if !roomPaths[filepath.ToSlash(rel)] {
+			if err := checkRoot(); err != nil {
+				return err
+			}
+			if err := ensureUnder(root, filepath.Dir(d)); err != nil {
+				return err
+			}
 			if err := removePath(d); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("remove stale directory %s: %w", d, err)
 			}

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -99,6 +100,37 @@ func TestLocalStoreRoundTripAndIdempotency(t *testing.T) {
 	missing, _ := store.Missing([]string{hash, "sha256:" + strings.Repeat("0", 64)})
 	if len(missing) != 1 || missing[0] != "sha256:"+strings.Repeat("0", 64) {
 		t.Fatalf("missing = %v", missing)
+	}
+}
+
+func TestLocalStoreListsBeyondOneSweepWindow(t *testing.T) {
+	store, err := NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4097; i++ {
+		content := []byte(fmt.Sprintf("object-%d", i))
+		sum := sha256.Sum256(content)
+		hash := "sha256:" + hex.EncodeToString(sum[:])
+		if err := store.Put(hash, content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var seen int
+	after := ""
+	for {
+		page, err := store.List(after, 256)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen += len(page)
+		if len(page) == 0 {
+			break
+		}
+		after = page[len(page)-1]
+	}
+	if seen != 4097 {
+		t.Fatalf("listed %d objects, want 4097", seen)
 	}
 }
 
