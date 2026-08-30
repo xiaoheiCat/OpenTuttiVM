@@ -17,11 +17,12 @@ import (
 
 // Errors surfaced to API/WS callers.
 var (
-	ErrNotOwner      = errors.New("only the agent owner may change sharing")
-	ErrNotBorrowable = errors.New("agent does not satisfy the BorrowSafe contract")
-	ErrUnknownAgent  = errors.New("agent instance not shared in this room")
-	ErrStaleLease    = errors.New("borrowing lease revoked (stale generation)")
-	ErrNotOperator   = errors.New("only the session operator may decide approvals")
+	ErrNotOwner           = errors.New("only the agent owner may change sharing")
+	ErrNotBorrowable      = errors.New("agent does not satisfy the BorrowSafe contract")
+	ErrUnknownAgent       = errors.New("agent instance not shared in this room")
+	ErrStaleLease         = errors.New("borrowing lease revoked (stale generation)")
+	ErrNotOperator        = errors.New("only the session operator may decide approvals")
+	ErrCommandFailedOwner = errors.New("only the owning device may report command failure")
 )
 
 // AgentInstance is one shared agent in one room.
@@ -247,6 +248,27 @@ func (r *Registry) Command(roomID string, p borrowagent.BorrowCommandPayload) (b
 		}
 		r.commandBorrowers[key] = p.BorrowerDeviceID
 	}
+	return p, nil
+}
+
+func (r *Registry) CommandFailed(roomID, ownerDeviceID string, p borrowagent.CommandFailedPayload) (borrowagent.CommandFailedPayload, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	inst := r.agents[roomID][p.AgentInstanceID]
+	if inst == nil {
+		return p, ErrUnknownAgent
+	}
+	if inst.OwnerDeviceID != ownerDeviceID {
+		return p, ErrCommandFailedOwner
+	}
+	if p.LeaseGeneration != inst.LeaseGeneration {
+		return p, ErrStaleLease
+	}
+	borrower, ok := r.commandBorrowers[roomID+"\x00"+p.AgentInstanceID+"\x00"+p.CommandID]
+	if !ok {
+		return p, ErrUnknownAgent
+	}
+	p.BorrowerDeviceID = borrower
 	return p, nil
 }
 

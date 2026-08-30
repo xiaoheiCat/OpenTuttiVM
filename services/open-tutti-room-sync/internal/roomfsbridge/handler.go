@@ -294,7 +294,7 @@ func classifyRoomError(err error) error {
 	}
 	msg := err.Error()
 	for _, code := range []string{roomfs.ErrorNotFound, roomfs.ErrorExists, roomfs.ErrorNotEmpty, roomfs.ErrorAgain, roomfs.ErrorIO} {
-		if strings.Contains(msg, code) {
+		if strings.HasPrefix(msg, code+":") || msg == code {
 			return protocolError(code, err)
 		}
 	}

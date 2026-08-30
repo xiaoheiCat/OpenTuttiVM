@@ -13,6 +13,9 @@ Use the owner documents linked below for detailed behavior. This file exists to 
 
 ## Local State And Runtime Paths
 
+OpenTuttiVM server overrides are documented in the service `.env.example` and
+are intentionally not part of the Tutti daemon override namespace.
+
 | Variable                      | Owner document                                                                                             | Purpose                                                                              |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `TUTTI_ENV`                   | [Local State Storage](./local-state-storage.md)                                                            | Selects production or development default state roots.                               |

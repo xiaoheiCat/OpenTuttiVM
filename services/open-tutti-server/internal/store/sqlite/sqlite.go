@@ -96,6 +96,10 @@ CREATE TABLE IF NOT EXISTS cas_refs (
 	hash TEXT NOT NULL,
 	PRIMARY KEY (room_id, hash)
 );
+CREATE TABLE IF NOT EXISTS cas_objects (
+	 hash TEXT PRIMARY KEY,
+	 size INTEGER NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_memberships_room ON memberships(room_id);
 CREATE INDEX IF NOT EXISTS idx_cas_refs_hash ON cas_refs(hash);
 `
@@ -150,8 +154,11 @@ func (r *Repo) UpdateMembershipPolicy(ctx context.Context, roomID, deviceID, pol
 }
 
 func (r *Repo) UpdateTransferReadiness(ctx context.Context, roomID, deviceID, generation string, snapshotSeq uint64) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE memberships SET transfer_generation=?, transfer_snapshot_seq=?, transfer_ready=1 WHERE room_id=? AND device_id=?`, generation, snapshotSeq, roomID, deviceID)
-	return err
+	res, err := r.db.ExecContext(ctx, `UPDATE memberships SET transfer_generation=?, transfer_snapshot_seq=?, transfer_ready=1 WHERE room_id=? AND device_id=?`, generation, snapshotSeq, roomID, deviceID)
+	if err != nil {
+		return err
+	}
+	return requireUpdated(res)
 }
 
 // Close closes the database.
@@ -560,6 +567,14 @@ func (r *Repo) LatestSnapshot(ctx context.Context, roomID string) (store.Snapsho
 }
 
 func (r *Repo) AddCASRefs(ctx context.Context, roomID string, hashes []string) error {
+	objects := make([]store.CASObject, 0, len(hashes))
+	for _, hash := range hashes {
+		objects = append(objects, store.CASObject{Hash: hash})
+	}
+	return r.AddCASRefsSized(ctx, roomID, objects, 0)
+}
+
+func (r *Repo) AddCASRefsSized(ctx context.Context, roomID string, objects []store.CASObject, quotaBytes int64) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -570,10 +585,27 @@ func (r *Repo) AddCASRefs(ctx context.Context, roomID string, hashes []string) e
 		return err
 	}
 	defer stmt.Close()
-	for _, h := range hashes {
-		if _, err := stmt.ExecContext(ctx, roomID, h); err != nil {
+	for _, object := range objects {
+		if object.Hash == "" || object.Size < 0 {
+			return errors.New("invalid CAS object accounting")
+		}
+		if object.Size > 0 {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO cas_objects(hash, size) VALUES(?, ?) ON CONFLICT(hash) DO UPDATE SET size=excluded.size`, object.Hash, object.Size); err != nil {
+				return err
+			}
+		}
+		if _, err := stmt.ExecContext(ctx, roomID, object.Hash); err != nil {
 			return err
 		}
+	}
+	var used int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(o.size), 0) FROM cas_refs r JOIN cas_objects o ON o.hash=r.hash WHERE r.room_id=?`, roomID).Scan(&used); err != nil {
+		return err
+	}
+	// The quota is stored in the repository-independent room policy table by
+	// the API's configured limit; callers pass the limit through the context.
+	if quotaBytes > 0 && used > quotaBytes {
+		return fmt.Errorf("CAS room quota exceeded: %d > %d bytes", used, quotaBytes)
 	}
 	return tx.Commit()
 }

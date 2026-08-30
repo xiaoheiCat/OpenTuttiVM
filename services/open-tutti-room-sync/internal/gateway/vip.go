@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"errors"
 	"net"
 	"os"
 	"runtime"
@@ -11,6 +12,8 @@ import (
 
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 )
+
+var ErrVIPExhausted = errors.New("tutti VIP address pool exhausted")
 
 // Addressing modes for the room's virtual network.
 type vipMode int32
@@ -197,29 +200,38 @@ func (a *VIPAllocator) NeedsFreebind() bool {
 
 // Assign returns the synthetic IP for a hostname, allocating on first use.
 func (a *VIPAllocator) Assign(host vmprotocol.TuttiHost) net.IP {
+	ip, _ := a.AssignWithError(host)
+	return ip
+}
+
+// AssignWithError allocates without ever reusing an address held by another
+// host. A nil IP means the finite reserved pool is exhausted.
+func (a *VIPAllocator) AssignWithError(host vmprotocol.TuttiHost) (net.IP, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if vipMode(a.mode.Load()) == modeShared {
 		addr := probeSharedAddr()
 		a.byKey[host.String()] = addr
-		return addr
+		return addr, nil
 	}
 	key := host.String()
 	if ip, ok := a.byKey[key]; ok {
-		return ip
+		return ip, nil
 	}
-	device := uint32(1 + (a.next/200)%200)
-	index := uint32(1 + a.next%200)
+	const poolSize = 200 * 200
+	if a.next > poolSize {
+		return nil, ErrVIPExhausted
+	}
+	device := uint32(1 + (a.next-1)/200)
+	index := uint32(1 + (a.next-1)%200)
 	a.next++
-	for a.used[ipFromOffset(device, index).String()] && a.next < 1<<16 {
-		index = uint32(1 + a.next%200)
-		device = uint32(1 + (a.next/200)%200)
-		a.next++
-	}
 	ip := ipFromOffset(device, index)
+	if a.used[ip.String()] {
+		return nil, ErrVIPExhausted
+	}
 	a.byKey[key] = ip
 	a.used[ip.String()] = true
-	return ip
+	return ip, nil
 }
 
 // ReleaseAll clears allocations (room teardown).

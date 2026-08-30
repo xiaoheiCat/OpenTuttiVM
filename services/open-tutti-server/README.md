@@ -29,6 +29,10 @@ listen address; loopback HTTP remains available for local development.
 Environment > `.env` > defaults. Every variable is documented in
 [`.env.example`](./.env.example).
 
+`OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES` limits each room's distinct referenced CAS
+bytes. Repeated references to the same hash count once per room; the same hash
+is counted independently for different rooms.
+
 ## API surface (summary)
 
 - `GET  /api/info` — server info

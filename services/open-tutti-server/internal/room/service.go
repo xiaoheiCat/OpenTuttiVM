@@ -71,6 +71,7 @@ type Service struct {
 	leaveUnfence func(roomID string)
 	memberMutate func(roomID, deviceID string, fn func() error) error
 	barrierClean func(roomID, deviceID string)
+	hostReady    func(context.Context, string, string) bool
 	tokens       *tokenMinter
 
 	mu sync.Mutex
@@ -164,6 +165,12 @@ func (s *Service) SetBarrierClean(f func(roomID, deviceID string)) { s.barrierCl
 // until they are explicitly closed — the same teardown kick and leave
 // already perform.
 func (s *Service) SetConnectionDropper(drop func(roomID, deviceID string)) { s.dropConn = drop }
+
+// SetTransferHostReadiness injects the real host-workspace initialization
+// capability. Without a host adapter transfer readiness is deliberately false.
+func (s *Service) SetTransferHostReadiness(f func(context.Context, string, string) bool) {
+	s.hostReady = f
+}
 
 // broadcast is nil-safe so lifecycle tests can run without a hub.
 func (s *Service) broadcast(roomID string, ev vmprotocol.Event) {
@@ -845,6 +852,9 @@ func (s *Service) ReportTransferReady(ctx context.Context, roomID, deviceID, gen
 	}
 	if _, err := s.repo.GetMembership(ctx, roomID, deviceID); err != nil {
 		return err
+	}
+	if s.hostReady == nil || !s.hostReady(ctx, roomID, deviceID) {
+		return ErrTransferIncomplete
 	}
 	return s.repo.UpdateTransferReadiness(ctx, roomID, deviceID, generation, snapshotSeq)
 }

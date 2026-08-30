@@ -340,6 +340,23 @@ func run() error {
 			}
 		}
 	}
+	completeTransfer := func() {
+		status, err := c.TransferStatus(ctx)
+		if err != nil || !status.Pending || status.CandidateDeviceID != deviceID {
+			return
+		}
+		if err := mgr.PromoteToFull(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "room-sync: transfer materialization: %v\n", err)
+			return
+		}
+		if !mgr.Replica.IsFull() {
+			fmt.Fprintln(os.Stderr, "room-sync: transfer readiness refused: replica is not full")
+			return
+		}
+		if err := c.ReportTransferReady(ctx, status.Generation, status.SnapshotSeq); err != nil {
+			fmt.Fprintf(os.Stderr, "room-sync: transfer host readiness unavailable: %v\n", err)
+		}
+	}
 
 	// Tunnel loop: the relay tunnel has its OWN lifecycle. A transient
 	// tunnel handshake failure while the business WebSocket stays healthy
@@ -481,6 +498,7 @@ func run() error {
 						// the borrower learns the owner runtime cannot
 						// execute (no Agent Host adapter wired).
 						fmt.Fprintf(os.Stderr, "room-sync: borrow command %s: %v\n", p.CommandID, err)
+						_ = sess.ReportBorrowCommandFailed(borrowagent.CommandFailedPayload{CommandID: p.CommandID, AgentInstanceID: p.AgentInstanceID, LeaseGeneration: p.LeaseGeneration, Reason: err.Error()})
 					}
 				}
 			case borrowagent.TopicBorrowRevoked:
@@ -548,6 +566,7 @@ func run() error {
 		if err := sess.ReportPolicy(string(mgr.Policy)); err != nil {
 			fmt.Fprintf(os.Stderr, "room-sync: report policy: %v\n", err)
 		}
+		completeTransfer()
 		// Barrier resolutions whose confirmation was lost with the old
 		// socket: the fences are still up server-side, and only this
 		// session (the assigned resolver) can lift them.

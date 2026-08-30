@@ -38,6 +38,7 @@ type Config struct {
 	JoinTicketTTL time.Duration
 	// SnapshotIntervalOps triggers a checkpoint after this many operations.
 	SnapshotIntervalOps int
+	CASRoomQuotaBytes   int64
 }
 
 // Load resolves configuration from env, then envFile (.env), then defaults.
@@ -68,6 +69,7 @@ func Load(envFile string) (Config, error) {
 		JoinTicketTTL:    secondsOrDefault(get("OPEN_TUTTI_JOIN_TICKET_TTL_SECONDS", ""), 60*time.Second),
 		// An operation count, not a duration.
 		SnapshotIntervalOps: intOrDefault(get("OPEN_TUTTI_SNAPSHOT_INTERVAL_OPS", ""), 512),
+		CASRoomQuotaBytes:   int64OrDefault(get("OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES", ""), 1<<30),
 	}
 
 	cfg.DatabasePath = get("OPEN_TUTTI_DATABASE_PATH", filepath.Join(cfg.DataDir, "open-tutti.db"))
@@ -81,18 +83,29 @@ func Load(envFile string) (Config, error) {
 		return Config{}, errors.New("OPEN_TUTTI_PUBLIC_URL must be an absolute URL")
 	}
 	if u.Scheme == "http" {
-		host := cfg.ListenAddr
-		if h, _, splitErr := net.SplitHostPort(cfg.ListenAddr); splitErr == nil {
-			host = h
-		}
-		if host != "" && host != "localhost" && host != "127.0.0.1" && host != "::1" {
+		if !isLoopbackListenAddr(cfg.ListenAddr) {
 			return Config{}, errors.New("plain HTTP public URL requires a loopback listen address; use a TLS reverse proxy for remote deployment")
 		}
 	}
-	if cfg.OwnerGracePeriod <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 {
+	if cfg.OwnerGracePeriod <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 {
 		return Config{}, errors.New("grace period, ticket TTL, and snapshot interval must be positive")
 	}
 	return cfg, nil
+}
+
+func isLoopbackListenAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	if host == "" {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
 
 // intOrDefault parses a plain positive integer override (defaults on
@@ -102,6 +115,17 @@ func intOrDefault(v string, def int) int {
 		return def
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n <= 0 {
+		return def
+	}
+	return n
+}
+
+func int64OrDefault(v string, def int64) int64 {
+	if v == "" {
+		return def
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
 	if err != nil || n <= 0 {
 		return def
 	}

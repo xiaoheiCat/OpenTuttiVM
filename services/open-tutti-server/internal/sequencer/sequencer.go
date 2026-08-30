@@ -428,7 +428,14 @@ func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason
 		}); err != nil {
 			return err
 		}
-		return m.repo.AddCASRefs(context.Background(), roomID, m.snapshotRefs(snap))
+		refs := m.snapshotRefs(snap)
+		objects := make([]store.CASObject, 0, len(refs))
+		for _, hash := range refs {
+			if data, err := m.cas.Get(hash); err == nil {
+				objects = append(objects, store.CASObject{Hash: hash, Size: int64(len(data))})
+			}
+		}
+		return m.repo.AddCASRefsSized(context.Background(), roomID, objects, m.cfg.CASRoomQuotaBytes)
 	}); err != nil {
 		return snap, err
 	}

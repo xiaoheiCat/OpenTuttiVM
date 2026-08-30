@@ -123,7 +123,12 @@ func (p *Proxy) Sync(ctx context.Context) error {
 			if err != nil {
 				return // malformed .tutti host cannot own an address
 			}
-			addr = net.JoinHostPort(p.vips.Assign(h).String(), fmt.Sprintf("%d", port))
+			ip, err := p.vips.AssignWithError(h)
+			if err != nil {
+				p.log.Error("tutti VIP allocation failed", "host", host, "port", port, "err", err)
+				return
+			}
+			addr = net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
 		}
 		b, ok := want[addr]
 		if !ok {

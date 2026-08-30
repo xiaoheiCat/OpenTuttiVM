@@ -29,6 +29,7 @@ const (
 	// TopicApprovalDecision carries the borrower's choice back to the
 	// owning device.
 	TopicApprovalDecision vmprotocol.EventTopic = "agent.approval_decision"
+	TopicCommandFailed    vmprotocol.EventTopic = "agent.command_failed"
 )
 
 // AgentSharedPayload is the payload of agent.shared. Sharing is scoped to
@@ -76,6 +77,14 @@ type BorrowCommandPayload struct {
 	// are dropped as revoked.
 	LeaseGeneration uint64 `json:"lease_generation"`
 	Input           string `json:"input"`
+}
+
+type CommandFailedPayload struct {
+	CommandID        string `json:"command_id"`
+	AgentInstanceID  string `json:"agent_instance_id"`
+	BorrowerDeviceID string `json:"borrower_device_id"`
+	LeaseGeneration  uint64 `json:"lease_generation"`
+	Reason           string `json:"reason"`
 }
 
 // BorrowRevokedPayload announces borrowing ended (owner revoked, agent left

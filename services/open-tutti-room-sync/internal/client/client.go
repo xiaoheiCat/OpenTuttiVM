@@ -443,6 +443,48 @@ func (s *Session) BorrowCommand(p borrowagent.BorrowCommandPayload) error {
 	return s.writeTyped("borrow_command", p)
 }
 
+func (s *Session) ReportBorrowCommandFailed(p borrowagent.CommandFailedPayload) error {
+	return s.writeTyped("command_failed", p)
+}
+
+type TransferPreparation struct {
+	Generation        string `json:"generation"`
+	SnapshotSeq       uint64 `json:"snapshot_seq"`
+	CandidateDeviceID string `json:"candidate_device_id"`
+}
+
+type TransferStatus struct {
+	Pending           bool   `json:"pending"`
+	Generation        string `json:"generation"`
+	SnapshotSeq       uint64 `json:"snapshot_seq"`
+	CandidateDeviceID string `json:"candidate_device_id"`
+}
+
+func (c *Client) TransferStatus(ctx context.Context) (TransferStatus, error) {
+	c.mu.Lock()
+	token, roomID := c.token, c.roomID
+	c.mu.Unlock()
+	var out TransferStatus
+	err := getJSON(ctx, c.http, c.server.BaseURL+"/api/rooms/"+roomID+"/transfer/status", token, &out)
+	return out, err
+}
+
+func (c *Client) PrepareTransfer(ctx context.Context, candidateDeviceID string) (TransferPreparation, error) {
+	c.mu.Lock()
+	token, roomID := c.token, c.roomID
+	c.mu.Unlock()
+	var out TransferPreparation
+	err := postJSON(ctx, c.http, c.server.BaseURL+"/api/rooms/"+roomID+"/transfer/prepare", map[string]string{"to_device_id": candidateDeviceID}, &out, authHeader(token))
+	return out, err
+}
+
+func (c *Client) CommitTransfer(ctx context.Context, candidateDeviceID, generation string, snapshotSeq uint64) error {
+	c.mu.Lock()
+	token, roomID := c.token, c.roomID
+	c.mu.Unlock()
+	return postJSON(ctx, c.http, c.server.BaseURL+"/api/rooms/"+roomID+"/transfer/commit", map[string]any{"to_device_id": candidateDeviceID, "generation": generation, "snapshot_seq": snapshotSeq}, nil, authHeader(token))
+}
+
 // RequestApproval is used by the owning device's agent runtime to surface
 // a permission prompt to the current borrower (the session operator).
 func (s *Session) RequestApproval(p borrowagent.ApprovalRequestPayload) error {

@@ -86,6 +86,13 @@ Hybrid, by content class:
   sequence → the candidate builds a full replica and initializes the host
   workspace, then reports readiness on its authenticated room connection →
   commit. Partial transfers never land.
+- Transfer readiness is not a client boolean: room-sync materializes the
+  candidate's full replica before calling `ReportTransferReady`, and the
+  server accepts that report only for the authenticated prepared candidate and
+  exact generation/snapshot pair. A real host-workspace initialization adapter
+  must be injected before the report can succeed; the current standalone
+  room-sync binary has no such Host adapter and therefore fails closed rather
+  than claiming initialization.
 - Server restart ends all rooms (meeting over; durable artifacts remain in
   CAS and participants' applied workspaces).
 
@@ -165,6 +172,12 @@ feature, not a later plugin:
   contract (workspace-only filesystem, no host fs, no docker socket, no
   credential files, no privilege escalation, policy-controlled network)
   stay self-usable but the server refuses to share them.
+
+  Borrowing is enabled only by the host composition root through an explicit
+  capability injection. Standalone room-sync uses the observation-only Noop
+  host, does not advertise shared agents, and returns an authenticated,
+  generation-bound `agent.command_failed` event when a routed command cannot
+  execute; it does not claim borrowing is implemented.
 
 Server-side state lives in `services/open-tutti-server/internal/borrow`
 (registry + fencing + approval routing); identities (owner, borrower,

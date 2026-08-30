@@ -200,3 +200,24 @@ func TestClearRoomDropsAgentsAndApprovals(t *testing.T) {
 		t.Fatal("approval survived ClearRoom")
 	}
 }
+
+func TestCommandFailureIsBoundToOwnerBorrowerAndGeneration(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "cmd", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+	if _, err := r.Command("room1", cmd); err != nil {
+		t.Fatal(err)
+	}
+	failure := borrowagent.CommandFailedPayload{CommandID: cmd.CommandID, AgentInstanceID: cmd.AgentInstanceID, LeaseGeneration: cmd.LeaseGeneration, Reason: "host unavailable"}
+	out, err := r.CommandFailed("room1", "dev_alice", failure)
+	if err != nil || out.BorrowerDeviceID != "dev_bob" {
+		t.Fatalf("failure routing = %+v err=%v", out, err)
+	}
+	if _, err := r.CommandFailed("room1", "dev_bob", failure); !errors.Is(err, ErrCommandFailedOwner) {
+		t.Fatalf("non-owner failure err = %v", err)
+	}
+	failure.LeaseGeneration++
+	if _, err := r.CommandFailed("room1", "dev_alice", failure); !errors.Is(err, ErrStaleLease) {
+		t.Fatalf("stale failure err = %v", err)
+	}
+}

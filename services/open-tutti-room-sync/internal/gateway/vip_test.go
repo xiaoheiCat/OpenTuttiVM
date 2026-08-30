@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
@@ -49,5 +51,23 @@ func TestVIPAllocatorVIPModeDistinctHosts(t *testing.T) {
 	}
 	if a.Shared() {
 		t.Fatal("default mode must not be shared")
+	}
+}
+
+func TestVIPAllocatorExhaustionDoesNotCollide(t *testing.T) {
+	a := NewVIPAllocator()
+	seen := map[string]bool{}
+	for i := 0; i < 200*200; i++ {
+		ip, err := a.AssignWithError(vmprotocol.TuttiHost{Device: fmt.Sprintf("device-%d", i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if seen[ip.String()] {
+			t.Fatalf("colliding allocation %s", ip)
+		}
+		seen[ip.String()] = true
+	}
+	if _, err := a.AssignWithError(vmprotocol.TuttiHost{Device: "exhausted"}); !errors.Is(err, ErrVIPExhausted) {
+		t.Fatalf("exhaustion error = %v", err)
 	}
 }

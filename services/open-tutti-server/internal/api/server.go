@@ -79,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/prepare", s.authRoomOwner(s.handleTransferPrepare))
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/commit", s.authRoomOwner(s.handleTransferCommit))
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/ready", s.authRoom(s.handleTransferReady))
+	mux.HandleFunc("GET /api/rooms/{roomID}/transfer/status", s.authRoom(s.handleTransferStatus))
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/abort", s.authRoomOwner(s.handleTransferAbort))
 	mux.HandleFunc("GET /api/rooms/{roomID}/ws", s.authRoomWS(s.handleRoomWS))
 	mux.HandleFunc("GET /api/tunnel", s.handleTunnelWS)
@@ -378,6 +379,23 @@ func (s *Server) handleTransferReady(w http.ResponseWriter, r *http.Request, roo
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
+func (s *Server) handleTransferStatus(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
+	roomInfo, err := s.rooms.GetRoom(r.Context(), roomID)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if roomInfo.PendingTransferToDevice != deviceID {
+		writeJSON(w, http.StatusOK, map[string]any{"pending": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"pending": true, "generation": roomInfo.PendingTransferGeneration,
+		"snapshot_seq":        roomInfo.PendingTransferSnapshotSeq,
+		"candidate_device_id": deviceID,
+	})
+}
+
 func (s *Server) handleTransferAbort(w http.ResponseWriter, r *http.Request, roomID, deviceID string) {
 	if err := s.rooms.AbortTransfer(r.Context(), roomID, deviceID); err != nil {
 		writeErr(w, http.StatusConflict, err.Error())
@@ -416,8 +434,12 @@ func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, _ 
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return err
 		}
-		if err := s.repo.AddCASRefs(r.Context(), roomID, []string{hash}); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+		if err := s.repo.AddCASRefsSized(r.Context(), roomID, []store.CASObject{{Hash: hash, Size: int64(len(body))}}, s.cfg.CASRoomQuotaBytes); err != nil {
+			if strings.Contains(err.Error(), "quota exceeded") {
+				writeErr(w, http.StatusRequestEntityTooLarge, err.Error())
+			} else {
+				writeErr(w, http.StatusInternalServerError, err.Error())
+			}
 			return err
 		}
 		return nil
@@ -551,7 +573,7 @@ func (s *Server) handleRoomWS(w http.ResponseWriter, r *http.Request, roomID, de
 }
 
 func (s *Server) handleTunnelWS(w http.ResponseWriter, r *http.Request) {
-	token := bearerOrQuery(r)
+	token := bearerToken(r)
 	roomID, deviceID, err := s.rooms.ValidateSessionToken(r.Context(), token)
 	if err != nil {
 		writeErr(w, http.StatusUnauthorized, err.Error())
@@ -602,7 +624,7 @@ func (s *Server) authRoomWS(h roomHandler) http.HandlerFunc {
 func (s *Server) authToken(h roomHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		roomID := r.PathValue("roomID")
-		token := bearerOrQuery(r)
+		token := bearerToken(r)
 		authRoom, deviceID, err := s.rooms.ValidateSessionToken(r.Context(), token)
 		if err != nil || authRoom != roomID {
 			writeErr(w, http.StatusUnauthorized, "invalid session token")
@@ -623,7 +645,7 @@ func (s *Server) authRoomOwner(h roomHandler) http.HandlerFunc {
 	})
 }
 
-func bearerOrQuery(r *http.Request) string {
+func bearerToken(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimPrefix(h, "Bearer ")
 	}

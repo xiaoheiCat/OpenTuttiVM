@@ -302,6 +302,7 @@ func TestOwnerGracePeriodNobodyOnlineDissolves(t *testing.T) {
 
 func TestOwnershipTransferThreePhases(t *testing.T) {
 	svc, _ := newTestService(t, "")
+	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
 	created := createRoom(t, svc, "")
 	joinRoom(t, svc, created, memberDevice("dev_leo"))
 	ctx := context.Background()

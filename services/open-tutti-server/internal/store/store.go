@@ -89,6 +89,11 @@ type CASRef struct {
 	Hash   string
 }
 
+type CASObject struct {
+	Hash string
+	Size int64
+}
+
 // Repository is the durable metadata store.
 // ErrTicketUsed reports a lost redemption race.
 var ErrTicketUsed = errors.New("join ticket already used")
@@ -137,6 +142,7 @@ type Repository interface {
 
 	// CAS references
 	AddCASRefs(ctx context.Context, roomID string, hashes []string) error
+	AddCASRefsSized(ctx context.Context, roomID string, objects []CASObject, quotaBytes int64) error
 	ListCASRefCounts(ctx context.Context) (map[string]int, error)
 	// RoomCASRefs lists one room's referenced object hashes.
 	RoomCASRefs(ctx context.Context, roomID string) ([]string, error)
