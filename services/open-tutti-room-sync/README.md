@@ -23,6 +23,7 @@ project):
 | `OPEN_TUTTI_DEVICE_ID` | — (required) | This device's id |
 | `OPEN_TUTTI_POLICY` | `lazy` | `lazy` or `full` |
 | `OPEN_TUTTI_CACHE_DIR` | `/data/cache` | CAS cache |
+| `OPEN_TUTTI_CA_DIR` | `/data/ca` | Device-private room CA pair; certificate and key are atomically published as one synced file |
 | `OPEN_TUTTI_FS_LISTEN` | `/run/open-tutti/roomfs.sock` | Room FS socket |
 | `OPEN_TUTTI_ROOMFS_CAPABILITY` | random per process | Capability for open-tutti-fs |
 | `OPEN_TUTTI_ROOMFS_CAPABILITY_FILE` | sibling `roomfs.cap` for Unix sockets | Private capability handoff |

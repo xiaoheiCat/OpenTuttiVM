@@ -447,6 +447,10 @@ func (s *Session) ReportBorrowCommandFailed(p borrowagent.CommandFailedPayload) 
 	return s.writeTyped("command_failed", p)
 }
 
+func (s *Session) ReportBorrowCommandFinished(p borrowagent.CommandFinishedPayload) error {
+	return s.writeTyped("command_finished", p)
+}
+
 type TransferPreparation struct {
 	Generation        string `json:"generation"`
 	SnapshotSeq       uint64 `json:"snapshot_seq"`

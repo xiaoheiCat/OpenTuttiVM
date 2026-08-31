@@ -65,7 +65,7 @@ func run() error {
 
 	rooms := room.NewService(repo, cfg, room.RealClock{}, nil)
 	previews := preview.NewRegistry()
-	borrows := borrow.NewRegistry()
+	borrows := borrow.NewRegistry(cfg.BorrowerDisconnectGrace)
 	hub := realtime.NewHub(nil, rooms, previews, borrows, log)
 	seq := sequencer.NewManager(repo, cfg, cas, hub, log)
 	hub.SetSequencer(seq)

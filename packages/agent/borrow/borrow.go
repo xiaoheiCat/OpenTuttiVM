@@ -30,6 +30,7 @@ const (
 	// owning device.
 	TopicApprovalDecision vmprotocol.EventTopic = "agent.approval_decision"
 	TopicCommandFailed    vmprotocol.EventTopic = "agent.command_failed"
+	TopicCommandFinished  vmprotocol.EventTopic = "agent.command_finished"
 	// TopicBorrowNeedsInterrupt reports that the borrower disappeared and a
 	// delivered command must be interrupted by the generation-bound owner host.
 	TopicBorrowNeedsInterrupt vmprotocol.EventTopic = "agent.borrow_needs_interrupt"
@@ -88,6 +89,15 @@ type CommandFailedPayload struct {
 	BorrowerDeviceID string `json:"borrower_device_id"`
 	LeaseGeneration  uint64 `json:"lease_generation"`
 	Reason           string `json:"reason"`
+}
+
+// CommandFinishedPayload is the terminal report for a delivered command.
+type CommandFinishedPayload struct {
+	CommandID        string `json:"command_id"`
+	AgentInstanceID  string `json:"agent_instance_id"`
+	BorrowerDeviceID string `json:"borrower_device_id"`
+	LeaseGeneration  uint64 `json:"lease_generation"`
+	Success          bool   `json:"success"`
 }
 
 type BorrowNeedsInterruptPayload struct {

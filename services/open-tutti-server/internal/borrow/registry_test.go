@@ -2,6 +2,8 @@ package borrow
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,6 +56,9 @@ func TestUnexpectedBorrowerDisconnectRequiresGenerationBoundInterrupt(t *testing
 	}
 	if got := r.ExpireDisconnectGrace(time.Now().Add(borrowerDisconnectGrace * 3)); len(got) != 0 {
 		t.Fatalf("interrupt repeated: %+v", got)
+	}
+	if _, err := r.OpenApproval("room1", shared.AgentInstanceID, "approval-after-request", cmd.CommandID, []string{"yes"}); !errors.Is(err, ErrOperatorDisconnected) {
+		t.Fatalf("interrupt request must not fake command terminal: %v", err)
 	}
 }
 
@@ -347,6 +352,52 @@ func TestCommandIDRetriesAreIdempotentAndPayloadBound(t *testing.T) {
 	changed.Input = "two"
 	if _, err := r.Command("room1", changed); !errors.Is(err, ErrDuplicateCommand) {
 		t.Fatalf("changed retry = %v", err)
+	}
+}
+
+func TestOutstandingCommandsDoNotEvictApprovalRoute(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	start := make(chan struct{})
+	errs := make(chan error, 17)
+	var wg sync.WaitGroup
+	for i := 0; i < 17; i++ {
+		wg.Add(1)
+		cmd := borrowagent.BorrowCommandPayload{CommandID: fmt.Sprintf("cmd-%d", i), AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true })
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent command: %v", err)
+		}
+	}
+	if operator, err := r.OpenApproval("room1", shared.AgentInstanceID, "approval-first", "cmd-0", []string{"yes"}); err != nil || operator != "dev_bob" {
+		t.Fatalf("first approval route = %q, %v", operator, err)
+	}
+}
+
+func TestCommandLimitRejectsWithoutEvictingActiveMappings(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	for i := 0; i < maxTrackedCommandsPerAgent; i++ {
+		cmd := borrowagent.BorrowCommandPayload{CommandID: fmt.Sprintf("limit-%d", i), AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+		if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "over-limit", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_carol", LeaseGeneration: shared.LeaseGeneration}
+	if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); !errors.Is(err, ErrOutstandingCommands) {
+		t.Fatalf("over-limit error = %v", err)
+	}
+	if operator, err := r.OpenApproval("room1", shared.AgentInstanceID, "approval-limit", "limit-0", []string{"yes"}); err != nil || operator != "dev_bob" {
+		t.Fatalf("active mapping after rejection = %q, %v", operator, err)
 	}
 }
 

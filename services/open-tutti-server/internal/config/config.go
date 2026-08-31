@@ -33,7 +33,8 @@ type Config struct {
 	// OwnerGracePeriod is how long an unexpectedly disconnected owner keeps
 	// the room before ownership auto-transfers (or the room dissolves when
 	// nobody is online).
-	OwnerGracePeriod time.Duration
+	OwnerGracePeriod        time.Duration
+	BorrowerDisconnectGrace time.Duration
 	// JoinTicketTTL bounds the one-time share join tickets.
 	JoinTicketTTL time.Duration
 	// SnapshotIntervalOps triggers a checkpoint after this many operations.
@@ -69,14 +70,15 @@ func Load(envFile string) (Config, error) {
 	composeLocalMode := os.Getenv("OPEN_TUTTI_COMPOSE_LOCAL_MODE") == "1"
 
 	cfg := Config{
-		ListenAddr:       get("OPEN_TUTTI_LISTEN_ADDR", "127.0.0.1:8080"),
-		PublicURL:        get("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080"),
-		DataDir:          get("OPEN_TUTTI_DATA_DIR", defaultDataDir()),
-		LogLevel:         get("OPEN_TUTTI_LOG_LEVEL", "info"),
-		Secret:           get("OPEN_TUTTI_SECRET", ""),
-		ServerInviteCode: get("OPEN_TUTTI_SERVER_INVITE_CODE", ""),
-		OwnerGracePeriod: secondsOrDefault(get("OPEN_TUTTI_OWNER_GRACE_SECONDS", ""), 5*time.Minute),
-		JoinTicketTTL:    secondsOrDefault(get("OPEN_TUTTI_JOIN_TICKET_TTL_SECONDS", ""), 60*time.Second),
+		ListenAddr:              get("OPEN_TUTTI_LISTEN_ADDR", "127.0.0.1:8080"),
+		PublicURL:               get("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080"),
+		DataDir:                 get("OPEN_TUTTI_DATA_DIR", defaultDataDir()),
+		LogLevel:                get("OPEN_TUTTI_LOG_LEVEL", "info"),
+		Secret:                  get("OPEN_TUTTI_SECRET", ""),
+		ServerInviteCode:        get("OPEN_TUTTI_SERVER_INVITE_CODE", ""),
+		OwnerGracePeriod:        secondsOrDefault(get("OPEN_TUTTI_OWNER_GRACE_SECONDS", ""), 5*time.Minute),
+		BorrowerDisconnectGrace: secondsOrDefault(get("OPEN_TUTTI_BORROWER_DISCONNECT_GRACE_SECONDS", ""), 5*time.Minute),
+		JoinTicketTTL:           secondsOrDefault(get("OPEN_TUTTI_JOIN_TICKET_TTL_SECONDS", ""), 60*time.Second),
 		// An operation count, not a duration.
 		SnapshotIntervalOps:    intOrDefault(get("OPEN_TUTTI_SNAPSHOT_INTERVAL_OPS", ""), 512),
 		CASRoomQuotaBytes:      int64OrDefault(get("OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES", ""), 1<<30),
@@ -103,7 +105,7 @@ func Load(envFile string) (Config, error) {
 			return Config{}, errors.New("plain HTTP public URL requires a loopback listen address; use a TLS reverse proxy for remote deployment")
 		}
 	}
-	if cfg.OwnerGracePeriod <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 || cfg.CASPendingQuotaBytes <= 0 || cfg.CASPendingTTL <= 0 || cfg.WorkspaceMaxEntries <= 0 || cfg.WorkspaceMaxPathBytes <= 0 || cfg.WorkspaceMaxIdentities <= 0 || cfg.ActiveRoomLimit <= 0 {
+	if cfg.OwnerGracePeriod <= 0 || cfg.BorrowerDisconnectGrace <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 || cfg.CASPendingQuotaBytes <= 0 || cfg.CASPendingTTL <= 0 || cfg.WorkspaceMaxEntries <= 0 || cfg.WorkspaceMaxPathBytes <= 0 || cfg.WorkspaceMaxIdentities <= 0 || cfg.ActiveRoomLimit <= 0 {
 		return Config{}, errors.New("grace period, ticket TTL, snapshot interval, CAS quotas, workspace limits, and active room limit must be positive")
 	}
 	return cfg, nil

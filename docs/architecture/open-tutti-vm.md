@@ -205,6 +205,12 @@ feature, not a later plugin:
   decision (`agent.approval_decision`) routes back to the owner's runtime,
   which resumes or interrupts. Agents continue approval-free work while
   paused on a prompt.
+- **Unexpected borrower disconnect** — a delivered command keeps its
+  generation-bound approval route for the PDF v1 five-minute reconnect grace.
+  After the deadline the server emits `agent.borrow_needs_interrupt` once; it
+  never claims that the owner runtime already interrupted the command. The
+  mapping is released only by an owner terminal report (`command_failed` or
+  `command_finished`), and intentional leave/kick fencing remains immediate.
 - **BorrowSafe gating** — adapters that cannot guarantee the isolation
   contract (workspace-only filesystem, no host fs, no docker socket, no
   credential files, no privilege escalation, policy-controlled network)

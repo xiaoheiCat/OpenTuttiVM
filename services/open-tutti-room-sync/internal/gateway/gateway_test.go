@@ -3,6 +3,8 @@ package gateway
 import (
 	"crypto/x509"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -150,6 +152,31 @@ func TestLocalCALeafCacheIsBoundedAndRejectsInvalidHosts(t *testing.T) {
 	}
 	if len(ca.leafCache) > maxLeafCache {
 		t.Fatalf("leaf cache grew to %d", len(ca.leafCache))
+	}
+}
+
+func TestLocalCAPairPersistsAtomicallyAndIgnoresIncompletePair(t *testing.T) {
+	dir := t.TempDir()
+	first, err := LoadOrCreateLocalCA(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, caPairFile)); err != nil {
+		t.Fatal(err)
+	}
+	cert := first.CACertPEM()
+	if err := os.WriteFile(filepath.Join(dir, caPairFile), cert, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := LoadOrCreateLocalCA(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(first.CACertPEM()) == string(second.CACertPEM()) {
+		t.Fatal("incomplete pair was accepted instead of being replaced")
+	}
+	if _, err := second.LeafFor("device.tutti"); err != nil {
+		t.Fatal(err)
 	}
 }
 

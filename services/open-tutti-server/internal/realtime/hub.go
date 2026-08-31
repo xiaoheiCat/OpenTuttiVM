@@ -32,6 +32,7 @@ type ClientMessage struct {
 	AgentShare       *borrowagent.AgentSharedPayload      `json:"agent_share,omitempty"`
 	BorrowCommand    *borrowagent.BorrowCommandPayload    `json:"borrow_command,omitempty"`
 	CommandFailed    *borrowagent.CommandFailedPayload    `json:"command_failed,omitempty"`
+	CommandFinished  *borrowagent.CommandFinishedPayload  `json:"command_finished,omitempty"`
 	ApprovalRequest  *borrowagent.ApprovalRequestPayload  `json:"approval_request,omitempty"`
 	ApprovalDecision *borrowagent.ApprovalDecisionPayload `json:"approval_decision,omitempty"`
 }
@@ -561,6 +562,20 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 				continue
 			}
 			h.SendTo(c.RoomID, out.BorrowerDeviceID, vmprotocol.Event{Topic: borrowagent.TopicCommandFailed, RoomID: c.RoomID, Payload: mustJSON(out)})
+		case "command_finished":
+			if msg.CommandFinished == nil {
+				continue
+			}
+			p := *msg.CommandFinished
+			if len(p.CommandID) > 128 || len(p.AgentInstanceID) > 128 {
+				continue
+			}
+			out, err := h.borrows.CommandFinished(c.RoomID, c.DeviceID, p)
+			if err != nil {
+				h.log.Warn("borrow command finished", "room", c.RoomID, "err", err)
+				continue
+			}
+			h.SendTo(c.RoomID, out.BorrowerDeviceID, vmprotocol.Event{Topic: borrowagent.TopicCommandFinished, RoomID: c.RoomID, Payload: mustJSON(out)})
 		case "approval_request":
 			if msg.ApprovalRequest == nil {
 				continue

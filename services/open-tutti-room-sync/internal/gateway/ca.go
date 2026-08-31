@@ -40,10 +40,12 @@ type cachedLeaf struct {
 const (
 	maxLeafCache = 256
 	leafCacheTTL = 24 * time.Hour
+	caPairFile   = "room-ca-pair.pem"
 )
 
-// LoadOrCreateLocalCA loads the persisted room CA from dir (room-ca.pem
-// + room-ca-key.pem) or generates and persists a fresh one. Persisting
+// LoadOrCreateLocalCA loads the persisted room CA from the atomic shared pair
+// file (with compatibility for room-ca.pem + room-ca-key.pem) or generates
+// and persists a fresh one. Persisting
 // matters: a regenerated CA invalidates every previously issued .tutti
 // certificate, so after a room-sync restart all consumers still
 // trusting the old bundle would reject the new certificates until each
@@ -73,6 +75,11 @@ func publicKeysEqual(a, b any) bool {
 }
 
 func LoadOrCreateLocalCA(dir string) (*LocalCA, error) {
+	if pair, err := os.ReadFile(filepath.Join(dir, caPairFile)); err == nil {
+		if ca, err := parseCAPairFile(pair); err == nil && keyMatchesCert(ca) {
+			return ca, nil
+		}
+	}
 	certPEM, certErr := os.ReadFile(filepath.Join(dir, "room-ca.pem"))
 	keyPEM, keyErr := os.ReadFile(filepath.Join(dir, "room-ca-key.pem"))
 	if certErr == nil && keyErr == nil {
@@ -92,18 +99,58 @@ func LoadOrCreateLocalCA(dir string) (*LocalCA, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "room-ca.pem"), ca.CACertPEM(), 0o600); err != nil {
-		return nil, err
-	}
 	keyBytes, err := x509.MarshalECPrivateKey(ca.caKey)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "room-ca-key.pem"),
-		pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}), 0o600); err != nil {
+	if err := persistCAPair(dir, ca.CACertPEM(), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})); err != nil {
 		return nil, err
 	}
 	return ca, nil
+}
+
+func parseCAPairFile(pair []byte) (*LocalCA, error) {
+	certBlock, rest := pem.Decode(pair)
+	keyBlock, _ := pem.Decode(rest)
+	if certBlock == nil || keyBlock == nil {
+		return nil, errors.New("room CA pair not PEM-encoded")
+	}
+	return parseCAPair(pem.EncodeToMemory(certBlock), pem.EncodeToMemory(keyBlock))
+}
+
+// persistCAPair publishes the certificate and key as one durable object. The
+// temporary file is synced before rename, so a crash cannot expose a new cert
+// beside an old key or leave a complete pair half-written.
+func persistCAPair(dir string, certPEM, keyPEM []byte) error {
+	f, err := os.CreateTemp(dir, ".room-ca-pair-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp)
+	if err := f.Chmod(0o600); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := f.Write(append(certPEM, keyPEM...)); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, filepath.Join(dir, caPairFile)); err != nil {
+		return fmt.Errorf("publish room CA pair: %w", err)
+	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
 }
 
 func parseCAPair(certPEM, keyPEM []byte) (*LocalCA, error) {

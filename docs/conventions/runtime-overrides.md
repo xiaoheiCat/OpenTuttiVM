@@ -22,6 +22,7 @@ are intentionally not part of the Tutti daemon override namespace.
 | `OPEN_TUTTI_COMPOSE_LOCAL_MODE` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Compose-only process marker for the fixed loopback-published bridge deployment; ignored when supplied through `.env`. |
 | `OPEN_TUTTI_MAX_PENDING_OPERATIONS` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds room-sync operations awaiting authoritative acknowledgement; default 128. |
 | `OPEN_TUTTI_MAX_PENDING_BYTES` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds cumulative JSON envelope bytes awaiting acknowledgement; default 64 MiB. |
+| `OPEN_TUTTI_BORROWER_DISCONNECT_GRACE_SECONDS` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | PDF v1 reconnect grace for unexpectedly disconnected borrowers; default 300 seconds. Active leave/kick fencing remains immediate. |
 
 | Variable                      | Owner document                                                                                             | Purpose                                                                              |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |

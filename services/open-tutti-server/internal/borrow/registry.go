@@ -28,6 +28,7 @@ var (
 	ErrCommandIDRequired    = errors.New("borrow command id required")
 	ErrInvalidChoice        = errors.New("approval choice is not one of the advertised options")
 	ErrOperatorDisconnected = errors.New("borrower disconnected; command awaiting interrupt")
+	ErrOutstandingCommands  = errors.New("borrow command limit reached; wait for an existing command to finish")
 )
 
 // AgentInstance is one shared agent in one room.
@@ -57,12 +58,14 @@ type Registry struct {
 	// execution even after other borrowers send their own commands.
 	// Bounded FIFO: only recent commands can still be executing.
 	commandBorrowers map[string]commandRecord
+	terminalCommands map[string]commandRecord
 	// commandOrder bounds the tracked commands PER ROOM+AGENT: a global
 	// FIFO let 65 unrelated commands evict a still-executing command's
 	// mapping, so its later approval prompt failed closed and the
 	// operator never saw it.
 	commandOrder map[string][]string
 	presence     map[string]borrowerPresence
+	grace        time.Duration
 }
 
 type borrowerPresence struct {
@@ -81,11 +84,13 @@ type openApproval struct {
 }
 
 type commandRecord struct {
-	payload    borrowagent.BorrowCommandPayload
-	borrower   string
-	epoch      uint64
-	delivery   commandDeliveryState
-	graceUntil time.Time
+	payload         borrowagent.BorrowCommandPayload
+	borrower        string
+	epoch           uint64
+	delivery        commandDeliveryState
+	graceUntil      time.Time
+	interruptIssued bool
+	terminalAt      time.Time
 }
 
 type commandDeliveryState uint8
@@ -97,9 +102,10 @@ const (
 
 // maxTrackedCommandsPerAgent bounds one room+agent's tracked commands:
 // prompts only arrive for commands still executing on that agent.
-const maxTrackedCommandsPerAgent = 16
+const maxTrackedCommandsPerAgent = 64
+const maxTerminalCommandsPerAgent = 64
 
-const borrowerDisconnectGrace = 30 * time.Second
+const borrowerDisconnectGrace = 5 * time.Minute
 
 // maxOutstandingApprovals bounds one agent's pending approvals, and
 // approvalTTL expires them even without a resolution (interactive
@@ -110,13 +116,19 @@ const (
 )
 
 // NewRegistry returns an empty registry.
-func NewRegistry() *Registry {
+func NewRegistry(grace ...time.Duration) *Registry {
+	disconnectGrace := borrowerDisconnectGrace
+	if len(grace) > 0 && grace[0] > 0 {
+		disconnectGrace = grace[0]
+	}
 	return &Registry{
 		agents:           map[string]map[string]*AgentInstance{},
 		approvals:        map[string]openApproval{},
 		commandBorrowers: map[string]commandRecord{},
+		terminalCommands: map[string]commandRecord{},
 		commandOrder:     map[string][]string{},
 		presence:         map[string]borrowerPresence{},
+		grace:            disconnectGrace,
 	}
 }
 
@@ -137,7 +149,7 @@ func (r *Registry) SetPresence(roomID, deviceID string, online bool) {
 	p.online = online
 	r.presence[key] = p
 	if !online {
-		deadline := time.Now().Add(borrowerDisconnectGrace)
+		deadline := time.Now().Add(r.grace)
 		for commandKey, record := range r.commandBorrowers {
 			if record.borrower == deviceID && strings.HasPrefix(commandKey, roomID+"\x00") && record.delivery == commandDelivered {
 				record.graceUntil = deadline
@@ -231,6 +243,11 @@ func (r *Registry) Share(roomID string, p borrowagent.AgentSharedPayload) (borro
 				delete(r.commandBorrowers, key)
 			}
 		}
+		for key := range r.terminalCommands {
+			if k := strings.SplitN(key, "\x00", 3); len(k) == 3 && k[0] == roomID && k[1] == p.AgentInstanceID {
+				delete(r.terminalCommands, key)
+			}
+		}
 	} else {
 		inst.LeaseGeneration = 1
 	}
@@ -268,6 +285,11 @@ func (r *Registry) Revoke(roomID, ownerDeviceID, agentInstanceID string) (borrow
 	for key := range r.commandBorrowers {
 		if k := strings.SplitN(key, "\x00", 3); len(k) == 3 && k[0] == roomID && k[1] == agentInstanceID {
 			delete(r.commandBorrowers, key)
+		}
+	}
+	for key := range r.terminalCommands {
+		if k := strings.SplitN(key, "\x00", 3); len(k) == 3 && k[0] == roomID && k[1] == agentInstanceID {
+			delete(r.terminalCommands, key)
 		}
 	}
 	shared := borrowagent.AgentSharedPayload{
@@ -321,11 +343,13 @@ func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPaylo
 			}
 			return previous.payload, false, nil
 		}
+		if previous, ok := r.terminalCommands[key]; ok {
+			if previous.payload.Input != p.Input || previous.payload.AgentInstanceID != p.AgentInstanceID || previous.payload.LeaseGeneration != p.LeaseGeneration || previous.borrower != p.BorrowerDeviceID {
+				return p, false, ErrDuplicateCommand
+			}
+			return previous.payload, false, nil
+		}
 	}
-	// BorrowerDeviceID was stamped by the hub from the authenticated
-	// connection before this call; recording it makes this device the
-	// session operator for subsequent approvals.
-	inst.LastBorrower = p.BorrowerDeviceID
 	// Track the originating borrower per command, keyed by
 	// room+agent+command: provider-local command ids collide across
 	// agents and rooms, and a global key would let one command's entry
@@ -337,13 +361,14 @@ func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPaylo
 	if _, exists := r.commandBorrowers[key]; !exists {
 		order := append(r.commandOrder[agentKey], key)
 		if len(order) > maxTrackedCommandsPerAgent {
-			delete(r.commandBorrowers, order[0])
-			order = order[1:]
+			return p, false, ErrOutstandingCommands
 		}
 		r.commandOrder[agentKey] = order
 	}
 	epoch := r.presence[roomID+"\x00"+p.BorrowerDeviceID].epoch
 	r.commandBorrowers[key] = commandRecord{payload: p, borrower: p.BorrowerDeviceID, epoch: epoch, delivery: commandQueued}
+	// Record the operator only after capacity admission succeeds.
+	inst.LastBorrower = p.BorrowerDeviceID
 	return p, true, nil
 }
 
@@ -396,12 +421,98 @@ func (r *Registry) CommandFailed(roomID, ownerDeviceID string, p borrowagent.Com
 	if p.LeaseGeneration != inst.LeaseGeneration {
 		return p, ErrStaleLease
 	}
-	record, ok := r.commandBorrowers[roomID+"\x00"+p.AgentInstanceID+"\x00"+p.CommandID]
+	key := roomID + "\x00" + p.AgentInstanceID + "\x00" + p.CommandID
+	record, ok := r.commandBorrowers[key]
+	if !ok {
+		record, ok = r.terminalCommands[key]
+		if !ok {
+			return p, ErrUnknownAgent
+		}
+	}
+	if _, active := r.commandBorrowers[key]; active {
+		record, ok = r.finishCommandLocked(roomID, p.AgentInstanceID, p.CommandID)
+	}
 	if !ok {
 		return p, ErrUnknownAgent
 	}
 	p.BorrowerDeviceID = record.borrower
 	return p, nil
+}
+
+// CommandFinished releases an active command mapping only after the owning
+// runtime reports a terminal state. The terminal record preserves command-id
+// idempotency and payload/generation fencing for retries.
+func (r *Registry) CommandFinished(roomID, ownerDeviceID string, p borrowagent.CommandFinishedPayload) (borrowagent.CommandFinishedPayload, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	inst := r.agents[roomID][p.AgentInstanceID]
+	if inst == nil {
+		return p, ErrUnknownAgent
+	}
+	if inst.OwnerDeviceID != ownerDeviceID {
+		return p, ErrCommandFailedOwner
+	}
+	if p.LeaseGeneration != inst.LeaseGeneration {
+		return p, ErrStaleLease
+	}
+	record, ok := r.finishCommandLocked(roomID, p.AgentInstanceID, p.CommandID)
+	if !ok {
+		key := roomID + "\x00" + p.AgentInstanceID + "\x00" + p.CommandID
+		record, ok = r.terminalCommands[key]
+		if !ok {
+			return p, ErrUnknownAgent
+		}
+	}
+	p.BorrowerDeviceID = record.borrower
+	return p, nil
+}
+
+func (r *Registry) finishCommandLocked(roomID, agentID, commandID string) (commandRecord, bool) {
+	key := roomID + "\x00" + agentID + "\x00" + commandID
+	record, ok := r.commandBorrowers[key]
+	if !ok {
+		return commandRecord{}, false
+	}
+	delete(r.commandBorrowers, key)
+	agentKey := roomID + "\x00" + agentID
+	order := r.commandOrder[agentKey]
+	for i, candidate := range order {
+		if candidate == key {
+			r.commandOrder[agentKey] = append(order[:i], order[i+1:]...)
+			break
+		}
+	}
+	record.terminalAt = time.Now()
+	r.terminalCommands[key] = record
+	r.trimTerminalCommandsLocked(agentKey)
+	return record, true
+}
+
+func (r *Registry) trimTerminalCommandsLocked(agentKey string) {
+	count := 0
+	for key := range r.terminalCommands {
+		if strings.HasPrefix(key, agentKey+"\x00") {
+			count++
+		}
+	}
+	for count > maxTerminalCommandsPerAgent {
+		var oldestKey string
+		var oldest time.Time
+		for key, record := range r.terminalCommands {
+			if !strings.HasPrefix(key, agentKey+"\x00") {
+				continue
+			}
+			opened := record.terminalAt
+			if oldestKey == "" || opened.Before(oldest) {
+				oldestKey, oldest = key, opened
+			}
+		}
+		if oldestKey == "" {
+			return
+		}
+		delete(r.terminalCommands, oldestKey)
+		count--
+	}
 }
 
 // CurrentOperator returns the current session operator (borrower) of an
@@ -516,7 +627,7 @@ func (r *Registry) ExpireDisconnectGrace(now time.Time) []InterruptRequest {
 	defer r.mu.Unlock()
 	var out []InterruptRequest
 	for key, record := range r.commandBorrowers {
-		if record.graceUntil.IsZero() || now.Before(record.graceUntil) {
+		if record.graceUntil.IsZero() || now.Before(record.graceUntil) || record.interruptIssued {
 			continue
 		}
 		parts := strings.SplitN(key, "\x00", 3)
@@ -530,15 +641,16 @@ func (r *Registry) ExpireDisconnectGrace(now time.Time) []InterruptRequest {
 				CommandID: record.payload.CommandID, AgentInstanceID: record.payload.AgentInstanceID,
 				OwnerDeviceID:    inst.OwnerDeviceID,
 				BorrowerDeviceID: record.borrower, LeaseGeneration: record.payload.LeaseGeneration,
-				DisconnectAtMS: record.graceUntil.Add(-borrowerDisconnectGrace).UnixMilli(), Reason: "borrower_disconnected",
+				DisconnectAtMS: record.graceUntil.Add(-r.grace).UnixMilli(), Reason: "borrower_disconnected",
 			}})
+			record.interruptIssued = true
+			r.commandBorrowers[key] = record
 		}
 		for approvalKey, approval := range r.approvals {
 			if approval.roomID == parts[0] && approval.agentID == parts[1] && approval.operator == record.borrower {
 				delete(r.approvals, approvalKey)
 			}
 		}
-		delete(r.commandBorrowers, key)
 	}
 	return out
 }
@@ -707,6 +819,11 @@ func (r *Registry) ClearRoom(roomID string) {
 			delete(r.commandBorrowers, key)
 		}
 	}
+	for key := range r.terminalCommands {
+		if strings.HasPrefix(key, prefix) {
+			delete(r.terminalCommands, key)
+		}
+	}
 	for key := range r.commandOrder {
 		if strings.HasPrefix(key, prefix) {
 			delete(r.commandOrder, key)
@@ -770,6 +887,11 @@ func (r *Registry) DropDevice(roomID, ownerDeviceID string) []borrowagent.Borrow
 			if inst := r.agents[roomID][parts[1]]; inst == nil || inst.OwnerDeviceID == ownerDeviceID {
 				delete(r.commandBorrowers, key)
 			}
+		}
+	}
+	for key := range r.terminalCommands {
+		if strings.HasPrefix(key, presenceKey+"\x00") {
+			delete(r.terminalCommands, key)
 		}
 	}
 	return revoked
