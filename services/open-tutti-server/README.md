@@ -42,6 +42,11 @@ and `default` are rejected. Every variable is documented in
 The checked-in Compose file builds the server from the repository Dockerfile;
 it does not pull a mutable `latest` image. Compose also fails before startup
 unless `OPEN_TUTTI_SECRET` is explicitly supplied in `.env` or the environment.
+This is the checked-in v1 deployment contract: local Dockerfile build, explicit
+secret, named `open-tutti-data` volume, and loopback-only host publication. The
+historical `../../docs/OpenTuttiVM_PRD对话.pdf` is an immutable record of earlier
+discussion; its old `latest` and bind-mount examples are not executable
+deployment guidance and the PDF text has not been modified.
 
 `OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES` limits each room's distinct referenced CAS
 bytes. Repeated references to the same hash count once per room; the same hash

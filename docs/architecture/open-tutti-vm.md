@@ -6,7 +6,9 @@ previews — while every agent keeps running in its owner's own machine,
 never on a shared server.
 
 The complete design conversation is preserved at
-`docs/OpenTuttiVM_PRD对话.pdf`.
+`docs/OpenTuttiVM_PRD对话.pdf`. That PDF is an immutable historical record, not
+an executable deployment specification. The checked-in v1 deployment contract
+supersedes its earlier `latest` image and bind-mount examples.
 
 ## Topology
 
@@ -148,10 +150,12 @@ topology; it is accepted only with the fixed listener and
 `http://localhost:8080`, so `.env` cannot create a general localhost exception.
 Remote deployments must provide a separate override with TLS and must not
 publish the server or its data volume directly to an untrusted network.
-The checked-in `docker-compose.yml` builds `services/open-tutti-server/Dockerfile`
-instead of pulling a mutable `:latest` image, and requires an explicit
-`OPEN_TUTTI_SECRET` value of at least 32 characters; placeholder values are
-rejected by the server.
+The checked-in v1 deployment contract is: build locally from
+`services/open-tutti-server/Dockerfile`, provide an explicit
+`OPEN_TUTTI_SECRET` of at least 32 characters, persist `/data` in the named
+`open-tutti-data` volume, and publish the host port on loopback only. Placeholder
+secret values are rejected by the server. The historical PDF remains unchanged
+and must not be used as a deployment recipe.
 
 ## `.tutti` virtual network
 
@@ -274,9 +278,8 @@ those capabilities before they are advertised as product behavior.
 
 Go modules build and test on Linux, macOS, and Windows; the FUSE layer is
 Linux-only by design (it runs inside session containers on the Docker
-Desktop VM) and is build-tagged out elsewhere. Deployment ships only the
-bare server image (`ghcr.io/xiaoheicat/open-tutti-server`); clients build
-per-platform from this repository.
+Desktop VM) and is build-tagged out elsewhere. The checked-in deployment builds
+the bare server image locally; clients build per-platform from this repository.
 
 Upstream Tutti services (`services/tuttid`, `apps/desktop`) are untouched
 by this change set; OpenTuttiVM adds new value beside them.

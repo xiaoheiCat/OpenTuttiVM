@@ -11,15 +11,21 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/coder/websocket"
 	"github.com/hashicorp/yamux"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 )
 
+const defaultMaxStreams = 256
+
+var ErrStreamLimit = fmt.Errorf("tunnel stream limit reached")
+
 // Tunnel is one multiplexed connection to the server relay.
 type Tunnel struct {
-	sess *yamux.Session
+	sess  *yamux.Session
+	slots chan struct{}
 }
 
 // Dial connects the device tunnel using the room session token.
@@ -41,37 +47,72 @@ func Dial(ctx context.Context, serverURL, token string) (*Tunnel, error) {
 		netConn.Close()
 		return nil, fmt.Errorf("tunnel yamux client: %w", err)
 	}
-	return &Tunnel{sess: sess}, nil
+	return &Tunnel{sess: sess, slots: make(chan struct{}, defaultMaxStreams)}, nil
 }
 
 // Connect opens a stream to one room route. The first frame identifies the
 // target; everything after is raw bytes.
 func (t *Tunnel) Connect(route vmprotocol.RouteKey) (net.Conn, error) {
+	if !t.tryAcquire() {
+		return nil, ErrStreamLimit
+	}
 	stream, err := t.sess.Open()
 	if err != nil {
+		t.release()
 		return nil, err
 	}
 	header := vmprotocol.TunnelHeader{Action: vmprotocol.TunnelConnect, RoomID: route.RoomID, Route: route}
 	if err := writeHeaderFrame(stream, header); err != nil {
 		stream.Close()
+		t.release()
 		return nil, err
 	}
-	return stream, nil
+	return &admittedConn{Conn: stream, release: t.release}, nil
 }
 
 // Accept answers a server-initiated stream (another device connecting to a
 // route on this device).
 func (t *Tunnel) Accept() (net.Conn, *vmprotocol.TunnelHeader, error) {
-	stream, err := t.sess.Accept()
-	if err != nil {
-		return nil, nil, err
+	for {
+		stream, err := t.sess.Accept()
+		if err != nil {
+			return nil, nil, err
+		}
+		if !t.tryAcquire() {
+			_ = stream.Close()
+			continue
+		}
+		header, err := readHeaderFrame(stream)
+		if err != nil {
+			_ = stream.Close()
+			t.release()
+			return nil, nil, err
+		}
+		return &admittedConn{Conn: stream, release: t.release}, header, nil
 	}
-	header, err := readHeaderFrame(stream)
-	if err != nil {
-		stream.Close()
-		return nil, nil, err
+}
+
+func (t *Tunnel) tryAcquire() bool {
+	select {
+	case t.slots <- struct{}{}:
+		return true
+	default:
+		return false
 	}
-	return stream, header, nil
+}
+
+func (t *Tunnel) release() { <-t.slots }
+
+type admittedConn struct {
+	net.Conn
+	once    sync.Once
+	release func()
+}
+
+func (c *admittedConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.release)
+	return err
 }
 
 // Close shuts the tunnel down.

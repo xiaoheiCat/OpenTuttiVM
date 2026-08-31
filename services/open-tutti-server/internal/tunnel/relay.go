@@ -7,6 +7,7 @@ package tunnel
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +19,13 @@ import (
 	"github.com/hashicorp/yamux"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 )
+
+const (
+	defaultMaxStreamsPerDevice = 128
+	defaultMaxStreamsTotal     = 2048
+)
+
+var ErrStreamLimit = fmt.Errorf("tunnel stream limit reached")
 
 // RouteAuthorizer validates that a requested route is actually
 // advertised by the target device: relay targets must be announced
@@ -32,13 +40,31 @@ type Relay struct {
 	log    *slog.Logger
 	routes RouteAuthorizer
 
-	mu       sync.Mutex
-	sessions map[string]map[string]*yamux.Session // roomID → deviceID → session
+	mu           sync.Mutex
+	sessions     map[string]map[string]*yamux.Session // roomID → deviceID → session
+	streams      map[streamOwner]int
+	total        int
+	maxPerDevice int
+	maxTotal     int
 }
+
+type streamOwner struct{ roomID, deviceID string }
 
 // NewRelay wires the relay. routes may be nil (no authorization; tests).
 func NewRelay(log *slog.Logger, routes RouteAuthorizer) *Relay {
-	return &Relay{log: log, routes: routes, sessions: map[string]map[string]*yamux.Session{}}
+	return NewRelayWithLimits(log, routes, defaultMaxStreamsPerDevice, defaultMaxStreamsTotal)
+}
+
+// NewRelayWithLimits is primarily useful to embedders and tests that need a
+// smaller resource budget. Limits are enforced before stream work starts.
+func NewRelayWithLimits(log *slog.Logger, routes RouteAuthorizer, maxPerDevice, maxTotal int) *Relay {
+	if maxPerDevice <= 0 {
+		maxPerDevice = defaultMaxStreamsPerDevice
+	}
+	if maxTotal <= 0 {
+		maxTotal = defaultMaxStreamsTotal
+	}
+	return &Relay{log: log, routes: routes, sessions: map[string]map[string]*yamux.Session{}, streams: map[streamOwner]int{}, maxPerDevice: maxPerDevice, maxTotal: maxTotal}
 }
 
 // ServeTunnel upgrades an authenticated device websocket into a yamux
@@ -84,7 +110,13 @@ func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, dev
 		if err != nil {
 			return nil // session closed
 		}
-		go r.handleStream(stream, roomID)
+		admission, err := r.admitStream(roomID, deviceID)
+		if err != nil {
+			writeHeaderError(stream, ErrStreamLimit.Error())
+			_ = stream.Close()
+			continue
+		}
+		go r.handleStream(stream, roomID, admission)
 	}
 }
 
@@ -142,27 +174,70 @@ func (r *Relay) unregisterLocked(roomID, deviceID string) {
 // yamux session.
 func (r *Relay) DropDevice(roomID, deviceID string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if sess := r.sessions[roomID][deviceID]; sess != nil {
-		sess.Close()
-	}
+	sess := r.sessions[roomID][deviceID]
 	r.unregisterLocked(roomID, deviceID)
+	r.mu.Unlock()
+	if sess != nil {
+		_ = sess.Close()
+	}
 }
 
 // DropRoom closes every tunnel session in one room (dissolution).
 func (r *Relay) DropRoom(roomID string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	var sessions []*yamux.Session
 	for deviceID, sess := range r.sessions[roomID] {
 		if sess != nil {
-			sess.Close()
+			sessions = append(sessions, sess)
 		}
 		delete(r.sessions[roomID], deviceID)
 	}
 	delete(r.sessions, roomID)
+	r.mu.Unlock()
+	for _, sess := range sessions {
+		_ = sess.Close()
+	}
 }
 
-func (r *Relay) handleStream(stream net.Conn, authenticatedRoom string) {
+type streamAdmission struct {
+	relay *Relay
+	owner streamOwner
+	once  sync.Once
+}
+
+func (a *streamAdmission) Release() {
+	a.once.Do(func() {
+		a.relay.releaseStream(a.owner)
+	})
+}
+
+func (r *Relay) admitStream(roomID, deviceID string) (*streamAdmission, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner := streamOwner{roomID: roomID, deviceID: deviceID}
+	if r.total >= r.maxTotal || r.streams[owner] >= r.maxPerDevice {
+		return nil, ErrStreamLimit
+	}
+	r.streams[owner]++
+	r.total++
+	return &streamAdmission{relay: r, owner: owner}, nil
+}
+
+func (r *Relay) releaseStream(owner streamOwner) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if n := r.streams[owner]; n > 1 {
+		r.streams[owner] = n - 1
+	} else {
+		delete(r.streams, owner)
+	}
+	if r.total > 0 {
+		r.total--
+	}
+}
+
+func (r *Relay) handleStream(stream net.Conn, authenticatedRoom string, source *streamAdmission) {
+	defer source.Release()
 	header, err := readHeader(stream)
 	if err != nil {
 		stream.Close()
@@ -183,12 +258,18 @@ func (r *Relay) handleStream(stream net.Conn, authenticatedRoom string) {
 		stream.Close()
 		return
 	}
-	target := r.dial(header.Route)
+	target, targetAdmission, err := r.dial(header.Route)
+	if errors.Is(err, ErrStreamLimit) {
+		writeHeaderError(stream, ErrStreamLimit.Error())
+		stream.Close()
+		return
+	}
 	if target == nil {
 		writeHeaderError(stream, fmt.Sprintf("route %s:%d unreachable", header.Route.DeviceID, header.Route.Port))
 		stream.Close()
 		return
 	}
+	defer targetAdmission.Release()
 	if err := writeHeader(target, *header); err != nil {
 		target.Close()
 		stream.Close()
@@ -197,7 +278,7 @@ func (r *Relay) handleStream(stream net.Conn, authenticatedRoom string) {
 	pipe(stream, target)
 }
 
-func (r *Relay) dial(route vmprotocol.RouteKey) net.Conn {
+func (r *Relay) dial(route vmprotocol.RouteKey) (net.Conn, *streamAdmission, error) {
 	// Snapshot the session under the lock, OPEN outside it: yamux's
 	// Open blocks on the peer's SYN-ACK window (up to 75s with the
 	// default StreamOpenTimeout when a registered-but-wedged device
@@ -208,13 +289,18 @@ func (r *Relay) dial(route vmprotocol.RouteKey) net.Conn {
 	sess := r.sessions[route.RoomID][route.DeviceID]
 	r.mu.Unlock()
 	if sess == nil {
-		return nil
+		return nil, nil, nil
+	}
+	admission, err := r.admitStream(route.RoomID, route.DeviceID)
+	if err != nil {
+		return nil, nil, err
 	}
 	stream, err := sess.Open()
 	if err != nil {
-		return nil
+		admission.Release()
+		return nil, nil, err
 	}
-	return stream
+	return stream, admission, nil
 }
 
 func pipe(a, b net.Conn) {
