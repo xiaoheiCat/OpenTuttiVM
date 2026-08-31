@@ -68,3 +68,23 @@ func TestWorkspaceRejectsLongOperationIdentitiesAndRestoreBudget(t *testing.T) {
 		t.Fatal("over-budget snapshot restored")
 	}
 }
+
+func TestWorkspaceContentBudgetCoversTextAndBlobLogicalSize(t *testing.T) {
+	w := NewWorkspaceState()
+	w.MaxContentBytes = 3
+	create := func(id, path string) vmprotocol.Envelope {
+		return vmprotocol.Envelope{AuthorDeviceID: "dev", OperationID: id, Operation: vmprotocol.FileOperation{ID: id, Path: path, Kind: vmprotocol.OpCreate}}
+	}
+	if _, err := w.Accept(create("a", "a")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Accept(vmprotocol.Envelope{AuthorDeviceID: "dev", OperationID: "p", BaseSeq: 1, Operation: vmprotocol.FileOperation{ID: "p", Path: "a", Kind: vmprotocol.OpTextPatch, Patch: &vmprotocol.TextPatch{BaseHash: ContentHash(nil), Splices: []vmprotocol.Splice{{Offset: 0, Insert: "ab"}}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Accept(create("b", "b")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Accept(vmprotocol.Envelope{AuthorDeviceID: "dev", OperationID: "blob", BaseSeq: 3, Operation: vmprotocol.FileOperation{ID: "blob", Path: "b", Kind: vmprotocol.OpBlobReplace, Blob: &vmprotocol.BlobReplace{BaseHash: ContentHash(nil), Manifest: "sha256:x", Size: 2}}}); err == nil {
+		t.Fatal("blob exceeding cumulative content budget accepted")
+	}
+}

@@ -506,7 +506,20 @@ func (r *Repo) ListMemberships(ctx context.Context, roomID string) ([]store.Memb
 }
 
 func (r *Repo) DeleteMembership(ctx context.Context, roomID, deviceID string) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM memberships WHERE room_id=? AND device_id=?`, roomID, deviceID)
+	r.casMu.Lock()
+	defer r.casMu.Unlock()
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM memberships WHERE room_id=? AND device_id=?`, roomID, deviceID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM cas_pending_refs WHERE room_id=? AND device_id=?`, roomID, deviceID); err != nil {
+		return err
+	}
+	err = tx.Commit()
 	return err
 }
 
@@ -723,7 +736,7 @@ func (r *Repo) addCASRefsSized(ctx context.Context, roomID string, objects []sto
 // ReserveCASPending records an upload without making it a durable room ref.
 // The per-device quota prevents any member from filling a room's durable
 // quota with abandoned chunk PUTs.
-func (r *Repo) ReserveCASPending(ctx context.Context, ref store.CASPendingRef, quotaBytes int64) error {
+func (r *Repo) ReserveCASPending(ctx context.Context, ref store.CASPendingRef, quotaBytes, roomQuotaBytes int64) error {
 	if ref.RoomID == "" || ref.DeviceID == "" || ref.Hash == "" || ref.Size < 0 {
 		return errors.New("invalid pending CAS reference")
 	}
@@ -754,6 +767,13 @@ func (r *Repo) ReserveCASPending(ctx context.Context, ref store.CASPendingRef, q
 	}
 	if quotaBytes > 0 && used > quotaBytes {
 		return fmt.Errorf("CAS pending device quota exceeded: %d > %d bytes", used, quotaBytes)
+	}
+	var roomUsed int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(size),0) FROM cas_pending_refs WHERE room_id=? AND expires_at>=?`, ref.RoomID, time.Now().Unix()).Scan(&roomUsed); err != nil {
+		return err
+	}
+	if roomQuotaBytes > 0 && roomUsed > roomQuotaBytes {
+		return fmt.Errorf("CAS pending room quota exceeded: %d > %d bytes", roomUsed, roomQuotaBytes)
 	}
 	return tx.Commit()
 }
@@ -1174,6 +1194,9 @@ func (r *Repo) DissolveRoom(ctx context.Context, roomID string, at time.Time) er
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM cas_refs WHERE room_id=?`, roomID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM cas_pending_refs WHERE room_id=?`, roomID); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -119,12 +119,15 @@ type WorkspaceState struct {
 	MaxIdentityBytes     int64
 	MaxOperationIDBytes  int
 	MaxAgentSessionBytes int
-	seq                  uint64
-	files                map[string]*fileState
-	history              map[string][]appliedPatch
-	hashLog              map[string][]seqHash
-	barriers             map[string]*barrier
-	ops                  []vmprotocol.Envelope
+	// MaxContentBytes bounds the logical bytes retained by live text and blob
+	// entries. Blob bytes use their declared CAS logical size even when lazy.
+	MaxContentBytes int64
+	seq             uint64
+	files           map[string]*fileState
+	history         map[string][]appliedPatch
+	hashLog         map[string][]seqHash
+	barriers        map[string]*barrier
+	ops             []vmprotocol.Envelope
 	// accepted deduplicates (AuthorDeviceID, OperationID): a retry after
 	// a lost broadcast/ack must return the original acknowledgement, not
 	// sequence the same edit twice (a re-applied insert duplicates user
@@ -374,6 +377,9 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 	if w.MaxLivePathBytes > 0 && w.livePathBytes()+w.pathDelta(env.Operation) > w.MaxLivePathBytes {
 		return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "workspace live path budget exceeded"}
 	}
+	if w.MaxContentBytes > 0 && w.contentDelta(env.Operation) > w.MaxContentBytes {
+		return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "workspace content budget exceeded"}
+	}
 	if !vmprotocol.ValidWorkspacePath(env.Operation.Path) {
 		return env, &RejectionError{Reason: RejectInvalid}
 	}
@@ -451,6 +457,33 @@ func (w *WorkspaceState) livePathBytes() int64 {
 		total += int64(len(path))
 	}
 	return total
+}
+
+func fileContentSize(f *fileState) int64 {
+	if f == nil || f.IsDir {
+		return 0
+	}
+	if f.Kind == kindText && f.Content != nil {
+		return int64(len(f.Content))
+	}
+	return f.Size
+}
+
+func (w *WorkspaceState) contentBytes() int64 {
+	var total int64
+	for _, f := range w.files {
+		total += fileContentSize(f)
+	}
+	return total
+}
+
+func (w *WorkspaceState) contentDelta(op vmprotocol.FileOperation) int64 {
+	// The exact post-operation size is checked in the mutator once a patch has
+	// been transformed. This preflight catches blob declarations immediately.
+	if op.Kind != vmprotocol.OpBlobReplace || op.Blob == nil {
+		return 0
+	}
+	return w.contentBytes() - fileContentSize(w.files[op.Path]) + op.Blob.Size
 }
 
 func (w *WorkspaceState) pathDelta(op vmprotocol.FileOperation) int64 {
@@ -642,6 +675,9 @@ func (w *WorkspaceState) applyTextPatch(env *vmprotocol.Envelope) error {
 	if len(next) > MaxTextFile || !utf8.Valid(next) {
 		return &RejectionError{Reason: RejectInvalid}
 	}
+	if w.MaxContentBytes > 0 && w.contentBytes()-fileContentSize(f)+int64(len(next)) > w.MaxContentBytes {
+		return &RejectionError{Reason: RejectInvalid, CurrentHash: "workspace content budget exceeded"}
+	}
 	f.Content = next
 	f.Size = int64(len(next))
 	env.Operation.Patch = &patch
@@ -663,6 +699,10 @@ func (w *WorkspaceState) applyBlobReplace(env *vmprotocol.Envelope) error {
 	}
 	if op.Blob.BaseHash != w.currentHash(op.Path) {
 		return &RejectionError{Reason: RejectBaseMismatch, CurrentHash: w.currentHash(op.Path)}
+	}
+	newTotal := w.contentBytes() - fileContentSize(f) + op.Blob.Size
+	if w.MaxContentBytes > 0 && newTotal > w.MaxContentBytes {
+		return &RejectionError{Reason: RejectInvalid, CurrentHash: "workspace content budget exceeded"}
 	}
 	f.Kind = kindBlob
 	f.Manifest = op.Blob.Manifest
@@ -700,9 +740,17 @@ func (w *WorkspaceState) pathTreeConflict(path string, isDir bool) bool {
 	return false
 }
 
+func (w *WorkspaceState) missingParent(path string) bool {
+	i := strings.LastIndexByte(path, '/')
+	return i >= 0 && (w.files[path[:i]] == nil || !w.files[path[:i]].IsDir)
+}
+
 func (w *WorkspaceState) applyCreate(op vmprotocol.FileOperation) error {
 	if _, exists := w.files[op.Path]; exists {
 		return &RejectionError{Reason: RejectInvalid}
+	}
+	if w.missingParent(op.Path) {
+		return &RejectionError{Reason: RejectInvalid, CurrentHash: "parent directory does not exist"}
 	}
 	if w.pathTreeConflict(op.Path, false) || w.ciConflict(op.Path) {
 		return &RejectionError{Reason: RejectInvalid}
@@ -755,6 +803,9 @@ func (w *WorkspaceState) applyRemove(env *vmprotocol.Envelope) error {
 func (w *WorkspaceState) applyMkdir(op vmprotocol.FileOperation) error {
 	if _, exists := w.files[op.Path]; exists {
 		return &RejectionError{Reason: RejectInvalid}
+	}
+	if w.missingParent(op.Path) {
+		return &RejectionError{Reason: RejectInvalid, CurrentHash: "parent directory does not exist"}
 	}
 	if w.pathTreeConflict(op.Path, true) || w.ciConflict(op.Path) {
 		return &RejectionError{Reason: RejectInvalid}
@@ -815,6 +866,9 @@ func (w *WorkspaceState) applyRename(env *vmprotocol.Envelope) error {
 	f, exists := w.files[r.OldPath]
 	if !exists {
 		return &RejectionError{Reason: RejectInvalid}
+	}
+	if w.missingParent(r.NewPath) {
+		return &RejectionError{Reason: RejectInvalid, CurrentHash: "parent directory does not exist"}
 	}
 	// renameat2 RENAME_NOREPLACE is enforced ATOMICALLY here (the
 	// authoritative Apply is single-threaded): an existing destination
@@ -1102,6 +1156,7 @@ func (w *WorkspaceState) RestoreSnapshot(snap vmprotocol.WorkspaceSnapshot) erro
 	}
 	var pathBytes int64
 	seen := make(map[string]struct{}, len(snap.Entries))
+	dirs := make(map[string]bool)
 	for _, e := range snap.Entries {
 		if !vmprotocol.ValidWorkspacePath(e.Path) {
 			return fmt.Errorf("snapshot entry %q: invalid workspace path", e.Path)
@@ -1110,10 +1165,32 @@ func (w *WorkspaceState) RestoreSnapshot(snap vmprotocol.WorkspaceSnapshot) erro
 			return fmt.Errorf("snapshot entry %q duplicated", e.Path)
 		}
 		seen[e.Path] = struct{}{}
+		if e.Kind == vmprotocol.TreeEntryDir {
+			dirs[e.Path] = true
+		}
 		pathBytes += int64(len(e.Path))
 	}
 	if w.MaxLivePathBytes > 0 && pathBytes > w.MaxLivePathBytes {
 		return fmt.Errorf("snapshot live path budget exceeded")
+	}
+	var contentBytes int64
+	for _, e := range snap.Entries {
+		if e.Kind != vmprotocol.TreeEntryDir {
+			if e.Size < 0 {
+				return fmt.Errorf("snapshot entry %q has negative size", e.Path)
+			}
+			contentBytes += e.Size
+		}
+	}
+	if w.MaxContentBytes > 0 && contentBytes > w.MaxContentBytes {
+		return fmt.Errorf("snapshot content budget exceeded: %d > %d bytes", contentBytes, w.MaxContentBytes)
+	}
+	for _, e := range snap.Entries {
+		if i := strings.LastIndexByte(e.Path, '/'); i >= 0 {
+			if !dirs[e.Path[:i]] {
+				return fmt.Errorf("snapshot entry %q has no explicit parent directory", e.Path)
+			}
+		}
 	}
 	w.seq = snap.ServerSeq
 	w.files = map[string]*fileState{}
@@ -1158,6 +1235,9 @@ func (w *WorkspaceState) validateBudgets() error {
 	}
 	if w.MaxIdentityBytes > 0 && w.identityBytes() > w.MaxIdentityBytes {
 		return fmt.Errorf("operation identity bytes exceeded")
+	}
+	if w.MaxContentBytes > 0 && w.contentBytes() > w.MaxContentBytes {
+		return fmt.Errorf("workspace content budget exceeded")
 	}
 	return nil
 }

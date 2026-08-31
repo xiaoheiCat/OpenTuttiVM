@@ -108,6 +108,9 @@ func run() error {
 		Addr:              cfg.ListenAddr,
 		Handler:           server.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)

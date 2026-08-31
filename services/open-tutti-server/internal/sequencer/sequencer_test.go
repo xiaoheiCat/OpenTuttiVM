@@ -65,13 +65,13 @@ func TestSubmitExpiredBlobPendingDoesNotAdvanceStateOrBroadcast(t *testing.T) {
 	if err := repo.ReserveCASPending(ctx, store.CASPendingRef{
 		RoomID: "room-a", DeviceID: "dev-a", Hash: manifest.Hash,
 		Size: int64(len(manifest.Body())), ExpiresAt: now.Add(-time.Second),
-	}, 1<<20); err != nil {
+	}, 1<<20, 2<<20); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.ReserveCASPending(ctx, store.CASPendingRef{
 		RoomID: "room-a", DeviceID: "dev-a", Hash: manifest.Chunks[0],
 		Size: int64(len(chunks[0])), ExpiresAt: now.Add(-time.Second),
-	}, 1<<20); err != nil {
+	}, 1<<20, 2<<20); err != nil {
 		t.Fatal(err)
 	}
 

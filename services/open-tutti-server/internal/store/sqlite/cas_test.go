@@ -124,7 +124,7 @@ func TestCASPendingRefsPromoteAndSweep(t *testing.T) {
 	defer r.Close()
 	ctx := context.Background()
 	ref := store.CASPendingRef{RoomID: "room-a", DeviceID: "dev-a", Hash: "sha256:" + strings.Repeat("a", 64), Size: 10, ExpiresAt: time.Now().Add(time.Hour)}
-	if err := r.ReserveCASPending(ctx, ref, 20); err != nil {
+	if err := r.ReserveCASPending(ctx, ref, 20, 100); err != nil {
 		t.Fatal(err)
 	}
 	if ok, err := r.HasCASRef(ctx, ref.RoomID, ref.Hash); err != nil || ok {
@@ -138,11 +138,30 @@ func TestCASPendingRefsPromoteAndSweep(t *testing.T) {
 	}
 	ref.Hash = "sha256:" + strings.Repeat("b", 64)
 	ref.ExpiresAt = time.Unix(10, 0)
-	if err := r.ReserveCASPending(ctx, ref, 20); err != nil {
+	if err := r.ReserveCASPending(ctx, ref, 20, 100); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.SweepCASPending(ctx, time.Unix(10, 0)); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCASPendingRoomQuotaCannotBeBypassedByDevices(t *testing.T) {
+	r, err := Open(t.TempDir() + "/pending-room.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	ctx := context.Background()
+	for i, device := range []string{"dev-a", "dev-b"} {
+		hash := "sha256:" + strings.Repeat(string(rune('a'+i)), 64)
+		err := r.ReserveCASPending(ctx, store.CASPendingRef{RoomID: "room", DeviceID: device, Hash: hash, Size: 6, ExpiresAt: time.Now().Add(time.Hour)}, 10, 10)
+		if i == 0 && err != nil {
+			t.Fatal(err)
+		}
+		if i == 1 && err == nil {
+			t.Fatal("room pending quota bypassed by second device")
+		}
 	}
 }
 
@@ -172,7 +191,7 @@ func TestPublishCASPendingRollsBackPromotionWhenPrepareFails(t *testing.T) {
 	hash := "sha256:" + strings.Repeat("e", 64)
 	if err := r.ReserveCASPending(ctx, store.CASPendingRef{
 		RoomID: "room-a", DeviceID: "dev-a", Hash: hash, Size: 10, ExpiresAt: time.Now().Add(time.Hour),
-	}, 20); err != nil {
+	}, 20, 100); err != nil {
 		t.Fatal(err)
 	}
 	prepareErr := errors.New("prepare rejected")
@@ -265,7 +284,7 @@ func TestDeleteCASPendingAndCollectKeepsOtherRoomLiveMetadata(t *testing.T) {
 	if err := r.AddCASRefsSized(ctx, "room-live", []store.CASObject{{Hash: hash, Size: 4}}, 10); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.ReserveCASPending(ctx, store.CASPendingRef{RoomID: "room-failed", DeviceID: "dev", Hash: hash, Size: 4, ExpiresAt: time.Now().Add(time.Hour)}, 10); err != nil {
+	if err := r.ReserveCASPending(ctx, store.CASPendingRef{RoomID: "room-failed", DeviceID: "dev", Hash: hash, Size: 4, ExpiresAt: time.Now().Add(time.Hour)}, 10, 100); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.DeleteCASPendingAndCollect(ctx, "room-failed", "dev", []string{hash}); err != nil {

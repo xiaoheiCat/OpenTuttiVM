@@ -56,6 +56,9 @@ func (w *WorkspaceState) ApplySequenced(env vmprotocol.Envelope) error {
 			// advancing AppliedSeq over a permanently skewed replica.
 			return fmt.Errorf("apply patch to %s: %w", op.Path, err)
 		}
+		if w.MaxContentBytes > 0 && w.contentBytes()-fileContentSize(f)+int64(len(next)) > w.MaxContentBytes {
+			return fmt.Errorf("workspace content budget exceeded")
+		}
 		f.Content = next
 	case vmprotocol.OpBlobReplace:
 		f := w.files[op.Path]
@@ -64,6 +67,9 @@ func (w *WorkspaceState) ApplySequenced(env vmprotocol.Envelope) error {
 		}
 		if op.Blob == nil {
 			return nil
+		}
+		if w.MaxContentBytes > 0 && w.contentBytes()-fileContentSize(f)+op.Blob.Size > w.MaxContentBytes {
+			return fmt.Errorf("workspace content budget exceeded")
 		}
 		f.Kind = kindBlob
 		f.Manifest = op.Blob.Manifest

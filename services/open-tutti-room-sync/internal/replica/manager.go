@@ -566,6 +566,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			if err := os.MkdirAll(dst, 0o755); err != nil {
 				return err
 			}
+			if err := syncDir(filepath.Dir(dst)); err != nil {
+				return fmt.Errorf("sync directory parent %s: %w", dst, err)
+			}
 			if err := checkRoot(); err != nil {
 				return err
 			}
@@ -614,6 +617,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			if err := applyMode(dst, info.Mode); err != nil {
 				return fmt.Errorf("chmod %s: %w", dst, err)
 			}
+			if err := syncDir(filepath.Dir(dst)); err != nil {
+				return fmt.Errorf("sync chmod parent %s: %w", dst, err)
+			}
 			if err := checkRoot(); err != nil {
 				return err
 			}
@@ -649,6 +655,9 @@ func (m *Manager) ApplyToWorkspace(ctx context.Context, targetDir string) error 
 			}
 			if err := applyMode(d.dst, d.mode); err != nil {
 				return fmt.Errorf("chmod %s: %w", d.dst, err)
+			}
+			if err := syncDir(filepath.Dir(d.dst)); err != nil {
+				return fmt.Errorf("sync chmod parent %s: %w", d.dst, err)
 			}
 			if err := checkRoot(); err != nil {
 				return err
@@ -742,6 +751,10 @@ func atomicWrite(root, dst string, content []byte, checkRoot func() error) error
 		tmp.Close()
 		return err
 	}
+	if err := syncFile(tmp); err != nil {
+		tmp.Close()
+		return fmt.Errorf("sync temporary file: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
@@ -760,6 +773,9 @@ func atomicWrite(root, dst string, content []byte, checkRoot func() error) error
 	// replaces atomically.
 	if err := replaceFile(tmp.Name(), dst); err != nil {
 		return err
+	}
+	if err := syncDir(filepath.Dir(dst)); err != nil {
+		return fmt.Errorf("sync parent directory: %w", err)
 	}
 	if err := checkRoot(); err != nil {
 		return err
@@ -807,6 +823,9 @@ func pruneRemoved(root string, roomPaths map[string]bool, checkRoot func() error
 			if err := removePath(p); err != nil {
 				return err
 			}
+			if err := syncDir(filepath.Dir(p)); err != nil {
+				return fmt.Errorf("sync removal parent %s: %w", p, err)
+			}
 			if err := checkRoot(); err != nil {
 				return err
 			}
@@ -830,6 +849,9 @@ func pruneRemoved(root string, roomPaths map[string]bool, checkRoot func() error
 			}
 			if err := removePath(d); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("remove stale directory %s: %w", d, err)
+			}
+			if err := syncDir(filepath.Dir(d)); err != nil {
+				return fmt.Errorf("sync directory removal parent %s: %w", d, err)
 			}
 			if err := checkRoot(); err != nil {
 				return err

@@ -53,6 +53,9 @@ func TestConcurrentEditsDifferentRegionsMerge(t *testing.T) {
 	// The Tutti VM scenario: Alice edits the port line, Bob edits line3,
 	// both from the same base. Both edits must survive in one sequence.
 	w := NewWorkspaceState()
+	if _, err := w.Accept(vmprotocol.Envelope{AuthorDeviceID: "dev-alice", OperationID: "mkdir-src", Operation: vmprotocol.FileOperation{ID: "mkdir-src", Path: "src", Kind: vmprotocol.OpMkdir, IsDir: true}}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := w.Accept(vmprotocol.Envelope{
 		AuthorDeviceID: "dev-alice", AgentSessionID: "alice-claude", BaseSeq: 0,
 		Operation: vmprotocol.FileOperation{ID: "c1", Path: "src/app.ts", Kind: vmprotocol.OpCreate},
@@ -63,16 +66,16 @@ func TestConcurrentEditsDifferentRegionsMerge(t *testing.T) {
 	bobWant := strings.Replace(baseDoc, "export default app", "export default server", 1)
 
 	// Seed the base document first so both authors share one base revision.
-	if _, err := submit(t, w, 1, "src/app.ts", mustPatch(t, []byte{}, []byte(baseDoc)), "alice-claude"); err != nil {
+	if _, err := submit(t, w, 2, "src/app.ts", mustPatch(t, []byte{}, []byte(baseDoc)), "alice-claude"); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	// Alice is up to date and applies directly.
-	if _, err := submit(t, w, 2, "src/app.ts", mustPatch(t, []byte(baseDoc), []byte(aliceWant)), "alice-claude"); err != nil {
+	if _, err := submit(t, w, 3, "src/app.ts", mustPatch(t, []byte(baseDoc), []byte(aliceWant)), "alice-claude"); err != nil {
 		t.Fatalf("alice submit: %v", err)
 	}
 	// Bob submits against the same stale base; the server transforms.
-	if _, err := submit(t, w, 2, "src/app.ts", mustPatch(t, []byte(baseDoc), []byte(bobWant)), "bob-codex"); err != nil {
+	if _, err := submit(t, w, 3, "src/app.ts", mustPatch(t, []byte(baseDoc), []byte(bobWant)), "bob-codex"); err != nil {
 		t.Fatalf("bob submit: %v", err)
 	}
 

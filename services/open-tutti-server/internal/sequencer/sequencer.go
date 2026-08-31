@@ -561,6 +561,7 @@ func (m *Manager) engine(roomID string) (*engine, error) {
 	state.MaxEntries = m.cfg.WorkspaceMaxEntries
 	state.MaxPathBytes = m.cfg.WorkspaceMaxPathBytes
 	state.MaxLivePathBytes = m.cfg.WorkspaceMaxLivePathBytes
+	state.MaxContentBytes = m.cfg.WorkspaceMaxContentBytes
 	state.MaxIdentities = m.cfg.WorkspaceMaxIdentities
 	state.MaxIdentityBytes = m.cfg.WorkspaceMaxIdentityBytes
 	state.MaxOperationIDBytes = m.cfg.WorkspaceMaxOperationIDBytes

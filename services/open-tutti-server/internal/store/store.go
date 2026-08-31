@@ -164,7 +164,7 @@ type Repository interface {
 	// CAS references
 	AddCASRefs(ctx context.Context, roomID string, hashes []string) error
 	AddCASRefsSized(ctx context.Context, roomID string, objects []CASObject, quotaBytes int64) error
-	ReserveCASPending(ctx context.Context, ref CASPendingRef, quotaBytes int64) error
+	ReserveCASPending(ctx context.Context, ref CASPendingRef, deviceQuotaBytes, roomQuotaBytes int64) error
 	PromoteCASPending(ctx context.Context, roomID, deviceID string, hashes []string, quotaBytes int64) error
 	// PublishCASPending promotes reservations and runs fn before committing
 	// the same transaction. If fn or the commit fails, no promotion is visible.

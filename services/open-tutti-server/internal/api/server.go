@@ -87,7 +87,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/rooms/{roomID}/transfer/abort", s.authRoomOwner(s.handleTransferAbort))
 	mux.HandleFunc("GET /api/rooms/{roomID}/ws", s.authRoomWS(s.handleRoomWS))
 	mux.HandleFunc("GET /api/tunnel", s.handleTunnelWS)
-	return mux
+	// Set an explicit body deadline before dispatch. WebSocket endpoints are
+	// excluded because their upgraded connection is intentionally long-lived.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/ws") && r.URL.Path != "/api/tunnel" {
+			d := 10 * time.Second
+			if strings.Contains(r.URL.Path, "/cas/") {
+				d = 30 * time.Second
+			}
+			_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(d))
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
@@ -469,7 +480,7 @@ func (s *Server) handleCASPut(w http.ResponseWriter, r *http.Request, roomID, de
 		writeErr(w, http.StatusConflict, "room already dissolved")
 		return
 	}
-	if err := s.repo.ReserveCASPending(r.Context(), store.CASPendingRef{RoomID: roomID, DeviceID: deviceID, Hash: hash, Size: int64(len(body)), ExpiresAt: time.Now().Add(s.cfg.CASPendingTTL)}, s.cfg.CASPendingQuotaBytes); err != nil {
+	if err := s.repo.ReserveCASPending(r.Context(), store.CASPendingRef{RoomID: roomID, DeviceID: deviceID, Hash: hash, Size: int64(len(body)), ExpiresAt: time.Now().Add(s.cfg.CASPendingTTL)}, s.cfg.CASPendingQuotaBytes, s.cfg.CASPendingRoomQuotaBytes); err != nil {
 		if strings.Contains(err.Error(), "quota exceeded") {
 			writeErr(w, http.StatusRequestEntityTooLarge, err.Error())
 		} else {

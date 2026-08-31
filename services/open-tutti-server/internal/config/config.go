@@ -41,10 +41,12 @@ type Config struct {
 	SnapshotIntervalOps           int
 	CASRoomQuotaBytes             int64
 	CASPendingQuotaBytes          int64
+	CASPendingRoomQuotaBytes      int64
 	CASPendingTTL                 time.Duration
 	WorkspaceMaxEntries           int
 	WorkspaceMaxPathBytes         int64
 	WorkspaceMaxLivePathBytes     int64
+	WorkspaceMaxContentBytes      int64
 	WorkspaceMaxIdentities        int
 	WorkspaceMaxIdentityBytes     int64
 	WorkspaceMaxOperationIDBytes  int
@@ -87,10 +89,12 @@ func Load(envFile string) (Config, error) {
 		SnapshotIntervalOps:           intOrDefault(get("OPEN_TUTTI_SNAPSHOT_INTERVAL_OPS", ""), 512),
 		CASRoomQuotaBytes:             int64OrDefault(get("OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES", ""), 1<<30),
 		CASPendingQuotaBytes:          int64OrDefault(get("OPEN_TUTTI_CAS_PENDING_QUOTA_BYTES", ""), 64<<20),
+		CASPendingRoomQuotaBytes:      int64OrDefault(get("OPEN_TUTTI_CAS_PENDING_ROOM_QUOTA_BYTES", ""), 256<<20),
 		CASPendingTTL:                 secondsOrDefault(get("OPEN_TUTTI_CAS_PENDING_TTL_SECONDS", ""), 15*time.Minute),
 		WorkspaceMaxEntries:           intOrDefault(get("OPEN_TUTTI_WORKSPACE_MAX_ENTRIES", ""), 100000),
 		WorkspaceMaxPathBytes:         int64OrDefault(get("OPEN_TUTTI_WORKSPACE_MAX_PATH_BYTES", ""), 16<<20),
 		WorkspaceMaxLivePathBytes:     int64OrDefault(get("OPEN_TUTTI_WORKSPACE_MAX_LIVE_PATH_BYTES", ""), 64<<20),
+		WorkspaceMaxContentBytes:      int64OrDefault(get("OPEN_TUTTI_WORKSPACE_MAX_CONTENT_BYTES", ""), 1<<30),
 		WorkspaceMaxIdentities:        intOrDefault(get("OPEN_TUTTI_WORKSPACE_MAX_IDENTITIES", ""), 200000),
 		WorkspaceMaxIdentityBytes:     int64OrDefault(get("OPEN_TUTTI_WORKSPACE_MAX_IDENTITY_BYTES", ""), 32<<20),
 		WorkspaceMaxOperationIDBytes:  intOrDefault(get("OPEN_TUTTI_WORKSPACE_MAX_OPERATION_ID_BYTES", ""), 1024),
@@ -113,7 +117,7 @@ func Load(envFile string) (Config, error) {
 			return Config{}, errors.New("plain HTTP public URL requires a loopback listen address; use a TLS reverse proxy for remote deployment")
 		}
 	}
-	if cfg.OwnerGracePeriod <= 0 || cfg.BorrowerDisconnectGrace <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 || cfg.CASPendingQuotaBytes <= 0 || cfg.CASPendingTTL <= 0 || cfg.WorkspaceMaxEntries <= 0 || cfg.WorkspaceMaxPathBytes <= 0 || cfg.WorkspaceMaxLivePathBytes <= 0 || cfg.WorkspaceMaxIdentities <= 0 || cfg.WorkspaceMaxIdentityBytes <= 0 || cfg.WorkspaceMaxOperationIDBytes <= 0 || cfg.WorkspaceMaxAgentSessionBytes <= 0 || cfg.ActiveRoomLimit <= 0 {
+	if cfg.OwnerGracePeriod <= 0 || cfg.BorrowerDisconnectGrace <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 || cfg.CASPendingQuotaBytes <= 0 || cfg.CASPendingRoomQuotaBytes <= 0 || cfg.CASPendingTTL <= 0 || cfg.WorkspaceMaxEntries <= 0 || cfg.WorkspaceMaxPathBytes <= 0 || cfg.WorkspaceMaxLivePathBytes <= 0 || cfg.WorkspaceMaxContentBytes <= 0 || cfg.WorkspaceMaxIdentities <= 0 || cfg.WorkspaceMaxIdentityBytes <= 0 || cfg.WorkspaceMaxOperationIDBytes <= 0 || cfg.WorkspaceMaxAgentSessionBytes <= 0 || cfg.ActiveRoomLimit <= 0 {
 		return Config{}, errors.New("grace period, ticket TTL, snapshot interval, CAS quotas, workspace limits, and active room limit must be positive")
 	}
 	return cfg, nil
