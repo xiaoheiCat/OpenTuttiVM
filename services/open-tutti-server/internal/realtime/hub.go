@@ -628,6 +628,16 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 				continue
 			}
 			p := *msg.ApprovalDecision
+			// Reject before any registry lookup or error response: these
+			// fields are copied into the delivery fence and the response
+			// payload, so an oversized decision could amplify through the
+			// 64-slot queue. Invalid choices are rejected here only when
+			// they are outside the bounded protocol range; the registry
+			// still validates the advertised option index.
+			if !validApprovalDecision(p) {
+				h.log.Warn("approval decision over limit", "room", c.RoomID, "device", c.DeviceID)
+				continue
+			}
 			p.DeciderDeviceID = c.DeviceID
 			// Resolve under the admission fence: a decision frame read
 			// before a kick can otherwise resolve and forward after
@@ -665,6 +675,17 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 // legitimate sessions need a handful; hostile or buggy clients must not
 // grow the process-global registry without limit.
 const maxRoutesPerDevice = 64
+
+const (
+	maxApprovalDecisionIDLen  = 128
+	maxApprovalDecisionChoice = 16
+)
+
+func validApprovalDecision(p borrowagent.ApprovalDecisionPayload) bool {
+	return len(p.ApprovalID) <= maxApprovalDecisionIDLen &&
+		len(p.AgentInstanceID) <= maxApprovalDecisionIDLen &&
+		p.Choice >= -1 && p.Choice < maxApprovalDecisionChoice
+}
 
 func labelAgent(sessionLabel string) string {
 	for i := 0; i < len(sessionLabel); i++ {
