@@ -25,6 +25,7 @@ var (
 	ErrCommandFailedOwner  = errors.New("only the owning device may report command failure")
 	ErrDeliveryUnavailable = errors.New("borrow delivery unavailable")
 	ErrDuplicateCommand    = errors.New("borrow command id already used with different payload")
+	ErrCommandIDRequired   = errors.New("borrow command id required")
 	ErrInvalidChoice       = errors.New("approval choice is not one of the advertised options")
 )
 
@@ -60,6 +61,12 @@ type Registry struct {
 	// mapping, so its later approval prompt failed closed and the
 	// operator never saw it.
 	commandOrder map[string][]string
+	presence     map[string]borrowerPresence
+}
+
+type borrowerPresence struct {
+	epoch  uint64
+	online bool
 }
 
 type openApproval struct {
@@ -75,6 +82,7 @@ type openApproval struct {
 type commandRecord struct {
 	payload  borrowagent.BorrowCommandPayload
 	borrower string
+	epoch    uint64
 	delivery commandDeliveryState
 }
 
@@ -104,7 +112,38 @@ func NewRegistry() *Registry {
 		approvals:        map[string]openApproval{},
 		commandBorrowers: map[string]commandRecord{},
 		commandOrder:     map[string][]string{},
+		presence:         map[string]borrowerPresence{},
 	}
+}
+
+// SetPresence binds delivery to the authenticated borrower's current socket
+// session. A disconnect advances the epoch so queued work from that session
+// cannot be emitted after a later reconnect.
+func (r *Registry) SetPresence(roomID, deviceID string, online bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := roomID + "\x00" + deviceID
+	p := r.presence[key]
+	if online && !p.online {
+		p.epoch++
+	}
+	if p.epoch == 0 {
+		p.epoch = 1
+	}
+	p.online = online
+	r.presence[key] = p
+}
+
+// BeginPresence starts a new authenticated socket session, including a
+// replacement connection that overlaps the predecessor's detach.
+func (r *Registry) BeginPresence(roomID, deviceID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := roomID + "\x00" + deviceID
+	p := r.presence[key]
+	p.epoch++
+	p.online = true
+	r.presence[key] = p
 }
 
 // Share enables or disables borrowing for one agent instance. Only the
@@ -248,7 +287,10 @@ func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPaylo
 	if !inst.Shared {
 		return p, false, ErrUnknownAgent
 	}
-	if p.CommandID != "" {
+	if p.CommandID == "" {
+		return p, false, ErrCommandIDRequired
+	}
+	{
 		key := roomID + "\x00" + p.AgentInstanceID + "\x00" + p.CommandID
 		if previous, ok := r.commandBorrowers[key]; ok {
 			if previous.payload.Input != p.Input || previous.payload.AgentInstanceID != p.AgentInstanceID || previous.payload.LeaseGeneration != p.LeaseGeneration || previous.borrower != p.BorrowerDeviceID {
@@ -267,19 +309,18 @@ func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPaylo
 	// overwrite another's borrower. Prompts arriving mid-execution route
 	// to THIS borrower, not to whoever commanded most recently. Bounded
 	// FIFO: only recent commands can still be executing.
-	if p.CommandID != "" {
-		agentKey := roomID + "\x00" + p.AgentInstanceID
-		key := agentKey + "\x00" + p.CommandID
-		if _, exists := r.commandBorrowers[key]; !exists {
-			order := append(r.commandOrder[agentKey], key)
-			if len(order) > maxTrackedCommandsPerAgent {
-				delete(r.commandBorrowers, order[0])
-				order = order[1:]
-			}
-			r.commandOrder[agentKey] = order
+	agentKey := roomID + "\x00" + p.AgentInstanceID
+	key := agentKey + "\x00" + p.CommandID
+	if _, exists := r.commandBorrowers[key]; !exists {
+		order := append(r.commandOrder[agentKey], key)
+		if len(order) > maxTrackedCommandsPerAgent {
+			delete(r.commandBorrowers, order[0])
+			order = order[1:]
 		}
-		r.commandBorrowers[key] = commandRecord{payload: p, borrower: p.BorrowerDeviceID, delivery: commandQueued}
+		r.commandOrder[agentKey] = order
 	}
+	epoch := r.presence[roomID+"\x00"+p.BorrowerDeviceID].epoch
+	r.commandBorrowers[key] = commandRecord{payload: p, borrower: p.BorrowerDeviceID, epoch: epoch, delivery: commandQueued}
 	return p, true, nil
 }
 
@@ -369,23 +410,19 @@ func (r *Registry) OpenApproval(roomID, agentInstanceID, approvalID, commandID s
 }
 
 func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, commandID string, options []string) (operator string, err error) {
+	if commandID == "" {
+		return "", ErrCommandIDRequired
+	}
 	room := r.agents[roomID]
 	inst := room[agentInstanceID]
 	if inst == nil {
 		return "", ErrUnknownAgent
 	}
 	operator = inst.LastBorrower
-	if commandID != "" {
-		if record, ok := r.commandBorrowers[roomID+"\x00"+agentInstanceID+"\x00"+commandID]; ok {
-			operator = record.borrower
-		} else {
-			// Unknown NONEMPTY command id fails closed: the mapping may
-			// have aged out of the bounded FIFO while another borrower
-			// took over the agent, and the LastBorrower fallback would
-			// route this prompt (and its decision authority) to the
-			// wrong participant. Only legacy empty ids fall back.
-			return "", errors.New("unknown borrow command for approval routing")
-		}
+	if record, ok := r.commandBorrowers[roomID+"\x00"+agentInstanceID+"\x00"+commandID]; ok {
+		operator = record.borrower
+	} else {
+		return "", errors.New("unknown borrow command for approval routing")
 	}
 	if operator == "" {
 		return "", errors.New("no active borrowing session")
@@ -535,20 +572,44 @@ func (r *Registry) ResolveDecisionDispatch(roomID, agentInstanceID, approvalID, 
 // registry lock was held. The writer calls it after dequeue, so revocation can
 // invalidate queued work without making the registry lock cover socket I/O.
 func (r *Registry) ValidateDelivery(roomID, agentInstanceID, approvalID, recipient string, generation uint64) bool {
+	return r.ValidateDeliveryForBorrower(roomID, agentInstanceID, approvalID, recipient, "", "", generation)
+}
+
+// ValidateDeliveryForBorrower is the final generation and borrower-session
+// fence. borrower is the authenticated device whose queued work is being
+// delivered; an empty value is retained only for non-borrow messages.
+func (r *Registry) ValidateDeliveryForBorrower(roomID, agentInstanceID, approvalID, commandID, recipient, borrower string, generation uint64) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	inst := r.agents[roomID][agentInstanceID]
 	if inst == nil || !inst.Shared || inst.LeaseGeneration != generation {
 		return false
 	}
-	// Approval decisions consume the pending approval before the prompt may
-	// leave a slow queue. Generation fencing is sufficient here: the queued
-	// recipient is the authenticated connection selected when the prompt was
-	// opened, while revoke/re-share always changes the generation.
 	if approvalID != "" {
-		return true
+		ap, ok := r.approvals[approvalScope(roomID, agentInstanceID, approvalID)]
+		if !ok || ap.operator != recipient {
+			return false
+		}
+		borrower = ap.operator
 	}
-	return inst.OwnerDeviceID == recipient
+	if commandID != "" {
+		record, ok := r.commandBorrowers[roomID+"\x00"+agentInstanceID+"\x00"+commandID]
+		if !ok || record.borrower != borrower || record.payload.LeaseGeneration != generation {
+			return false
+		}
+	}
+	if borrower == "" {
+		return inst.OwnerDeviceID == recipient
+	}
+	p := r.presence[roomID+"\x00"+borrower]
+	if !p.online || p.epoch == 0 {
+		return false
+	}
+	if commandID != "" {
+		record := r.commandBorrowers[roomID+"\x00"+agentInstanceID+"\x00"+commandID]
+		return record.epoch == p.epoch
+	}
+	return true
 }
 
 // Agent returns one instance (status/testing).
@@ -595,6 +656,11 @@ func (r *Registry) ClearRoom(roomID string) {
 func (r *Registry) DropDevice(roomID, ownerDeviceID string) []borrowagent.BorrowRevokedPayload {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	presenceKey := roomID + "\x00" + ownerDeviceID
+	p := r.presence[presenceKey]
+	p.epoch++
+	p.online = false
+	r.presence[presenceKey] = p
 	var revoked []borrowagent.BorrowRevokedPayload
 	for id, inst := range r.agents[roomID] {
 		if inst.OwnerDeviceID != ownerDeviceID {

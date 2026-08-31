@@ -163,33 +163,64 @@ const MaxBodyBytes = 256 << 20
 // ReadFrame reads one framed message into header (pointer) and returns the
 // raw body.
 func ReadFrame(r *bufio.Reader, header any) ([]byte, error) {
+	return ReadFrameWithBodyLimit(r, header, MaxBodyBytes)
+}
+
+// ReadFrameWithBodyLimit rejects a body before allocating it. The caller can
+// reserve a bounded per-connection budget while preserving the 256 MiB file
+// limit for ordinary requests.
+func ReadFrameWithBodyLimit(r *bufio.Reader, header any, bodyLimit uint32) ([]byte, error) {
+	body, _, err := readFrame(r, header, bodyLimit, nil)
+	return body, err
+}
+
+func ReadFrameWithBodyBudget(r *bufio.Reader, header any, bodyLimit uint32, reserve func(uint32) (func(), bool)) ([]byte, func(), error) {
+	body, release, err := readFrame(r, header, bodyLimit, reserve)
+	if err != nil {
+		return nil, nil, err
+	}
+	return body, release, nil
+}
+
+func readFrame(r *bufio.Reader, header any, bodyLimit uint32, reserve func(uint32) (func(), bool)) ([]byte, func(), error) {
 	var lenBuf [4]byte
 	if _, err := io.ReadFull(r, lenBuf[:]); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	n := binary.BigEndian.Uint32(lenBuf[:])
 	if n > 1<<22 {
-		return nil, fmt.Errorf("frame header too large: %d", n)
+		return nil, nil, fmt.Errorf("frame header too large: %d", n)
 	}
 	headerJSON := make([]byte, n)
 	if _, err := io.ReadFull(r, headerJSON); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := json.Unmarshal(headerJSON, header); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if _, err := io.ReadFull(r, lenBuf[:]); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	n = binary.BigEndian.Uint32(lenBuf[:])
-	if uint64(n) > MaxBodyBytes {
-		return nil, fmt.Errorf("frame body too large: %d", n)
+	if uint64(n) > uint64(bodyLimit) || uint64(n) > MaxBodyBytes {
+		return nil, nil, fmt.Errorf("frame body too large: %d", n)
+	}
+	var release func()
+	if reserve != nil {
+		var ok bool
+		release, ok = reserve(n)
+		if !ok {
+			return nil, nil, fmt.Errorf("frame body exceeds active connection budget: %d", n)
+		}
 	}
 	body := make([]byte, n)
 	if _, err := io.ReadFull(r, body); err != nil {
-		return nil, err
+		if release != nil {
+			release()
+		}
+		return nil, nil, err
 	}
-	return body, nil
+	return body, release, nil
 }
 
 // ReadCapabilityHello reads only the fixed, body-less authentication frame.

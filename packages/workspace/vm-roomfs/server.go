@@ -66,15 +66,18 @@ type Server struct {
 	auth  chan struct{}
 }
 
-const maxActiveRequests = 1024
-
 type serverConn struct {
 	conn       net.Conn
 	writer     *bufio.Writer
 	mu         sync.Mutex
 	requestsMu sync.Mutex
 	requests   map[uint64]context.CancelFunc
+	bodyMu     sync.Mutex
+	bodyBytes  uint64
 }
+
+const maxActiveRequests = 1024
+const maxConnectionBodyBytes = 512 << 20
 
 // NewServer creates a protocol server over a handler. The handler may be
 // attached later with SetHandler when it needs the server first (e.g. to
@@ -161,20 +164,20 @@ func (s *Server) serveConnReader(conn net.Conn, sc *serverConn, reader *bufio.Re
 	var wg sync.WaitGroup
 	for {
 		var req Request
-		body, err := ReadFrame(reader, &req)
+		body, releaseBody, err := ReadFrameWithBodyBudget(reader, &req, MaxBodyBytes, sc.reserveBody)
 		if err != nil {
 			cancel()
 			wg.Wait()
 			return
 		}
-		reqCopy := req
-		bodyCopy := append([]byte(nil), body...)
 		if req.Type == TypeCancel {
+			releaseBody()
 			sc.cancelRequest(req.ID)
 			continue
 		}
 		requestCtx, requestCancel := context.WithCancel(connCtx)
 		if !sc.addRequest(req.ID, requestCancel) {
+			releaseBody()
 			requestCancel()
 			go func() {
 				if err := s.writeResponse(sc, errorResponse(req.ID, fmt.Errorf("roomfs: too many active requests"))); err != nil {
@@ -187,14 +190,34 @@ func (s *Server) serveConnReader(conn net.Conn, sc *serverConn, reader *bufio.Re
 		go func(req Request, body []byte, requestCtx context.Context) {
 			defer wg.Done()
 			defer sc.removeRequest(req.ID)
+			defer releaseBody()
 			res := s.dispatch(requestCtx, req, body)
 			writeErr := s.writeResponse(sc, res)
 			if writeErr != nil {
 				cancel()
 				_ = conn.Close()
 			}
-		}(reqCopy, bodyCopy, requestCtx)
+		}(req, body, requestCtx)
 	}
+}
+
+func (sc *serverConn) reserveBody(n uint32) (func(), bool) {
+	sc.bodyMu.Lock()
+	if n == 0 {
+		sc.bodyMu.Unlock()
+		return func() {}, true
+	}
+	if sc.bodyBytes+uint64(n) > maxConnectionBodyBytes {
+		sc.bodyMu.Unlock()
+		return nil, false
+	}
+	sc.bodyBytes += uint64(n)
+	sc.bodyMu.Unlock()
+	return func() {
+		sc.bodyMu.Lock()
+		sc.bodyBytes -= uint64(n)
+		sc.bodyMu.Unlock()
+	}, true
 }
 
 func (sc *serverConn) addRequest(id uint64, cancel context.CancelFunc) bool {

@@ -44,9 +44,9 @@ type ServerMessage struct {
 }
 
 type borrowDelivery struct {
-	roomID, agentID, owner string
-	approvalID             string
-	generation             uint64
+	roomID, agentID, owner          string
+	approvalID, commandID, borrower string
+	generation                      uint64
 }
 
 // Conn is one authenticated device websocket.
@@ -214,12 +214,16 @@ func (h *Hub) SendTo(roomID, deviceID string, ev vmprotocol.Event) {
 }
 
 func (h *Hub) enqueueBorrow(roomID, deviceID, agentID, approvalID string, generation uint64, ev vmprotocol.Event) bool {
+	return h.enqueueBorrowWithCommand(roomID, deviceID, agentID, approvalID, "", "", generation, ev)
+}
+
+func (h *Hub) enqueueBorrowWithCommand(roomID, deviceID, agentID, approvalID, commandID, borrower string, generation uint64, ev vmprotocol.Event) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if c := h.conns[roomID][deviceID]; c != nil {
 		select {
 		case c.send <- ServerMessage{Type: "event", Event: ev, borrowFence: &borrowDelivery{
-			roomID: roomID, agentID: agentID, owner: deviceID, approvalID: approvalID, generation: generation,
+			roomID: roomID, agentID: agentID, owner: deviceID, approvalID: approvalID, commandID: commandID, borrower: borrower, generation: generation,
 		}}:
 			return true
 		default:
@@ -282,6 +286,7 @@ func (h *Hub) Detach(c *Conn) {
 		// device until yet another reconnect.
 		return
 	}
+	h.borrows.SetPresence(c.RoomID, c.DeviceID, false)
 	// Unexpected business-socket loss must withdraw this device's
 	// announced routes immediately (leave and kick already do): stale
 	// /routes entries kept resolving .tutti names to an offline device
@@ -324,6 +329,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 		ws.Close(websocket.StatusPolicyViolation, "membership revoked")
 		return
 	}
+	h.borrows.BeginPresence(c.RoomID, c.DeviceID)
 	defer h.Detach(c)
 	defer ws.Close(websocket.StatusNormalClosure, "")
 
@@ -340,7 +346,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 				if !ok {
 					return
 				}
-				if msg.borrowFence != nil && !h.borrows.ValidateDelivery(msg.borrowFence.roomID, msg.borrowFence.agentID, msg.borrowFence.approvalID, msg.borrowFence.owner, msg.borrowFence.generation) {
+				if msg.borrowFence != nil && !h.borrows.ValidateDeliveryForBorrower(msg.borrowFence.roomID, msg.borrowFence.agentID, msg.borrowFence.approvalID, msg.borrowFence.commandID, msg.borrowFence.owner, msg.borrowFence.borrower, msg.borrowFence.generation) {
 					continue
 				}
 				data, err := json.Marshal(msg)
@@ -508,13 +514,17 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			// echoes it back to the same connection, and a slow-reading
 			// sender could retain 64 near-frame-sized responses before
 			// overflow — several GiB from one socket.
+			if p.CommandID == "" {
+				h.SendTo(c.RoomID, c.DeviceID, vmprotocol.Event{Topic: borrowagent.TopicCommandFailed, RoomID: c.RoomID, Payload: mustJSON(borrowagent.CommandFailedPayload{AgentInstanceID: p.AgentInstanceID, BorrowerDeviceID: c.DeviceID, Reason: borrow.ErrCommandIDRequired.Error()})})
+				continue
+			}
 			if len(p.CommandID) > 128 || len(p.AgentInstanceID) > 128 || len(p.Input) > 1<<20 {
 				h.log.Warn("borrow command over limit", "room", c.RoomID, "device", c.DeviceID)
 				continue
 			}
 			err := h.rooms.MembershipMutation(c.RoomID, c.DeviceID, func() error {
 				return h.borrows.DispatchCommand(c.RoomID, p, func(owner string, generation uint64, out borrowagent.BorrowCommandPayload) bool {
-					return h.enqueueBorrow(c.RoomID, owner, p.AgentInstanceID, "", generation, vmprotocol.Event{Topic: borrowagent.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out)})
+					return h.enqueueBorrowWithCommand(c.RoomID, owner, p.AgentInstanceID, "", p.CommandID, c.DeviceID, generation, vmprotocol.Event{Topic: borrowagent.TopicBorrowCommand, RoomID: c.RoomID, Payload: mustJSON(out)})
 				})
 			})
 			if err != nil {
@@ -552,6 +562,10 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			// prompt/provider/option text is marshaled and queued IN
 			// FULL to a slow operator (gigabytes parked in the 64-slot
 			// send queue before overflow closes it).
+			if p.CommandID == "" {
+				h.SendTo(c.RoomID, c.DeviceID, vmprotocol.Event{Topic: borrowagent.TopicCommandFailed, RoomID: c.RoomID, Payload: mustJSON(borrowagent.CommandFailedPayload{AgentInstanceID: p.AgentInstanceID, BorrowerDeviceID: c.DeviceID, Reason: borrow.ErrCommandIDRequired.Error()})})
+				continue
+			}
 			if len(p.ApprovalID) > 128 || len(p.AgentInstanceID) > 128 || len(p.CommandID) > 128 || len(p.Provider) > 64 {
 				continue
 			}
@@ -577,7 +591,7 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			}
 			err := h.borrows.DispatchApproval(c.RoomID, p.AgentInstanceID, p.ApprovalID, p.CommandID, p.Options, func(operator string, generation uint64) bool {
 				p.SessionOperatorDeviceID = operator
-				return h.enqueueBorrow(c.RoomID, operator, p.AgentInstanceID, p.ApprovalID, generation, vmprotocol.Event{Topic: borrowagent.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p)})
+				return h.enqueueBorrowWithCommand(c.RoomID, operator, p.AgentInstanceID, p.ApprovalID, p.CommandID, operator, generation, vmprotocol.Event{Topic: borrowagent.TopicApprovalRequest, RoomID: c.RoomID, Payload: mustJSON(p)})
 			})
 			if err != nil {
 				h.log.Warn("approval open", "room", c.RoomID, "err", err)

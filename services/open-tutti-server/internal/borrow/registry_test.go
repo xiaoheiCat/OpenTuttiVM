@@ -90,6 +90,33 @@ func TestRevocationFencesStaleGenerations(t *testing.T) {
 	}
 }
 
+func TestCommandRequiresIDAndQueuedDeliveryDiesWithBorrower(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	r.SetPresence("room1", "dev_bob", true)
+	empty := borrowagent.BorrowCommandPayload{AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+	if _, err := r.Command("room1", empty); !errors.Is(err, ErrCommandIDRequired) {
+		t.Fatalf("empty command id = %v", err)
+	}
+	cmd := empty
+	cmd.CommandID = "queued"
+	if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	r.SetPresence("room1", "dev_bob", false)
+	if r.ValidateDeliveryForBorrower("room1", shared.AgentInstanceID, "", cmd.CommandID, "dev_alice", "dev_bob", shared.LeaseGeneration) {
+		t.Fatal("queued command survived borrower departure")
+	}
+}
+
+func TestApprovalCommandRequiresID(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	if _, err := r.OpenApproval("room1", shared.AgentInstanceID, "approval", "", nil); err == nil {
+		t.Fatal("empty approval command id accepted")
+	}
+}
+
 func TestApprovalsRouteToBorrowerNotOwner(t *testing.T) {
 	r := NewRegistry()
 	shared := shareClaude(t, r)
@@ -149,10 +176,9 @@ func TestApprovalRoutesToOriginatingCommandBorrower(t *testing.T) {
 	if _, err := r.ResolveDecision("room1", "agent-claude-1", "ap-bob", "dev_carol", 0); !errors.Is(err, ErrNotOperator) {
 		t.Fatalf("carol deciding bob's prompt err = %v", err)
 	}
-	// Without a command id the current operator (carol) receives it.
-	operator, err = r.OpenApproval("room1", "agent-claude-1", "ap-carol", "", nil)
-	if err != nil || operator != "dev_carol" {
-		t.Fatalf("legacy routing operator = %q err = %v", operator, err)
+	// Approval prompts must always identify the command they belong to.
+	if _, err = r.OpenApproval("room1", "agent-claude-1", "ap-carol", "", nil); !errors.Is(err, ErrCommandIDRequired) {
+		t.Fatalf("empty command id approval = %v", err)
 	}
 }
 

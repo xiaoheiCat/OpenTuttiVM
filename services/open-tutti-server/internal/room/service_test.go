@@ -377,7 +377,8 @@ func TestReportedFullPolicyCannotSuccedeLazyMember(t *testing.T) {
 
 func TestOwnershipTransferThreePhases(t *testing.T) {
 	svc, _ := newTestService(t, "")
-	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
+	hostReady := true
+	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return hostReady })
 	currentSeq := uint64(1)
 	svc.SetCurrentSequence(func(string) (uint64, error) { return currentSeq, nil })
 	created := createRoom(t, svc, "")
@@ -409,6 +410,11 @@ func TestOwnershipTransferThreePhases(t *testing.T) {
 		t.Fatalf("stale transfer commit error = %v", err)
 	}
 	currentSeq = 1
+	hostReady = false
+	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_leo", prepared.Generation, prepared.SnapshotSeq); !errors.Is(err, ErrTransferIncomplete) {
+		t.Fatalf("unready host commit error = %v", err)
+	}
+	hostReady = true
 	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_leo", prepared.Generation, prepared.SnapshotSeq); err != nil {
 		t.Fatalf("commit: %v", err)
 	}

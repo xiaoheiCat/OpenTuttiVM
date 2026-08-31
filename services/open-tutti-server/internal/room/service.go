@@ -924,6 +924,9 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 	if err != nil || currentSeq != membership.TransferAppliedSeq {
 		return ErrTransferIncomplete
 	}
+	if s.hostReady == nil || !s.hostReady(ctx, roomID, candidateDeviceID) {
+		return ErrTransferIncomplete
+	}
 	room.OwnerDeviceID = candidateDeviceID
 	room.PendingTransferToDevice = ""
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {

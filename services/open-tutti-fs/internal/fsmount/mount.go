@@ -212,6 +212,7 @@ var (
 	_ fs.NodeRenamer   = (*roomNode)(nil)
 	_ fs.NodeOpendirer = (*roomNode)(nil)
 	_ fs.NodeGetattrer = (*roomNode)(nil)
+	_ fs.NodeSetattrer = (*roomNode)(nil)
 
 	_ fs.NodeOpener    = (*fileNode)(nil)
 	_ fs.FileReader    = (*fileNode)(nil)
@@ -236,22 +237,16 @@ func (n *roomNode) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errn
 }
 
 func (n *roomNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
+	// The mount root is outside the Room FS path namespace.
 	out.Attr.Mode = n.dirPerms() | syscall.S_IFDIR
 	return 0
 }
 
-// Setattr forwards directory permission changes: directory modes are
-// carried by the protocol and snapshots, and without this hook a chmod
-// on a directory never reached RoomFS and silently stayed local.
+// Setattr keeps the mount root outside the Room FS path namespace. Directory
+// descendants are represented by their own roomNode and may use the protocol.
 func (n *roomNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
-	if mode, ok := in.GetMode(); ok {
-		if err := n.client.ChmodContext(ctx, n.path(""), mode); err != nil {
-			return roomErrno(err)
-		}
-		n.dirMode = mode & 0o7777
-		n.dirModeSet = true
-		out.Attr.Mode = n.dirPerms() | syscall.S_IFDIR
-		return 0
+	if _, ok := in.GetMode(); ok {
+		return syscall.EOPNOTSUPP
 	}
 	return n.Getattr(ctx, fh, out)
 }

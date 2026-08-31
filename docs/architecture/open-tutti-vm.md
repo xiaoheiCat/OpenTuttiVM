@@ -52,6 +52,22 @@ Two hard rules shape everything:
 | `services/open-tutti-fs` | FUSE mount (Linux containers) bridging POSIX into the room via the Room FS Protocol |
 | `packages/workspace/vm-roomfs` | The Room FS Protocol itself — a workspace-domain contract both services adapt to, so neither executable owns the seam |
 
+Room FS protocol bodies are capped at 256 MiB per file. The server also
+reserves body memory before reading each authenticated frame, with a bounded
+per-connection budget; concurrent large requests beyond that budget close the
+connection rather than allocating unbounded `body` copies. The FUSE mount root
+is outside the protocol path namespace: root `Getattr` reports its documented
+stable mode, while root `Setattr` returns `EOPNOTSUPP` and never submits an
+empty path.
+
+`ApplyToWorkspace` retains root identity, ancestor, symlink, and Windows
+reparse-point checks before and after filesystem mutations. These checks fail
+closed when an external actor changes the target during apply, but they are
+not an operating-system-wide transaction or lock. Callers must provide an
+exclusive target directory (or an equivalent external lock); concurrent
+writers remain a residual race and are reported as apply failure rather than
+being claimed fully race-free.
+
 ## Collaboration model
 
 Hybrid, by content class:
