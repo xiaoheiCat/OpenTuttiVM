@@ -3,6 +3,7 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	"net"
 	"testing"
 
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
@@ -57,7 +58,7 @@ func TestVIPAllocatorVIPModeDistinctHosts(t *testing.T) {
 func TestVIPAllocatorExhaustionDoesNotCollide(t *testing.T) {
 	a := NewVIPAllocator()
 	seen := map[string]bool{}
-	for i := 0; i < 200*200; i++ {
+	for i := 0; i < 3001; i++ {
 		ip, err := a.AssignWithError(vmprotocol.TuttiHost{Device: fmt.Sprintf("device-%d", i)})
 		if err != nil {
 			t.Fatal(err)
@@ -67,8 +68,30 @@ func TestVIPAllocatorExhaustionDoesNotCollide(t *testing.T) {
 		}
 		seen[ip.String()] = true
 	}
+	if got := a.Assign(vmprotocol.TuttiHost{Device: "device-3000"}); !got.Equal(net.IPv4(100, 96, 11, 185)) {
+		t.Fatalf("3001st address = %s", got)
+	}
+	a.next = maxPoolOffset
+	maxIP, err := a.AssignWithError(vmprotocol.TuttiHost{Device: "maximum"})
+	if err != nil || !maxIP.Equal(net.IPv4(100, 111, 255, 254)) {
+		t.Fatalf("maximum address = %s, err=%v", maxIP, err)
+	}
 	if _, err := a.AssignWithError(vmprotocol.TuttiHost{Device: "exhausted"}); !errors.Is(err, ErrVIPExhausted) {
 		t.Fatalf("exhaustion error = %v", err)
+	}
+}
+
+func TestVIPAllocatorAddressesStayInReservedCIDR(t *testing.T) {
+	_, block, err := net.ParseCIDR(vmprotocol.ReservedCIDR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := NewVIPAllocator()
+	for i := 0; i < 3001; i++ {
+		ip, err := a.AssignWithError(vmprotocol.TuttiHost{Device: fmt.Sprintf("cidr-%d", i)})
+		if err != nil || !block.Contains(ip) {
+			t.Fatalf("allocation %d = %s, err=%v", i, ip, err)
+		}
 	}
 }
 

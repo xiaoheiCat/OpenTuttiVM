@@ -30,10 +30,9 @@ const (
 	modeShared
 )
 
-// VIPAllocator assigns synthetic addresses for .tutti hosts:
-// device hostnames get addresses in 100.96.0.0/16, session hostnames get
-// addresses in 100.96.16.0+ space derived from the device block. Addresses
-// are stable while held and released back to the pool on Room teardown.
+// VIPAllocator assigns synthetic addresses for .tutti hosts from the usable
+// addresses in 100.96.0.0/12. Addresses are stable while held and released
+// back to the pool on Room teardown.
 type VIPAllocator struct {
 	mu    sync.Mutex
 	byKey map[string]net.IP
@@ -50,11 +49,20 @@ func NewVIPAllocator() *VIPAllocator {
 	return &VIPAllocator{byKey: map[string]net.IP{}, used: map[string]bool{}, next: 1}
 }
 
-func ipFromOffset(device, index uint32) net.IP {
-	// 4-byte IPv4 form: 100.96.<device>.<index> — devices and sessions
-	// share the /12 block; the 4-byte form avoids the v6-mapped
-	// representation's leading zero bytes.
-	return net.IP{100, 96, byte(device), byte(index)}
+const (
+	// The /12 has a 20-bit host portion. Offset zero is the network address
+	// and offset 0xfffff is the broadcast address, so neither is allocatable.
+	poolSize      = 1<<20 - 2
+	maxPoolOffset = 1<<20 - 2
+)
+
+func ipFromOffset(offset uint32) net.IP {
+	if offset == 0 || offset > maxPoolOffset {
+		return nil
+	}
+	// The first 4 bits of the host portion are the low nibble of the second
+	// octet; the remaining 16 bits are the third and fourth octets.
+	return net.IP{100, 96 + byte(offset>>16), byte(offset >> 8), byte(offset)}
 }
 
 // sharedAddrMu/record cache the shared-mode answer. On LINUX (the
@@ -122,7 +130,7 @@ func probeSharedAddr() net.IP {
 // 127.0.0.1 and the proxy demultiplexes by SNI/Host.
 func (a *VIPAllocator) Probe() {
 	a.probed.Do(func() {
-		vip := ipFromOffset(200, 200).String()
+		vip := ipFromOffset(0x12345).String()
 		if ln, err := net.Listen("tcp", net.JoinHostPort(vip, "0")); err == nil {
 			ln.Close()
 			return // the block is locally configured: real VIPs
@@ -218,17 +226,14 @@ func (a *VIPAllocator) AssignWithError(host vmprotocol.TuttiHost) (net.IP, error
 	if ip, ok := a.byKey[key]; ok {
 		return ip, nil
 	}
-	const poolSize = 200 * 200
-	for a.next <= poolSize && a.used[ipFromOffset(1+(a.next-1)/200, 1+(a.next-1)%200).String()] {
+	for a.next <= poolSize && a.used[ipFromOffset(a.next).String()] {
 		a.next++
 	}
 	if a.next > poolSize {
 		return nil, ErrVIPExhausted
 	}
-	device := uint32(1 + (a.next-1)/200)
-	index := uint32(1 + (a.next-1)%200)
+	ip := ipFromOffset(a.next)
 	a.next++
-	ip := ipFromOffset(device, index)
 	a.byKey[key] = ip
 	a.used[ip.String()] = true
 	return ip, nil
@@ -250,7 +255,7 @@ func (a *VIPAllocator) Release(host vmprotocol.TuttiHost) {
 		// Reusing the lowest returned slot bounds churn without changing
 		// addresses held by live hosts.
 		for n := uint32(1); n < a.next; n++ {
-			if !a.used[ipFromOffset(1+(n-1)/200, 1+(n-1)%200).String()] {
+			if !a.used[ipFromOffset(n).String()] {
 				a.next = n
 				break
 			}

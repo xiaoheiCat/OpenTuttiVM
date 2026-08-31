@@ -17,16 +17,24 @@ services:
       - "127.0.0.1:8080:8080"
     environment:
       OPEN_TUTTI_SECRET: ${OPEN_TUTTI_SECRET:?set OPEN_TUTTI_SECRET in .env or the environment}
-      OPEN_TUTTI_LISTEN_ADDR: 0.0.0.0:8080
+      OPEN_TUTTI_LISTEN_ADDR: 127.0.0.1:8081
       OPEN_TUTTI_PUBLIC_URL: http://localhost:8080
-      # Docker forwards to the container listener, so the server needs a
-      # narrow, Compose-only exception to its plain-HTTP loopback check.
-      OPEN_TUTTI_COMPOSE_LOCAL_MODE: "1"
     env_file:
       - path: ./.env
         required: false
     volumes:
       - open-tutti-data:/data
+    # The server remains loopback-only even inside the container. socat is the
+    # deliberately dumb container-internal forwarder for Docker's port map.
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        /usr/local/bin/open-tutti-server & server_pid=$$!;
+        trap 'kill $$server_pid 2>/dev/null || true; wait $$server_pid 2>/dev/null || true' TERM INT;
+        socat TCP-LISTEN:8080,bind=0.0.0.0,reuseaddr,fork TCP:127.0.0.1:8081;
+        status=$$?; kill $$server_pid 2>/dev/null || true;
+        wait $$server_pid 2>/dev/null || true; exit $$status
 
 volumes:
   open-tutti-data:

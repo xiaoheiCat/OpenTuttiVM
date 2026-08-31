@@ -23,13 +23,13 @@ RUN GOWORK=off CGO_ENABLED=0 GOOS=linux go -C services/open-tutti-server build \
     -trimpath -ldflags="-s -w" -o /out/open-tutti-server .
 
 FROM alpine:3.21
-RUN addgroup -S tutti && adduser -S tutti -G tutti \
+RUN apk add --no-cache socat \
+    && addgroup -S tutti && adduser -S tutti -G tutti \
     && mkdir -p /data && chown -R tutti:tutti /data
 COPY --from=build /out/open-tutti-server /usr/local/bin/open-tutti-server
 USER tutti
-# The image default is safe for direct `docker run`: a caller must explicitly
-# opt into the bridge topology below. Compose overrides both values and pins
-# the host publication to 127.0.0.1.
+# The image default is safe for direct `docker run`; the server itself remains
+# loopback-only. Compose adds an internal socat forwarder for its published port.
 ENV OPEN_TUTTI_LISTEN_ADDR=127.0.0.1:8080 \
     OPEN_TUTTI_PUBLIC_URL=http://localhost:8080 \
     OPEN_TUTTI_DATA_DIR=/data

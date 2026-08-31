@@ -42,17 +42,17 @@ func TestLoadHTTPSAllowsWildcard(t *testing.T) {
 	}
 }
 
-func TestLoadComposeLocalModeAllowsDockerBridgeListener(t *testing.T) {
+func TestLoadRejectsWildcardPlainHTTPRegardlessOfEnvironment(t *testing.T) {
 	t.Setenv("OPEN_TUTTI_SECRET", "test-secret-012345678901234567890")
 	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080")
 	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
 	t.Setenv("OPEN_TUTTI_COMPOSE_LOCAL_MODE", "1")
-	if _, err := Load(""); err != nil {
-		t.Fatal(err)
+	if _, err := Load(""); err == nil {
+		t.Fatal("expected wildcard plain HTTP to remain rejected")
 	}
 }
 
-func TestLoadComposeLocalModeDoesNotAllowArbitraryLocalURL(t *testing.T) {
+func TestLoadRejectsWildcardPlainHTTPWithArbitraryURL(t *testing.T) {
 	t.Setenv("OPEN_TUTTI_SECRET", "test-secret-012345678901234567890")
 	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080")
 	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:9999")
@@ -62,7 +62,7 @@ func TestLoadComposeLocalModeDoesNotAllowArbitraryLocalURL(t *testing.T) {
 	}
 }
 
-func TestLoadEnvFileCannotEnableComposeLocalMode(t *testing.T) {
+func TestLoadEnvFileMarkerCannotBypassPlainHTTP(t *testing.T) {
 	t.Setenv("OPEN_TUTTI_SECRET", "test-secret-012345678901234567890")
 	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080")
 	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
@@ -72,7 +72,7 @@ func TestLoadEnvFileCannotEnableComposeLocalMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := Load(envFile); err == nil {
-		t.Fatal("expected .env mode marker to be ignored")
+		t.Fatal("expected marker to have no effect")
 	}
 }
 

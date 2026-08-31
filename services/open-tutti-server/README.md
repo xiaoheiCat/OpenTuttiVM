@@ -20,15 +20,13 @@ Or from source:
 go run . # reads .env and OPEN_TUTTI_* environment variables
 ```
 
-The default Compose deployment uses an explicit bridge network. The container
-listens on `0.0.0.0:8080`, while Docker publishes it only on the host loopback
+The default Compose deployment uses an explicit bridge network. The server
+listens on container loopback at `127.0.0.1:8081`; an internal `socat`
+forwarder exposes port 8080 to Docker, while Docker publishes it only on the host loopback
 at `127.0.0.1:8080`. This is consistent on Docker Desktop macOS/Windows and
-Linux without host networking. Compose injects
-`OPEN_TUTTI_COMPOSE_LOCAL_MODE=1` outside `.env` to identify this exact local
-topology. The server accepts that marker only together with
-`0.0.0.0:8080` and `http://localhost:8080`; a user-configured localhost URL
-alone cannot bypass the plain-HTTP check. Remote deployment must use a
-separate Compose override with an HTTPS reverse proxy and an `https://`
+ Linux without host networking. The server always rejects plain HTTP on a
+non-loopback listener; no environment marker is a security boundary.
+Remote deployment must use a separate Compose override with an HTTPS reverse proxy and an `https://`
 `OPEN_TUTTI_PUBLIC_URL`; plain HTTP on a non-loopback listener is rejected.
 Do not publish the server port or the `/data` volume to an untrusted network.
 

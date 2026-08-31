@@ -143,11 +143,11 @@ never the password.
 Remote server deployment requires TLS termination in a reverse proxy before
 exposing the HTTP listener. Plain HTTP is fail-closed on non-loopback binds;
 loopback HTTP is for local development only. The checked-in Compose default is
-portable bridge networking: the server binds `0.0.0.0:8080` inside its
-container, but Docker publishes only `127.0.0.1:8080` on the host. Compose
-injects `OPEN_TUTTI_COMPOSE_LOCAL_MODE=1` as a process-only marker for this
-topology; it is accepted only with the fixed listener and
-`http://localhost:8080`, so `.env` cannot create a general localhost exception.
+portable bridge networking: the server binds `127.0.0.1:8081` inside its
+container and an internal forwarder provides port 8080, while Docker publishes
+only `127.0.0.1:8080` on the host. There is no Compose marker exception;
+ordinary environment variables are not a security boundary and cannot enable a
+remote cleartext listener.
 Remote deployments must provide a separate override with TLS and must not
 publish the server or its data volume directly to an untrusted network.
 The checked-in v1 deployment contract is: build locally from
