@@ -143,8 +143,8 @@ func persistCAPair(dir string, certPEM, keyPEM []byte) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, filepath.Join(dir, caPairFile)); err != nil {
-		return fmt.Errorf("publish room CA pair: %w", err)
+	if err := replaceCAPairFile(tmp, filepath.Join(dir, caPairFile)); err != nil {
+		return err
 	}
 	if d, err := os.Open(dir); err == nil {
 		_ = d.Sync()

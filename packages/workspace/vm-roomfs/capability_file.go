@@ -40,6 +40,9 @@ func WriteCapabilityFile(path, capability string) error {
 	if err := atomicRenameCapability(tmpName, path); err != nil {
 		return err
 	}
+	if err := validateCapabilityPath(path); err != nil {
+		return fmt.Errorf("validate published capability: %w", err)
+	}
 	return syncCapabilityDir(dir)
 }
 

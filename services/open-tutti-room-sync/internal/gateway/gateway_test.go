@@ -164,6 +164,13 @@ func TestLocalCAPairPersistsAtomicallyAndIgnoresIncompletePair(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, caPairFile)); err != nil {
 		t.Fatal(err)
 	}
+	restarted, err := LoadOrCreateLocalCA(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(first.CACertPEM()) != string(restarted.CACertPEM()) {
+		t.Fatal("valid pair was not reused after restart")
+	}
 	cert := first.CACertPEM()
 	if err := os.WriteFile(filepath.Join(dir, caPairFile), cert, 0o600); err != nil {
 		t.Fatal(err)
@@ -177,6 +184,13 @@ func TestLocalCAPairPersistsAtomicallyAndIgnoresIncompletePair(t *testing.T) {
 	}
 	if _, err := second.LeafFor("device.tutti"); err != nil {
 		t.Fatal(err)
+	}
+	third, err := LoadOrCreateLocalCA(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(second.CACertPEM()) != string(third.CACertPEM()) {
+		t.Fatal("repaired pair was not reused after restart")
 	}
 }
 
