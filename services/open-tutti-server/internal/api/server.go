@@ -586,9 +586,8 @@ func (s *Server) handleRoomWS(w http.ResponseWriter, r *http.Request, roomID, de
 	if err != nil {
 		return
 	}
-	// A valid text_patch envelope can carry up to MaxTextFile (8 MiB) of
-	// inserted text; the library default of 32 KiB would close every
-	// large paste as message-too-big before the sequencer sees it.
+	// The hub applies a stricter pre-decode budget to control messages. This
+	// transport limit remains large enough for valid text_patch operations.
 	ws.SetReadLimit(int64(vmsync.MaxTextFile)*6 + 1<<20)
 	if err := s.rooms.MarkOnline(r.Context(), roomID, deviceID); err != nil {
 		ws.Close(websocket.StatusPolicyViolation, "membership offline")

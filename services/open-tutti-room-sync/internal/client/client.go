@@ -346,7 +346,10 @@ func (s *Session) Submit(env vmprotocol.Envelope) error {
 	if err != nil {
 		return err
 	}
-	msg, err := json.Marshal(map[string]any{"type": "op", "envelope": json.RawMessage(envBytes)})
+	msg, err := json.Marshal(struct {
+		Type     string          `json:"type"`
+		Envelope json.RawMessage `json:"envelope"`
+	}{Type: "op", Envelope: json.RawMessage(envBytes)})
 	if err != nil {
 		return err
 	}

@@ -166,6 +166,86 @@ func TestCommandRequiresIDAndQueuedDeliveryDiesWithBorrower(t *testing.T) {
 	}
 }
 
+func TestDispatchDeliveryCompletionStartsGraceAfterBorrowerDisconnect(t *testing.T) {
+	r := NewRegistry(time.Minute)
+	shared := shareClaude(t, r)
+	r.BeginPresence("room1", "dev_bob")
+	cmd := borrowagent.BorrowCommandPayload{
+		CommandID: "delivery-race", AgentInstanceID: shared.AgentInstanceID,
+		BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration,
+	}
+	ready := make(chan struct{})
+	finish := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool {
+			close(ready)
+			<-finish
+			return true
+		}); err != nil {
+			t.Errorf("dispatch command: %v", err)
+		}
+	}()
+	<-ready
+	r.SetPresence("room1", "dev_bob", false)
+	close(finish)
+	<-done
+
+	if got := r.ExpireDisconnectGrace(time.Now().Add(30 * time.Second)); len(got) != 0 {
+		t.Fatalf("interrupt emitted before grace: %+v", got)
+	}
+	got := r.ExpireDisconnectGrace(time.Now().Add(2 * time.Minute))
+	if len(got) != 1 || got[0].Payload.CommandID != cmd.CommandID {
+		t.Fatalf("interrupt after delivery race = %+v", got)
+	}
+}
+
+func TestDispatchDeliveryCompletionInvalidatesQueuedCommandAfterReconnect(t *testing.T) {
+	r := NewRegistry(time.Minute)
+	shared := shareClaude(t, r)
+	r.BeginPresence("room1", "dev_bob")
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "queued-reconnect", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+	ready := make(chan struct{})
+	finish := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool {
+			close(ready)
+			<-finish
+			return true
+		})
+	}()
+	<-ready
+	r.SetPresence("room1", "dev_bob", false)
+	r.BeginPresence("room1", "dev_bob")
+	close(finish)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if got := r.ExpireDisconnectGrace(time.Now().Add(2 * time.Minute)); len(got) != 0 {
+		t.Fatalf("old queued command survived reconnect: %+v", got)
+	}
+	if _, err := r.Command("room1", cmd); err != nil {
+		t.Fatalf("reconnected borrower could not retry command: %v", err)
+	}
+}
+
+func TestDeliveredCommandGetsGraceWhenBorrowerDisconnectsAfterCallback(t *testing.T) {
+	r := NewRegistry(time.Minute)
+	shared := shareClaude(t, r)
+	r.BeginPresence("room1", "dev_bob")
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "callback-returned", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+	if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	r.SetPresence("room1", "dev_bob", false)
+	got := r.ExpireDisconnectGrace(time.Now().Add(2 * time.Minute))
+	if len(got) != 1 || got[0].Payload.CommandID != cmd.CommandID {
+		t.Fatalf("callback-returned command grace = %+v", got)
+	}
+}
+
 func TestApprovalCommandRequiresID(t *testing.T) {
 	r := NewRegistry()
 	shared := shareClaude(t, r)

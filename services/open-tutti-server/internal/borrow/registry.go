@@ -170,7 +170,7 @@ func (r *Registry) BeginPresence(roomID, deviceID string) {
 	p.online = true
 	r.presence[key] = p
 	for commandKey, record := range r.commandBorrowers {
-		if record.borrower == deviceID && strings.HasPrefix(commandKey, roomID+"\x00") && !record.graceUntil.IsZero() {
+		if record.borrower == deviceID && strings.HasPrefix(commandKey, roomID+"\x00") && record.delivery == commandDelivered && !record.interruptIssued && (record.epoch != p.epoch || !record.graceUntil.IsZero()) {
 			record.epoch = p.epoch
 			record.graceUntil = time.Time{}
 			r.commandBorrowers[commandKey] = record
@@ -384,8 +384,26 @@ func (r *Registry) DispatchCommand(roomID string, p borrowagent.BorrowCommandPay
 	r.mu.Lock()
 	key := roomID + "\x00" + p.AgentInstanceID + "\x00" + p.CommandID
 	if record, ok := r.commandBorrowers[key]; ok && record.delivery == commandQueued && record.payload.LeaseGeneration == generation {
-		record.delivery = commandDelivered
-		r.commandBorrowers[key] = record
+		presence, present := r.presence[roomID+"\x00"+record.borrower]
+		switch {
+		case present && !presence.online:
+			// The enqueue succeeded, but the borrower detached before the
+			// completion fence. Keep the command for the normal disconnect
+			// grace/interrupt path.
+			record.delivery = commandDelivered
+			record.graceUntil = time.Now().Add(r.grace)
+		case present && (presence.epoch == 0 || presence.epoch != record.epoch):
+			// A reconnect before completion belongs to a new socket session.
+			// The old queued item is invalid and must not be revived by the
+			// replacement connection.
+			delete(r.commandBorrowers, key)
+			r.removeCommandOrderKeyLocked(roomID+"\x00"+p.AgentInstanceID, key)
+		default:
+			record.delivery = commandDelivered
+		}
+		if _, stillTracked := r.commandBorrowers[key]; stillTracked {
+			r.commandBorrowers[key] = record
+		}
 	}
 	r.mu.Unlock()
 	return nil

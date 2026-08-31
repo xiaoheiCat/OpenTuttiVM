@@ -3,8 +3,10 @@
 package realtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -13,6 +15,7 @@ import (
 	"github.com/coder/websocket"
 	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
+	vmsync "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync"
 
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/borrow"
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/preview"
@@ -114,6 +117,76 @@ func NewHub(seq *sequencer.Manager, rooms *room.Service, previews *preview.Regis
 // alone can take far longer, leaving MarkOffline unrun and the owner
 // grace period stalled behind a half-open socket.
 const idleReapAfter = 3 * time.Minute
+
+// Operation messages may carry large text patches. All other inbound business
+// messages are control traffic and must not get the operation frame budget.
+const (
+	maxOperationMessageBytes = int64(vmsync.MaxTextFile)*6 + 1<<20
+	maxControlMessageBytes   = 128 << 10
+	discriminatorWindow      = 512
+	maxDiscriminatorTypeLen  = 32
+)
+
+// inboundMessageWithinBudget extracts only the discriminator before the full
+// ClientMessage decode. This keeps oversized control frames from materializing
+// their large payloads, while preserving the larger operation frame budget.
+func inboundMessageWithinBudget(data []byte) (string, bool) {
+	if int64(len(data)) > maxControlMessageBytes {
+		// Large frames must put a short, valid type discriminator first. A
+		// bounded decoder reads no more than the prefix, so a giant unknown
+		// field cannot be used to reach the operation budget or allocate a
+		// full RawMessage before the type is known.
+		dec := json.NewDecoder(io.LimitReader(bytes.NewReader(data), discriminatorWindow))
+		tok, err := dec.Token()
+		if err != nil || tok != json.Delim('{') {
+			return "", false
+		}
+		key, ok := nextStringToken(dec)
+		if !ok || key != "type" {
+			return "", false
+		}
+		var typ string
+		if err := dec.Decode(&typ); err != nil || typ == "" || len(typ) > maxDiscriminatorTypeLen {
+			return "", false
+		}
+		// Consume the next token to reject malformed bytes immediately after
+		// the discriminator. json.Decoder skips commas, so a valid object
+		// either ends here or exposes the next field name; full decoding still
+		// validates the body.
+		next, err := dec.Token()
+		if err != nil {
+			return "", false
+		}
+		if next != json.Delim('}') {
+			if _, ok := next.(string); !ok {
+				return "", false
+			}
+		}
+		if typ != "op" {
+			return "", false
+		}
+		return typ, int64(len(data)) <= maxOperationMessageBytes
+	}
+	var header struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(data, &header); err != nil || header.Type == "" {
+		return "", false
+	}
+	if header.Type == "op" {
+		return header.Type, int64(len(data)) <= maxOperationMessageBytes
+	}
+	return header.Type, int64(len(data)) <= maxControlMessageBytes
+}
+
+func nextStringToken(dec *json.Decoder) (string, bool) {
+	tok, err := dec.Token()
+	if err != nil {
+		return "", false
+	}
+	value, ok := tok.(string)
+	return value, ok
+}
 
 // reapIdle force-closes silent sockets so their detach sequence runs.
 func (h *Hub) reapIdle() {
@@ -380,11 +453,15 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 			return
 		}
 		c.lastSeen.Store(time.Now().UnixNano())
+		messageType, ok := inboundMessageWithinBudget(data)
+		if !ok {
+			continue
+		}
 		var msg ClientMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			continue
 		}
-		switch msg.Type {
+		switch messageType {
 		case "op":
 			var env vmprotocol.Envelope
 			if err := json.Unmarshal(msg.Envelope, &env); err != nil {

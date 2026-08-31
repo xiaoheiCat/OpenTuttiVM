@@ -1,11 +1,72 @@
 package realtime
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
 )
+
+func TestInboundMessageBudgetKeepsLargeFramesForOpsOnly(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		typ  string
+		want bool
+	}{
+		{name: "control frame", typ: "ping", want: false},
+		{name: "unknown frame", typ: "future_control", want: false},
+		{name: "operation frame", typ: "op", want: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(struct {
+				Type    string `json:"type"`
+				Payload string `json:"payload"`
+			}{Type: tt.typ, Payload: strings.Repeat("x", maxControlMessageBytes)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, got := inboundMessageWithinBudget(data); got != tt.want {
+				t.Fatalf("inboundMessageWithinBudget(%q) = %v, want %v", tt.typ, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInboundMessageBudgetRejectsMalformedAndOversizedOperation(t *testing.T) {
+	if _, ok := inboundMessageWithinBudget([]byte(`{"type":"ping"`)); ok {
+		t.Fatal("malformed frame accepted")
+	}
+	data, err := json.Marshal(struct {
+		Type    string `json:"type"`
+		Payload string `json:"payload"`
+	}{Type: "op", Payload: strings.Repeat("x", int(maxOperationMessageBytes))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := inboundMessageWithinBudget(data); ok {
+		t.Fatal("oversized operation accepted")
+	}
+}
+
+func TestInboundMessageBudgetRejectsLargeFramesWithoutBoundedType(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{name: "operation prefix after giant unknown field", data: []byte(`{"unknown":"` + strings.Repeat("x", maxControlMessageBytes) + `","type":"op"}`)},
+		{name: "unknown type", data: []byte(`{"type":"future","payload":"` + strings.Repeat("x", maxControlMessageBytes) + `"}`)},
+		{name: "malformed discriminator", data: []byte(`{"type":"op" garbage` + strings.Repeat("x", maxControlMessageBytes))},
+		{name: "long type", data: []byte(`{"type":"` + strings.Repeat("o", maxDiscriminatorTypeLen+1) + `","payload":"` + strings.Repeat("x", maxControlMessageBytes) + `"}`)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, ok := inboundMessageWithinBudget(tt.data); ok {
+				t.Fatal("large frame received an operation budget")
+			}
+		})
+	}
+}
 
 func TestValidApprovalDecisionBoundsUntrustedFieldsAndChoice(t *testing.T) {
 	tests := []struct {
