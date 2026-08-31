@@ -537,6 +537,13 @@ func run() error {
 				if json.Unmarshal(ev.Payload, &p) == nil {
 					borrowHost.Revoked(p)
 				}
+			case borrowagent.TopicBorrowNeedsInterrupt:
+				var p borrowagent.BorrowNeedsInterruptPayload
+				if json.Unmarshal(ev.Payload, &p) == nil && p.OwnerDeviceID == deviceID {
+					if err := borrowHost.NeedsInterrupt(p); err != nil {
+						fmt.Fprintf(os.Stderr, "room-sync: borrow command %s needs interrupt: %v\n", p.CommandID, err)
+					}
+				}
 			case borrowagent.TopicApprovalRequest:
 				var p borrowagent.ApprovalRequestPayload
 				if json.Unmarshal(ev.Payload, &p) == nil {

@@ -342,10 +342,8 @@ func (p *Proxy) handle(conn net.Conn, b *routeBinding) {
 				// listener drove unbounded CPU and heap growth before
 				// pickShared ever checked registration. Unknown names fail
 				// the handshake immediately.
-				if host != "" && host != b.target.host {
-					if _, aliased := b.shared[host]; !aliased {
-						return nil, fmt.Errorf("unknown sni host %q", host)
-					}
+				if host == "" || !bindingHasHost(b, host) {
+					return nil, fmt.Errorf("unknown sni host %q", host)
 				}
 				if host != "" {
 					sniHost = host
@@ -405,6 +403,14 @@ func (p *Proxy) handle(conn net.Conn, b *routeBinding) {
 		_ = dl.SetReadDeadline(time.Time{})
 	}
 	p.pipe(client, route)
+}
+
+func bindingHasHost(b *routeBinding, host string) bool {
+	if b.target != nil && b.target.host == host {
+		return true
+	}
+	_, ok := b.shared[host]
+	return ok
 }
 
 // pickShared selects the shared-mode target for one connection: SNI when

@@ -10,11 +10,15 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 )
 
 // LocalCA issues per-room certificates for *.tutti. Trust exists only
@@ -25,8 +29,18 @@ type LocalCA struct {
 	mu        sync.Mutex
 	caCert    *x509.Certificate
 	caKey     *ecdsa.PrivateKey
-	leafCache map[string]tls.Certificate
+	leafCache map[string]cachedLeaf
 }
+
+type cachedLeaf struct {
+	cert   tls.Certificate
+	issued time.Time
+}
+
+const (
+	maxLeafCache = 256
+	leafCacheTTL = 24 * time.Hour
+)
 
 // LoadOrCreateLocalCA loads the persisted room CA from dir (room-ca.pem
 // + room-ca-key.pem) or generates and persists a fresh one. Persisting
@@ -106,7 +120,7 @@ func parseCAPair(certPEM, keyPEM []byte) (*LocalCA, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &LocalCA{caCert: cert, caKey: key, leafCache: map[string]tls.Certificate{}}, nil
+	return &LocalCA{caCert: cert, caKey: key, leafCache: map[string]cachedLeaf{}}, nil
 }
 
 // NewLocalCA generates a fresh Ed25519-equivalent (ECDSA P-256) CA. One CA
@@ -133,7 +147,7 @@ func NewLocalCA() (*LocalCA, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &LocalCA{caCert: cert, caKey: key, leafCache: map[string]tls.Certificate{}}, nil
+	return &LocalCA{caCert: cert, caKey: key, leafCache: map[string]cachedLeaf{}}, nil
 }
 
 // CACertPEM exports the CA certificate for injecting into the Tutti
@@ -146,10 +160,31 @@ func (c *LocalCA) CACertPEM() []byte {
 // parent), signing on demand and caching. Leaves cover the host and the
 // wildcard so session and device names share the cert where possible.
 func (c *LocalCA) LeafFor(host string) (tls.Certificate, error) {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	if _, err := vmprotocol.ParseTuttiHost(host); err != nil {
+		return tls.Certificate{}, fmt.Errorf("invalid tutti TLS host %q: %w", host, err)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if cert, ok := c.leafCache[host]; ok {
-		return cert, nil
+	now := time.Now()
+	if cached, ok := c.leafCache[host]; ok && now.Sub(cached.issued) < leafCacheTTL {
+		return cached.cert, nil
+	}
+	if len(c.leafCache) >= maxLeafCache {
+		var oldestHost string
+		var oldest time.Time
+		for cachedHost, cached := range c.leafCache {
+			if now.Sub(cached.issued) >= leafCacheTTL {
+				delete(c.leafCache, cachedHost)
+				continue
+			}
+			if oldestHost == "" || cached.issued.Before(oldest) {
+				oldestHost, oldest = cachedHost, cached.issued
+			}
+		}
+		if len(c.leafCache) >= maxLeafCache && oldestHost != "" {
+			delete(c.leafCache, oldestHost)
+		}
 	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -173,7 +208,7 @@ func (c *LocalCA) LeafFor(host string) (tls.Certificate, error) {
 		return tls.Certificate{}, err
 	}
 	cert := tls.Certificate{Certificate: [][]byte{leaf.Raw, c.caCert.Raw}, PrivateKey: key}
-	c.leafCache[host] = cert
+	c.leafCache[host] = cachedLeaf{cert: cert, issued: now}
 	return cert, nil
 }
 

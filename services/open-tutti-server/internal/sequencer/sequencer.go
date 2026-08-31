@@ -485,23 +485,19 @@ func (m *Manager) snapshotLocked(roomID string, reason vmprotocol.SnapshotReason
 		if err != nil {
 			return err
 		}
-		if err := m.repo.SaveSnapshot(context.Background(), store.SnapshotRecord{
-			RoomID: roomID, ServerSeq: snap.ServerSeq, RootTreeHash: snap.RootTreeHash,
-			EntriesJSON: entries, Reason: string(reason),
-		}); err != nil {
-			return err
-		}
 		refs := m.snapshotRefs(snap)
 		objects := make([]store.CASObject, 0, len(refs))
 		for _, hash := range refs {
-			if data, err := m.cas.Get(hash); err == nil {
-				objects = append(objects, store.CASObject{Hash: hash, Size: int64(len(data))})
+			data, err := m.cas.Get(hash)
+			if err != nil {
+				return fmt.Errorf("snapshot object %s is not durable: %w", hash, err)
 			}
+			objects = append(objects, store.CASObject{Hash: hash, Size: int64(len(data))})
 		}
-		// The outer publication fence is already held while snapshot objects
-		// are written, so use the repository's short transaction helper through
-		// the public contract only in callers that do not hold that fence.
-		return m.repo.AddCASRefsSized(context.Background(), roomID, objects, m.cfg.CASRoomQuotaBytes)
+		return m.repo.PublishSnapshot(context.Background(), store.SnapshotRecord{
+			RoomID: roomID, ServerSeq: snap.ServerSeq, RootTreeHash: snap.RootTreeHash,
+			EntriesJSON: entries, Reason: string(reason), CreatedAt: time.Now(),
+		}, objects, m.cfg.CASRoomQuotaBytes)
 	}); err != nil {
 		return snap, err
 	}
@@ -530,10 +526,12 @@ func (m *Manager) snapshotRefs(snap vmprotocol.WorkspaceSnapshot) []string {
 			continue
 		}
 		out = append(out, e.Manifest)
-		if data, err := m.cas.Get(e.Manifest); err == nil {
-			if manifest, err := vmcas.DecodeManifest(data); err == nil {
-				out = append(out, manifest.Chunks...)
-			}
+		data, err := m.cas.Get(e.Manifest)
+		if err != nil {
+			continue
+		}
+		if manifest, err := vmcas.DecodeManifest(data); err == nil {
+			out = append(out, manifest.Chunks...)
 		}
 	}
 	return out

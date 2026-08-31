@@ -17,16 +17,17 @@ import (
 
 // Errors surfaced to API/WS callers.
 var (
-	ErrNotOwner            = errors.New("only the agent owner may change sharing")
-	ErrNotBorrowable       = errors.New("agent does not satisfy the BorrowSafe contract")
-	ErrUnknownAgent        = errors.New("agent instance not shared in this room")
-	ErrStaleLease          = errors.New("borrowing lease revoked (stale generation)")
-	ErrNotOperator         = errors.New("only the session operator may decide approvals")
-	ErrCommandFailedOwner  = errors.New("only the owning device may report command failure")
-	ErrDeliveryUnavailable = errors.New("borrow delivery unavailable")
-	ErrDuplicateCommand    = errors.New("borrow command id already used with different payload")
-	ErrCommandIDRequired   = errors.New("borrow command id required")
-	ErrInvalidChoice       = errors.New("approval choice is not one of the advertised options")
+	ErrNotOwner             = errors.New("only the agent owner may change sharing")
+	ErrNotBorrowable        = errors.New("agent does not satisfy the BorrowSafe contract")
+	ErrUnknownAgent         = errors.New("agent instance not shared in this room")
+	ErrStaleLease           = errors.New("borrowing lease revoked (stale generation)")
+	ErrNotOperator          = errors.New("only the session operator may decide approvals")
+	ErrCommandFailedOwner   = errors.New("only the owning device may report command failure")
+	ErrDeliveryUnavailable  = errors.New("borrow delivery unavailable")
+	ErrDuplicateCommand     = errors.New("borrow command id already used with different payload")
+	ErrCommandIDRequired    = errors.New("borrow command id required")
+	ErrInvalidChoice        = errors.New("approval choice is not one of the advertised options")
+	ErrOperatorDisconnected = errors.New("borrower disconnected; command awaiting interrupt")
 )
 
 // AgentInstance is one shared agent in one room.
@@ -80,10 +81,11 @@ type openApproval struct {
 }
 
 type commandRecord struct {
-	payload  borrowagent.BorrowCommandPayload
-	borrower string
-	epoch    uint64
-	delivery commandDeliveryState
+	payload    borrowagent.BorrowCommandPayload
+	borrower   string
+	epoch      uint64
+	delivery   commandDeliveryState
+	graceUntil time.Time
 }
 
 type commandDeliveryState uint8
@@ -96,6 +98,8 @@ const (
 // maxTrackedCommandsPerAgent bounds one room+agent's tracked commands:
 // prompts only arrive for commands still executing on that agent.
 const maxTrackedCommandsPerAgent = 16
+
+const borrowerDisconnectGrace = 30 * time.Second
 
 // maxOutstandingApprovals bounds one agent's pending approvals, and
 // approvalTTL expires them even without a resolution (interactive
@@ -132,6 +136,15 @@ func (r *Registry) SetPresence(roomID, deviceID string, online bool) {
 	}
 	p.online = online
 	r.presence[key] = p
+	if !online {
+		deadline := time.Now().Add(borrowerDisconnectGrace)
+		for commandKey, record := range r.commandBorrowers {
+			if record.borrower == deviceID && strings.HasPrefix(commandKey, roomID+"\x00") && record.delivery == commandDelivered {
+				record.graceUntil = deadline
+				r.commandBorrowers[commandKey] = record
+			}
+		}
+	}
 }
 
 // BeginPresence starts a new authenticated socket session, including a
@@ -144,6 +157,13 @@ func (r *Registry) BeginPresence(roomID, deviceID string) {
 	p.epoch++
 	p.online = true
 	r.presence[key] = p
+	for commandKey, record := range r.commandBorrowers {
+		if record.borrower == deviceID && strings.HasPrefix(commandKey, roomID+"\x00") && !record.graceUntil.IsZero() {
+			record.epoch = p.epoch
+			record.graceUntil = time.Time{}
+			r.commandBorrowers[commandKey] = record
+		}
+	}
 }
 
 // Share enables or disables borrowing for one agent instance. Only the
@@ -287,6 +307,9 @@ func (r *Registry) commandLocked(roomID string, p borrowagent.BorrowCommandPaylo
 	if !inst.Shared {
 		return p, false, ErrUnknownAgent
 	}
+	if presence, ok := r.presence[roomID+"\x00"+p.BorrowerDeviceID]; ok && !presence.online {
+		return p, false, ErrOperatorDisconnected
+	}
 	if p.CommandID == "" {
 		return p, false, ErrCommandIDRequired
 	}
@@ -420,6 +443,9 @@ func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, comma
 	}
 	operator = inst.LastBorrower
 	if record, ok := r.commandBorrowers[roomID+"\x00"+agentInstanceID+"\x00"+commandID]; ok {
+		if !record.graceUntil.IsZero() {
+			return "", ErrOperatorDisconnected
+		}
 		operator = record.borrower
 	} else {
 		return "", errors.New("unknown borrow command for approval routing")
@@ -475,6 +501,46 @@ func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, comma
 		options:    append([]string(nil), options...),
 	}
 	return operator, nil
+}
+
+// ExpireDisconnectGrace returns generation-bound interrupt requests for
+// delivered commands whose borrower did not reconnect. It never claims the
+// runtime stopped; the owner Host must acknowledge that by terminating work.
+type InterruptRequest struct {
+	RoomID, OwnerDeviceID string
+	Payload               borrowagent.BorrowNeedsInterruptPayload
+}
+
+func (r *Registry) ExpireDisconnectGrace(now time.Time) []InterruptRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []InterruptRequest
+	for key, record := range r.commandBorrowers {
+		if record.graceUntil.IsZero() || now.Before(record.graceUntil) {
+			continue
+		}
+		parts := strings.SplitN(key, "\x00", 3)
+		if len(parts) != 3 {
+			delete(r.commandBorrowers, key)
+			continue
+		}
+		inst := r.agents[parts[0]][parts[1]]
+		if inst != nil && inst.Shared && inst.LeaseGeneration == record.payload.LeaseGeneration {
+			out = append(out, InterruptRequest{RoomID: parts[0], OwnerDeviceID: inst.OwnerDeviceID, Payload: borrowagent.BorrowNeedsInterruptPayload{
+				CommandID: record.payload.CommandID, AgentInstanceID: record.payload.AgentInstanceID,
+				OwnerDeviceID:    inst.OwnerDeviceID,
+				BorrowerDeviceID: record.borrower, LeaseGeneration: record.payload.LeaseGeneration,
+				DisconnectAtMS: record.graceUntil.Add(-borrowerDisconnectGrace).UnixMilli(), Reason: "borrower_disconnected",
+			}})
+		}
+		for approvalKey, approval := range r.approvals {
+			if approval.roomID == parts[0] && approval.agentID == parts[1] && approval.operator == record.borrower {
+				delete(r.approvals, approvalKey)
+			}
+		}
+		delete(r.commandBorrowers, key)
+	}
+	return out
 }
 
 // DispatchApproval validates and records a prompt under the lease lock, then

@@ -30,6 +30,9 @@ const (
 	// owning device.
 	TopicApprovalDecision vmprotocol.EventTopic = "agent.approval_decision"
 	TopicCommandFailed    vmprotocol.EventTopic = "agent.command_failed"
+	// TopicBorrowNeedsInterrupt reports that the borrower disappeared and a
+	// delivered command must be interrupted by the generation-bound owner host.
+	TopicBorrowNeedsInterrupt vmprotocol.EventTopic = "agent.borrow_needs_interrupt"
 )
 
 // AgentSharedPayload is the payload of agent.shared. Sharing is scoped to
@@ -84,6 +87,16 @@ type CommandFailedPayload struct {
 	AgentInstanceID  string `json:"agent_instance_id"`
 	BorrowerDeviceID string `json:"borrower_device_id"`
 	LeaseGeneration  uint64 `json:"lease_generation"`
+	Reason           string `json:"reason"`
+}
+
+type BorrowNeedsInterruptPayload struct {
+	CommandID        string `json:"command_id"`
+	AgentInstanceID  string `json:"agent_instance_id"`
+	OwnerDeviceID    string `json:"owner_device_id"`
+	BorrowerDeviceID string `json:"borrower_device_id"`
+	LeaseGeneration  uint64 `json:"lease_generation"`
+	DisconnectAtMS   int64  `json:"disconnect_at_ms"`
 	Reason           string `json:"reason"`
 }
 

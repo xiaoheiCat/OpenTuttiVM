@@ -42,6 +42,80 @@ func TestCASRefsSizedQuotaDeduplicatesPerRoomAndRollsBack(t *testing.T) {
 	}
 }
 
+func TestPublishSnapshotQuotaFailureLeavesLatestUnchanged(t *testing.T) {
+	r, err := Open(t.TempDir() + "/snapshot.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	ctx := context.Background()
+	base := store.SnapshotRecord{RoomID: "room-a", ServerSeq: 1, RootTreeHash: "root-1", EntriesJSON: []byte(`[]`), Reason: "test", CreatedAt: time.Now()}
+	if err := r.PublishSnapshot(ctx, base, []store.CASObject{{Hash: "hash-1", Size: 4}}, 4); err != nil {
+		t.Fatal(err)
+	}
+	failed := base
+	failed.ServerSeq = 2
+	failed.RootTreeHash = "root-2"
+	if err := r.PublishSnapshot(ctx, failed, []store.CASObject{{Hash: "hash-2", Size: 1}}, 4); err == nil {
+		t.Fatal("quota failure expected")
+	}
+	latest, err := r.LatestSnapshot(ctx, "room-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if latest.ServerSeq != 1 || latest.RootTreeHash != "root-1" {
+		t.Fatalf("failed publication became latest: %+v", latest)
+	}
+	if ok, err := r.HasCASRef(ctx, "room-a", "hash-2"); err != nil || ok {
+		t.Fatalf("failed publication retained ref: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestPublishSnapshotInvalidRefLeavesNoSnapshot(t *testing.T) {
+	r, err := Open(t.TempDir() + "/snapshot.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	err = r.PublishSnapshot(context.Background(), store.SnapshotRecord{
+		RoomID: "room-a", ServerSeq: 1, RootTreeHash: "root", EntriesJSON: []byte(`[]`), CreatedAt: time.Now(),
+	}, []store.CASObject{{Hash: "", Size: 1}}, 10)
+	if err == nil {
+		t.Fatal("invalid ref accepted")
+	}
+	if _, err := r.LatestSnapshot(context.Background(), "room-a"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("failed snapshot visible: %v", err)
+	}
+}
+
+func TestDissolveRoomDeletesSnapshotsAndRefsTogether(t *testing.T) {
+	r, err := Open(t.TempDir() + "/dissolve.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	now := time.Now()
+	if err := r.CreateRoom(context.Background(), store.Room{ID: "room-a", ShareID: "share-a", PasswordHash: "hash", OwnerDeviceID: "owner", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.PublishSnapshot(context.Background(), store.SnapshotRecord{RoomID: "room-a", ServerSeq: 1, RootTreeHash: "root", EntriesJSON: []byte(`[]`), CreatedAt: now}, []store.CASObject{{Hash: "hash-1", Size: 1}}, 10); err != nil {
+		t.Fatal(err)
+	}
+	refs, err := r.DissolveRoomFenced(context.Background(), "room-a", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) != 1 || refs[0] != "hash-1" {
+		t.Fatalf("collection refs = %v", refs)
+	}
+	if _, err := r.LatestSnapshot(context.Background(), "room-a"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("snapshot survived dissolution: %v", err)
+	}
+	if ok, err := r.HasCASRef(context.Background(), "room-a", "hash-1"); err != nil || ok {
+		t.Fatalf("CAS ref survived dissolution: ok=%v err=%v", ok, err)
+	}
+}
+
 func TestCASPendingRefsPromoteAndSweep(t *testing.T) {
 	r, err := Open(t.TempDir() + "/pending.db")
 	if err != nil {

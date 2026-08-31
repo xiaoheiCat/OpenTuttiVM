@@ -153,6 +153,7 @@ type Repository interface {
 
 	// Snapshots
 	SaveSnapshot(ctx context.Context, s SnapshotRecord) error
+	PublishSnapshot(ctx context.Context, s SnapshotRecord, objects []CASObject, quotaBytes int64) error
 	LatestSnapshot(ctx context.Context, roomID string) (SnapshotRecord, error)
 
 	// CAS references

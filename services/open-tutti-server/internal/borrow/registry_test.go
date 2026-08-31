@@ -3,6 +3,7 @@ package borrow
 import (
 	"errors"
 	"testing"
+	"time"
 
 	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
 )
@@ -21,6 +22,57 @@ func shareClaude(t *testing.T, r *Registry) borrowagent.AgentSharedPayload {
 		t.Fatal(err)
 	}
 	return out
+}
+
+func TestUnexpectedBorrowerDisconnectRequiresGenerationBoundInterrupt(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	r.SetPresence("room1", "dev_bob", true)
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "running", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+	if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	r.SetPresence("room1", "dev_bob", false)
+	newCommand := cmd
+	newCommand.CommandID = "new-after-disconnect"
+	if _, err := r.Command("room1", newCommand); !errors.Is(err, ErrOperatorDisconnected) {
+		t.Fatalf("command during disconnect grace = %v", err)
+	}
+	if _, err := r.OpenApproval("room1", shared.AgentInstanceID, "approval", cmd.CommandID, []string{"yes"}); !errors.Is(err, ErrOperatorDisconnected) {
+		t.Fatalf("approval during disconnect grace = %v", err)
+	}
+	if got := r.ExpireDisconnectGrace(time.Now().Add(borrowerDisconnectGrace / 2)); len(got) != 0 {
+		t.Fatalf("interrupt emitted before grace: %+v", got)
+	}
+	got := r.ExpireDisconnectGrace(time.Now().Add(borrowerDisconnectGrace * 2))
+	if len(got) != 1 {
+		t.Fatalf("interrupt count = %d", len(got))
+	}
+	req := got[0]
+	if req.RoomID != "room1" || req.OwnerDeviceID != "dev_alice" || req.Payload.CommandID != cmd.CommandID || req.Payload.LeaseGeneration != shared.LeaseGeneration {
+		t.Fatalf("interrupt request = %+v", req)
+	}
+	if got := r.ExpireDisconnectGrace(time.Now().Add(borrowerDisconnectGrace * 3)); len(got) != 0 {
+		t.Fatalf("interrupt repeated: %+v", got)
+	}
+}
+
+func TestBorrowerReconnectWithinGraceKeepsCommand(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	r.BeginPresence("room1", "dev_bob")
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "running", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+	if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	r.SetPresence("room1", "dev_bob", false)
+	r.BeginPresence("room1", "dev_bob")
+	if got := r.ExpireDisconnectGrace(time.Now().Add(borrowerDisconnectGrace * 2)); len(got) != 0 {
+		t.Fatalf("reconnected borrower was interrupted: %+v", got)
+	}
+	if _, err := r.OpenApproval("room1", shared.AgentInstanceID, "approval", cmd.CommandID, []string{"yes"}); err != nil {
+		t.Fatalf("approval after reconnect: %v", err)
+	}
 }
 
 func TestShareRejectsUnsafeAdapter(t *testing.T) {

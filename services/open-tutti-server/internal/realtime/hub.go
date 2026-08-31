@@ -150,6 +150,16 @@ func (h *Hub) SetSequencer(seq *sequencer.Manager) { h.seq = seq }
 // Agent Host/Capability Broker adapter. It is intentionally opt-in.
 func (h *Hub) SetBorrowingEnabled(enabled bool) { h.borrowingEnabled = enabled }
 
+// ExpireBorrowerGrace publishes observable, generation-bound interrupt needs.
+// Delivery to the owner is best effort; the room broadcast prevents a missing
+// Host adapter from being mistaken for a completed cancellation.
+func (h *Hub) ExpireBorrowerGrace(now time.Time) {
+	for _, req := range h.borrows.ExpireDisconnectGrace(now) {
+		ev := vmprotocol.Event{Topic: borrowagent.TopicBorrowNeedsInterrupt, RoomID: req.RoomID, Payload: mustJSON(req.Payload)}
+		h.BroadcastRoom(req.RoomID, ev)
+	}
+}
+
 // BroadcastRoom implements sequencer.Sender and room.Broadcaster.
 func (h *Hub) BroadcastRoom(roomID string, ev vmprotocol.Event) {
 	msg := ServerMessage{Type: "event", Event: ev}

@@ -8,9 +8,20 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 
 	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
 )
+
+const (
+	dnsWorkerCount = 8
+	dnsQueueSize   = 128
+)
+
+type dnsPacket struct {
+	from net.Addr
+	msg  []byte
+}
 
 // DNSServer answers A queries for *.tutti with the allocator's synthetic
 // address. Only the room's own runtimes point their resolvers here; the
@@ -52,6 +63,21 @@ func (s *DNSServer) Bind(addr string) (net.PacketConn, error) {
 
 func (s *DNSServer) Serve(pc net.PacketConn) error {
 	defer pc.Close()
+	jobs := make(chan dnsPacket, dnsQueueSize)
+	var workers sync.WaitGroup
+	workers.Add(dnsWorkerCount)
+	for range dnsWorkerCount {
+		go func() {
+			defer workers.Done()
+			for packet := range jobs {
+				s.respond(pc, packet.from, packet.msg)
+			}
+		}()
+	}
+	defer func() {
+		close(jobs)
+		workers.Wait()
+	}()
 	buf := make([]byte, 1500)
 	for {
 		n, from, err := pc.ReadFrom(buf)
@@ -60,7 +86,12 @@ func (s *DNSServer) Serve(pc net.PacketConn) error {
 		}
 		msg := make([]byte, n)
 		copy(msg, buf[:n])
-		go s.respond(pc, from, msg)
+		select {
+		case jobs <- dnsPacket{from: from, msg: msg}:
+		default:
+			// UDP has no backpressure contract; overload is dropped so packet
+			// floods cannot create unbounded goroutines or retained buffers.
+		}
 	}
 }
 

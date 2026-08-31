@@ -115,6 +115,7 @@ func run() error {
 		for range ticker.C {
 			_ = repo.SweepCASPending(context.Background(), time.Now())
 			collector.Collect(context.Background(), nil)
+			hub.ExpireBorrowerGrace(time.Now())
 			active, err := repo.ListActiveRooms(context.Background())
 			if err != nil {
 				continue

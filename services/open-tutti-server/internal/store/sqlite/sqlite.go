@@ -581,6 +581,45 @@ func (r *Repo) SaveSnapshot(ctx context.Context, s store.SnapshotRecord) error {
 	return err
 }
 
+func (r *Repo) PublishSnapshot(ctx context.Context, s store.SnapshotRecord, objects []store.CASObject, quotaBytes int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`INSERT OR REPLACE INTO snapshots (room_id, server_seq, root_tree_hash, entries_json, reason, created_at)
+		 VALUES (?,?,?,?,?,?)`, s.RoomID, s.ServerSeq, s.RootTreeHash, s.EntriesJSON, s.Reason, s.CreatedAt.Unix()); err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, `INSERT OR IGNORE INTO cas_refs (room_id, hash) VALUES (?,?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, object := range objects {
+		if object.Hash == "" || object.Size < 0 {
+			return errors.New("invalid CAS object accounting")
+		}
+		if object.Size > 0 {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO cas_objects(hash, size) VALUES(?, ?) ON CONFLICT(hash) DO UPDATE SET size=excluded.size`, object.Hash, object.Size); err != nil {
+				return err
+			}
+		}
+		if _, err := stmt.ExecContext(ctx, s.RoomID, object.Hash); err != nil {
+			return err
+		}
+	}
+	var used int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(o.size), 0) FROM cas_refs r JOIN cas_objects o ON o.hash=r.hash WHERE r.room_id=?`, s.RoomID).Scan(&used); err != nil {
+		return err
+	}
+	if quotaBytes > 0 && used > quotaBytes {
+		return fmt.Errorf("CAS room quota exceeded: %d > %d bytes", used, quotaBytes)
+	}
+	return tx.Commit()
+}
+
 func (r *Repo) LatestSnapshot(ctx context.Context, roomID string) (store.SnapshotRecord, error) {
 	var s store.SnapshotRecord
 	var created int64
@@ -1097,6 +1136,9 @@ func (r *Repo) DissolveRoom(ctx context.Context, roomID string, at time.Time) er
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM join_tickets WHERE room_id=?`, roomID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM snapshots WHERE room_id=?`, roomID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM cas_refs WHERE room_id=?`, roomID); err != nil {

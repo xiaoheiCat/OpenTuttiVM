@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"crypto/x509"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -131,5 +132,36 @@ func TestLocalCASignsTuttiHostsOnlyInsideTrust(t *testing.T) {
 	cached, err := ca.LeafFor("claude-a.anna.tutti")
 	if err != nil || string(cached.Certificate[0]) != string(cert.Certificate[0]) {
 		t.Fatal("leaf cache miss")
+	}
+}
+
+func TestLocalCALeafCacheIsBoundedAndRejectsInvalidHosts(t *testing.T) {
+	ca, err := NewLocalCA()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ca.LeafFor("example.com"); err == nil {
+		t.Fatal("CA signed a non-tutti host")
+	}
+	for i := 0; i < maxLeafCache+20; i++ {
+		if _, err := ca.LeafFor(fmt.Sprintf("device-%d.tutti", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(ca.leafCache) > maxLeafCache {
+		t.Fatalf("leaf cache grew to %d", len(ca.leafCache))
+	}
+}
+
+func TestBindingHostWhitelistCoversVIPAndSharedAliases(t *testing.T) {
+	vip := &routeBinding{target: &routeTarget{host: "claude-a.alice.tutti"}}
+	if !bindingHasHost(vip, "claude-a.alice.tutti") || bindingHasHost(vip, "unknown.alice.tutti") {
+		t.Fatal("VIP binding host whitelist mismatch")
+	}
+	shared := &routeBinding{target: &routeTarget{host: "claude-a.alice.tutti"}, shared: map[string]*routeTarget{
+		"claude-a.alice.tutti": {}, "alice.tutti": {},
+	}}
+	if !bindingHasHost(shared, "alice.tutti") || bindingHasHost(shared, "unknown.alice.tutti") {
+		t.Fatal("shared alias whitelist mismatch")
 	}
 }

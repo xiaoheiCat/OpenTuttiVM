@@ -37,6 +37,7 @@ type Host interface {
 	Shared(p borrowagent.AgentSharedPayload) error
 	// Revoked ends every in-flight command holding the old generation.
 	Revoked(p borrowagent.BorrowRevokedPayload) error
+	NeedsInterrupt(p borrowagent.BorrowNeedsInterruptPayload) error
 }
 
 // Noop is the default host: it observes routed events without executing
@@ -85,4 +86,9 @@ func (n *Noop) Shared(p borrowagent.AgentSharedPayload) error {
 func (n *Noop) Revoked(p borrowagent.BorrowRevokedPayload) error {
 	n.log("borrow_revoked", "agent", p.AgentInstanceID, "generation", p.FinalGeneration)
 	return nil
+}
+
+func (n *Noop) NeedsInterrupt(p borrowagent.BorrowNeedsInterruptPayload) error {
+	n.log("borrow_needs_interrupt_not_wired", "agent", p.AgentInstanceID, "command", p.CommandID, "generation", p.LeaseGeneration)
+	return ErrHostNotWired
 }
