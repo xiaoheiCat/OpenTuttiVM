@@ -109,15 +109,22 @@ func IsEnvironmentPath(path string) bool { return EnvironmentPaths[path] }
 type WorkspaceState struct {
 	// Admission limits prevent empty structural entries and compacted
 	// operation identities from becoming unbounded memory allocations.
-	MaxEntries    int
-	MaxPathBytes  int64
-	MaxIdentities int
-	seq           uint64
-	files         map[string]*fileState
-	history       map[string][]appliedPatch
-	hashLog       map[string][]seqHash
-	barriers      map[string]*barrier
-	ops           []vmprotocol.Envelope
+	MaxEntries   int
+	MaxPathBytes int64
+	// MaxLivePathBytes bounds the total bytes occupied by all live path keys.
+	MaxLivePathBytes int64
+	MaxIdentities    int
+	// MaxIdentityBytes bounds the retained dedup key bytes. These keys remain
+	// live until the room ends, including after Checkpoint compacts envelopes.
+	MaxIdentityBytes     int64
+	MaxOperationIDBytes  int
+	MaxAgentSessionBytes int
+	seq                  uint64
+	files                map[string]*fileState
+	history              map[string][]appliedPatch
+	hashLog              map[string][]seqHash
+	barriers             map[string]*barrier
+	ops                  []vmprotocol.Envelope
 	// accepted deduplicates (AuthorDeviceID, OperationID): a retry after
 	// a lost broadcast/ack must return the original acknowledgement, not
 	// sequence the same edit twice (a re-applied insert duplicates user
@@ -327,6 +334,15 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 			}, nil
 		}
 	}
+	if w.MaxOperationIDBytes > 0 && len(env.OperationID) > w.MaxOperationIDBytes {
+		return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "operation id too long"}
+	}
+	if w.MaxOperationIDBytes > 0 && len(env.Operation.ID) > w.MaxOperationIDBytes {
+		return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "file operation id too long"}
+	}
+	if w.MaxAgentSessionBytes > 0 && len(env.AgentSessionID) > w.MaxAgentSessionBytes {
+		return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "agent session id too long"}
+	}
 	if w.MaxEntries > 0 && len(w.files) >= w.MaxEntries && (env.Operation.Kind == vmprotocol.OpCreate || env.Operation.Kind == vmprotocol.OpMkdir) {
 		return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "workspace entry limit exceeded"}
 	}
@@ -339,12 +355,24 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 			return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "workspace path budget exceeded"}
 		}
 	}
-	if w.MaxIdentities > 0 && len(w.accepted)+len(w.dedupStubs) >= w.MaxIdentities {
-		if _, exists := w.accepted[env.AuthorDeviceID+"\x00"+env.OperationID]; !exists {
-			if _, exists := w.dedupStubs[env.AuthorDeviceID+"\x00"+env.OperationID]; !exists {
-				return env, &RejectionError{Reason: RejectTooComplex, CurrentHash: "operation identity budget exceeded"}
+	identityKey := ""
+	if env.AuthorDeviceID != "" && env.OperationID != "" {
+		identityKey = env.AuthorDeviceID + "\x00" + env.OperationID
+	}
+	if identityKey != "" {
+		if _, exists := w.accepted[identityKey]; !exists {
+			if _, exists := w.dedupStubs[identityKey]; !exists {
+				if w.MaxIdentities > 0 && len(w.accepted)+len(w.dedupStubs) >= w.MaxIdentities {
+					return env, &RejectionError{Reason: RejectTooComplex, CurrentHash: "operation identity budget exceeded"}
+				}
+				if w.MaxIdentityBytes > 0 && w.identityBytes()+int64(len(identityKey)) > w.MaxIdentityBytes {
+					return env, &RejectionError{Reason: RejectTooComplex, CurrentHash: "operation identity bytes exceeded"}
+				}
 			}
 		}
+	}
+	if w.MaxLivePathBytes > 0 && w.livePathBytes()+w.pathDelta(env.Operation) > w.MaxLivePathBytes {
+		return env, &RejectionError{Reason: RejectInvalid, CurrentHash: "workspace live path budget exceeded"}
 	}
 	if !vmprotocol.ValidWorkspacePath(env.Operation.Path) {
 		return env, &RejectionError{Reason: RejectInvalid}
@@ -404,6 +432,54 @@ func (w *WorkspaceState) Accept(env vmprotocol.Envelope) (vmprotocol.Envelope, e
 	w.accepted[next.AuthorDeviceID+"\x00"+next.OperationID] = len(w.ops)
 	w.record(&next)
 	return next, nil
+}
+
+func (w *WorkspaceState) identityBytes() int64 {
+	var total int64
+	for key := range w.accepted {
+		total += int64(len(key))
+	}
+	for key := range w.dedupStubs {
+		total += int64(len(key))
+	}
+	return total
+}
+
+func (w *WorkspaceState) livePathBytes() int64 {
+	var total int64
+	for path := range w.files {
+		total += int64(len(path))
+	}
+	return total
+}
+
+func (w *WorkspaceState) pathDelta(op vmprotocol.FileOperation) int64 {
+	switch op.Kind {
+	case vmprotocol.OpCreate, vmprotocol.OpMkdir:
+		if _, exists := w.files[op.Path]; !exists {
+			return int64(len(op.Path))
+		}
+	case vmprotocol.OpRemove, vmprotocol.OpRmdir:
+		if _, exists := w.files[op.Path]; exists {
+			return -int64(len(op.Path))
+		}
+	case vmprotocol.OpRename:
+		if op.Rename == nil {
+			return 0
+		}
+		var delta int64
+		for path := range w.files {
+			if path == op.Rename.OldPath || strings.HasPrefix(path, op.Rename.OldPath+"/") {
+				moved := op.Rename.NewPath + strings.TrimPrefix(path, op.Rename.OldPath)
+				delta += int64(len(moved) - len(path))
+			}
+		}
+		if _, exists := w.files[op.Rename.NewPath]; exists && op.Rename.NewPath != op.Rename.OldPath {
+			delta -= int64(len(op.Rename.NewPath))
+		}
+		return delta
+	}
+	return 0
 }
 
 func asRejection(err error) error {
@@ -963,6 +1039,9 @@ func (w *WorkspaceState) materializeViaHook(path string) error {
 // Text file contents are chunked like any other object so bootstrap, export,
 // and owner transfer all read from one object layer.
 func (w *WorkspaceState) Snapshot(roomID string, reason vmprotocol.SnapshotReason, store vmcas.Store) (vmprotocol.WorkspaceSnapshot, error) {
+	if err := w.validateBudgets(); err != nil {
+		return vmprotocol.WorkspaceSnapshot{}, err
+	}
 	snap := vmprotocol.WorkspaceSnapshot{
 		RoomID:    roomID,
 		ServerSeq: w.seq,
@@ -1018,10 +1097,23 @@ func (w *WorkspaceState) Snapshot(roomID string, reason vmprotocol.SnapshotReaso
 // lazy replicas load the tree without CAS reads; callers materialize
 // content from CAS according to their policy.
 func (w *WorkspaceState) RestoreSnapshot(snap vmprotocol.WorkspaceSnapshot) error {
+	if w.MaxEntries > 0 && len(snap.Entries) > w.MaxEntries {
+		return fmt.Errorf("snapshot entry limit exceeded")
+	}
+	var pathBytes int64
+	seen := make(map[string]struct{}, len(snap.Entries))
 	for _, e := range snap.Entries {
 		if !vmprotocol.ValidWorkspacePath(e.Path) {
 			return fmt.Errorf("snapshot entry %q: invalid workspace path", e.Path)
 		}
+		if _, exists := seen[e.Path]; exists {
+			return fmt.Errorf("snapshot entry %q duplicated", e.Path)
+		}
+		seen[e.Path] = struct{}{}
+		pathBytes += int64(len(e.Path))
+	}
+	if w.MaxLivePathBytes > 0 && pathBytes > w.MaxLivePathBytes {
+		return fmt.Errorf("snapshot live path budget exceeded")
 	}
 	w.seq = snap.ServerSeq
 	w.files = map[string]*fileState{}
@@ -1050,6 +1142,22 @@ func (w *WorkspaceState) RestoreSnapshot(snap vmprotocol.WorkspaceSnapshot) erro
 			continue
 		}
 		w.files[e.Path] = &fileState{Mode: e.Mode, ModeSet: true, Kind: kindBlob, Manifest: e.Manifest, Size: e.Size}
+	}
+	return nil
+}
+
+func (w *WorkspaceState) validateBudgets() error {
+	if w.MaxEntries > 0 && len(w.files) > w.MaxEntries {
+		return fmt.Errorf("workspace entry limit exceeded")
+	}
+	if w.MaxLivePathBytes > 0 && w.livePathBytes() > w.MaxLivePathBytes {
+		return fmt.Errorf("workspace live path budget exceeded")
+	}
+	if w.MaxIdentities > 0 && len(w.accepted)+len(w.dedupStubs) > w.MaxIdentities {
+		return fmt.Errorf("operation identity budget exceeded")
+	}
+	if w.MaxIdentityBytes > 0 && w.identityBytes() > w.MaxIdentityBytes {
+		return fmt.Errorf("operation identity bytes exceeded")
 	}
 	return nil
 }

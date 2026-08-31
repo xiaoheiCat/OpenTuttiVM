@@ -560,7 +560,11 @@ func (m *Manager) engine(roomID string) (*engine, error) {
 	state := vmsync.NewWorkspaceState()
 	state.MaxEntries = m.cfg.WorkspaceMaxEntries
 	state.MaxPathBytes = m.cfg.WorkspaceMaxPathBytes
+	state.MaxLivePathBytes = m.cfg.WorkspaceMaxLivePathBytes
 	state.MaxIdentities = m.cfg.WorkspaceMaxIdentities
+	state.MaxIdentityBytes = m.cfg.WorkspaceMaxIdentityBytes
+	state.MaxOperationIDBytes = m.cfg.WorkspaceMaxOperationIDBytes
+	state.MaxAgentSessionBytes = m.cfg.WorkspaceMaxAgentSessionBytes
 	eng := &engine{state: state}
 	m.engines[roomID] = eng
 	return eng, nil

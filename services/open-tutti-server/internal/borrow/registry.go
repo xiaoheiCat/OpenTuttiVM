@@ -238,16 +238,7 @@ func (r *Registry) Share(roomID string, p borrowagent.AgentSharedPayload) (borro
 				delete(r.approvals, key)
 			}
 		}
-		for key := range r.commandBorrowers {
-			if k := strings.SplitN(key, "\x00", 3); len(k) == 3 && k[0] == roomID && k[1] == p.AgentInstanceID {
-				delete(r.commandBorrowers, key)
-			}
-		}
-		for key := range r.terminalCommands {
-			if k := strings.SplitN(key, "\x00", 3); len(k) == 3 && k[0] == roomID && k[1] == p.AgentInstanceID {
-				delete(r.terminalCommands, key)
-			}
-		}
+		r.clearAgentCommandsLocked(roomID, p.AgentInstanceID)
 	} else {
 		inst.LeaseGeneration = 1
 	}
@@ -282,16 +273,7 @@ func (r *Registry) Revoke(roomID, ownerDeviceID, agentInstanceID string) (borrow
 			delete(r.approvals, key)
 		}
 	}
-	for key := range r.commandBorrowers {
-		if k := strings.SplitN(key, "\x00", 3); len(k) == 3 && k[0] == roomID && k[1] == agentInstanceID {
-			delete(r.commandBorrowers, key)
-		}
-	}
-	for key := range r.terminalCommands {
-		if k := strings.SplitN(key, "\x00", 3); len(k) == 3 && k[0] == roomID && k[1] == agentInstanceID {
-			delete(r.terminalCommands, key)
-		}
-	}
+	r.clearAgentCommandsLocked(roomID, agentInstanceID)
 	shared := borrowagent.AgentSharedPayload{
 		AgentInstanceID: inst.ID, OwnerDeviceID: inst.OwnerDeviceID,
 		Provider: inst.Provider, Borrowable: inst.Borrowable,
@@ -394,6 +376,7 @@ func (r *Registry) DispatchCommand(roomID string, p borrowagent.BorrowCommandPay
 		key := roomID + "\x00" + p.AgentInstanceID + "\x00" + p.CommandID
 		if record, ok := r.commandBorrowers[key]; ok && record.delivery == commandQueued && record.payload.LeaseGeneration == generation {
 			delete(r.commandBorrowers, key)
+			r.removeCommandOrderKeyLocked(roomID+"\x00"+p.AgentInstanceID, key)
 		}
 		r.mu.Unlock()
 		return ErrDeliveryUnavailable
@@ -475,17 +458,47 @@ func (r *Registry) finishCommandLocked(roomID, agentID, commandID string) (comma
 	}
 	delete(r.commandBorrowers, key)
 	agentKey := roomID + "\x00" + agentID
-	order := r.commandOrder[agentKey]
-	for i, candidate := range order {
-		if candidate == key {
-			r.commandOrder[agentKey] = append(order[:i], order[i+1:]...)
-			break
-		}
-	}
+	r.removeCommandOrderKeyLocked(agentKey, key)
 	record.terminalAt = time.Now()
 	r.terminalCommands[key] = record
 	r.trimTerminalCommandsLocked(agentKey)
 	return record, true
+}
+
+// removeCommandOrderKeyLocked keeps the active FIFO in sync with command maps.
+func (r *Registry) removeCommandOrderKeyLocked(agentKey, commandKey string) {
+	order := r.commandOrder[agentKey]
+	for i, candidate := range order {
+		if candidate == commandKey {
+			order = append(order[:i], order[i+1:]...)
+			break
+		}
+	}
+	if len(order) == 0 {
+		delete(r.commandOrder, agentKey)
+	} else {
+		r.commandOrder[agentKey] = order
+	}
+}
+
+func (r *Registry) clearAgentCommandsLocked(roomID, agentID string) {
+	agentKey := roomID + "\x00" + agentID
+	for key := range r.commandBorrowers {
+		if strings.HasPrefix(key, agentKey+"\x00") {
+			r.clearCommandKeyLocked(agentKey, key)
+		}
+	}
+	for key := range r.terminalCommands {
+		if strings.HasPrefix(key, agentKey+"\x00") {
+			r.clearCommandKeyLocked(agentKey, key)
+		}
+	}
+}
+
+func (r *Registry) clearCommandKeyLocked(agentKey, commandKey string) {
+	delete(r.commandBorrowers, commandKey)
+	delete(r.terminalCommands, commandKey)
+	r.removeCommandOrderKeyLocked(agentKey, commandKey)
 }
 
 func (r *Registry) trimTerminalCommandsLocked(agentKey string) {
@@ -633,6 +646,7 @@ func (r *Registry) ExpireDisconnectGrace(now time.Time) []InterruptRequest {
 		parts := strings.SplitN(key, "\x00", 3)
 		if len(parts) != 3 {
 			delete(r.commandBorrowers, key)
+			r.removeCommandOrderKeyLocked("", key)
 			continue
 		}
 		inst := r.agents[parts[0]][parts[1]]
@@ -816,7 +830,12 @@ func (r *Registry) ClearRoom(roomID string) {
 	prefix := roomID + "\x00"
 	for key := range r.commandBorrowers {
 		if strings.HasPrefix(key, prefix) {
-			delete(r.commandBorrowers, key)
+			parts := strings.SplitN(key, "\x00", 3)
+			if len(parts) == 3 {
+				r.clearCommandKeyLocked(parts[0]+"\x00"+parts[1], key)
+			} else {
+				delete(r.commandBorrowers, key)
+			}
 		}
 	}
 	for key := range r.terminalCommands {
@@ -862,6 +881,7 @@ func (r *Registry) DropDevice(roomID, ownerDeviceID string) []borrowagent.Borrow
 		revoked = append(revoked, borrowagent.BorrowRevokedPayload{
 			AgentInstanceID: inst.ID, Reason: "owner_left", FinalGeneration: inst.LeaseGeneration,
 		})
+		r.clearAgentCommandsLocked(roomID, id)
 		delete(r.agents[roomID], id)
 	}
 	for key, ap := range r.approvals {
@@ -877,7 +897,12 @@ func (r *Registry) DropDevice(roomID, ownerDeviceID string) []borrowagent.Borrow
 	prefix := roomID + "\x00"
 	for key, record := range r.commandBorrowers {
 		if strings.HasPrefix(key, prefix) && record.borrower == ownerDeviceID {
-			delete(r.commandBorrowers, key)
+			parts := strings.SplitN(key, "\x00", 3)
+			if len(parts) == 3 {
+				r.clearCommandKeyLocked(parts[0]+"\x00"+parts[1], key)
+			} else {
+				delete(r.commandBorrowers, key)
+			}
 		}
 	}
 	for key := range r.commandBorrowers {
@@ -885,12 +910,12 @@ func (r *Registry) DropDevice(roomID, ownerDeviceID string) []borrowagent.Borrow
 		parts := strings.SplitN(key, "\x00", 3)
 		if len(parts) == 3 && parts[0] == roomID {
 			if inst := r.agents[roomID][parts[1]]; inst == nil || inst.OwnerDeviceID == ownerDeviceID {
-				delete(r.commandBorrowers, key)
+				r.clearCommandKeyLocked(parts[0]+"\x00"+parts[1], key)
 			}
 		}
 	}
-	for key := range r.terminalCommands {
-		if strings.HasPrefix(key, presenceKey+"\x00") {
+	for key, record := range r.terminalCommands {
+		if strings.HasPrefix(key, prefix) && record.borrower == ownerDeviceID {
 			delete(r.terminalCommands, key)
 		}
 	}

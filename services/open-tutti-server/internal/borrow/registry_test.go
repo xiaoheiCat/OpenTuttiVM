@@ -401,6 +401,45 @@ func TestCommandLimitRejectsWithoutEvictingActiveMappings(t *testing.T) {
 	}
 }
 
+func TestRevokeReshareClearsActiveCommandOrder(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	for i := 0; i < maxTrackedCommandsPerAgent; i++ {
+		cmd := borrowagent.BorrowCommandPayload{CommandID: fmt.Sprintf("old-%d", i), AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+		if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := r.Revoke("room1", "dev_alice", shared.AgentInstanceID); err != nil {
+		t.Fatal(err)
+	}
+	reshared := shareClaude(t, r)
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "new", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: reshared.LeaseGeneration}
+	if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); err != nil {
+		t.Fatalf("new generation command = %v", err)
+	}
+}
+
+func TestBorrowerLeaveClearsActiveCommandOrderForNewBorrower(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	r.SetPresence("room1", "dev_bob", true)
+	for i := 0; i < maxTrackedCommandsPerAgent; i++ {
+		cmd := borrowagent.BorrowCommandPayload{CommandID: fmt.Sprintf("bob-%d", i), AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+		if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := r.DropDevice("room1", "dev_bob"); len(got) != 0 {
+		t.Fatalf("borrower departure revoked owner agents: %+v", got)
+	}
+	r.SetPresence("room1", "dev_carol", true)
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "carol-new", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_carol", LeaseGeneration: shared.LeaseGeneration}
+	if err := r.DispatchCommand("room1", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); err != nil {
+		t.Fatalf("new borrower command = %v", err)
+	}
+}
+
 func TestDispatchFailureDoesNotConsumeCommandID(t *testing.T) {
 	r := NewRegistry()
 	shared := shareClaude(t, r)

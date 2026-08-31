@@ -21,3 +21,50 @@ func TestRestoreSnapshotReplacesOperationDerivedState(t *testing.T) {
 		t.Fatalf("restore retained derived state: files=%d history=%d hashes=%d barriers=%d ops=%d accepted=%d stubs=%d structs=%d", len(w.files), len(w.history), len(w.hashLog), len(w.barriers), len(w.ops), len(w.accepted), len(w.dedupStubs), len(w.structSeqs))
 	}
 }
+
+func TestWorkspaceBudgetsReleasePathsButRetainCheckpointIdentities(t *testing.T) {
+	w := NewWorkspaceState()
+	w.MaxLivePathBytes = int64(len("one") + len("two"))
+	w.MaxIdentityBytes = int64(len("dev\x00one") + len("dev\x00two") + len("dev\x00remove") + len("dev\x00tri"))
+	create := func(id, path string) vmprotocol.Envelope {
+		return vmprotocol.Envelope{AuthorDeviceID: "dev", OperationID: id, Operation: vmprotocol.FileOperation{ID: id, Path: path, Kind: vmprotocol.OpCreate}}
+	}
+	if _, err := w.Accept(create("one", "one")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Accept(create("two", "two")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Accept(create("three", "three")); err == nil {
+		t.Fatal("cumulative path budget accepted")
+	}
+	if _, err := w.Accept(vmprotocol.Envelope{AuthorDeviceID: "dev", OperationID: "remove", BaseSeq: 2, Operation: vmprotocol.FileOperation{ID: "remove", Path: "one", Kind: vmprotocol.OpRemove}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Accept(create("tri", "tri")); err != nil {
+		t.Fatalf("path budget was not released: %v", err)
+	}
+	w.Checkpoint(w.Seq())
+	if _, err := w.Accept(create("too-long-identity", "x")); err == nil {
+		t.Fatal("retained identity budget ignored")
+	}
+	if _, err := w.Accept(create("tri", "tri")); err != nil {
+		t.Fatalf("accepted retry rejected after checkpoint: %v", err)
+	}
+}
+
+func TestWorkspaceRejectsLongOperationIdentitiesAndRestoreBudget(t *testing.T) {
+	w := NewWorkspaceState()
+	w.MaxOperationIDBytes = 4
+	w.MaxAgentSessionBytes = 4
+	if _, err := w.Accept(vmprotocol.Envelope{AuthorDeviceID: "dev", OperationID: "12345", Operation: vmprotocol.FileOperation{ID: "1", Path: "x", Kind: vmprotocol.OpCreate}}); err == nil {
+		t.Fatal("long operation id accepted")
+	}
+	if _, err := w.Accept(vmprotocol.Envelope{AuthorDeviceID: "dev", OperationID: "ok", AgentSessionID: "12345", Operation: vmprotocol.FileOperation{ID: "ok", Path: "x", Kind: vmprotocol.OpCreate}}); err == nil {
+		t.Fatal("long agent session id accepted")
+	}
+	w.MaxLivePathBytes = 3
+	if err := w.RestoreSnapshot(vmprotocol.WorkspaceSnapshot{Entries: []vmprotocol.TreeEntry{{Path: "abcd", Kind: vmprotocol.TreeEntryDir}}}); err == nil {
+		t.Fatal("over-budget snapshot restored")
+	}
+}

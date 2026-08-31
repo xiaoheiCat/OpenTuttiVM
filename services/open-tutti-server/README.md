@@ -44,6 +44,12 @@ is counted independently for different rooms.
 `OPEN_TUTTI_ACTIVE_ROOM_LIMIT` bounds active rooms, including room creations in
 progress. Creation returns `429` when the limit is reached.
 
+Workspace admission also enforces cumulative live path-key bytes and retained
+deduplication identity-key bytes. Path bytes are released by remove and adjusted
+by rename; deduplication keys remain retained through checkpoint so accepted
+retries stay idempotent. Operation IDs and agent-session IDs have explicit byte
+length limits. The corresponding overrides are listed in `.env.example`.
+
 ## API surface (summary)
 
 - `GET  /api/info` — server info
