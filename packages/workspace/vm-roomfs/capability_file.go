@@ -48,10 +48,10 @@ func WriteCapabilityFile(path, capability string) error {
 
 // ReadCapabilityFile authenticates only from a safe regular file.
 func ReadCapabilityFile(path string) (string, error) {
-	if err := validateCapabilityPath(path); err != nil {
-		return "", err
+	if path == "" {
+		return "", fmt.Errorf("capability path is empty")
 	}
-	data, err := os.ReadFile(path)
+	data, err := readCapabilityFile(path)
 	if err != nil {
 		return "", err
 	}

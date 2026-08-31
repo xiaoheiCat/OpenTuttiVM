@@ -81,3 +81,18 @@ func TestCapabilityFileSafeRead(t *testing.T) {
 		t.Fatalf("read = %q, %v", got, err)
 	}
 }
+
+func TestCapabilityFileReadRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.cap")
+	link := filepath.Join(dir, "link.cap")
+	if err := os.WriteFile(target, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if _, err := ReadCapabilityFile(link); err == nil {
+		t.Fatal("symlink was accepted")
+	}
+}

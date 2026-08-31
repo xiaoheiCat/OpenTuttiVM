@@ -4,9 +4,12 @@ package roomfs
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 var (
@@ -40,6 +43,41 @@ func validateCapabilityPath(path string) error {
 		return fmt.Errorf("capability path is not a regular file")
 	}
 	return nil
+}
+
+func readCapabilityFile(path string) ([]byte, error) {
+	p, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, err
+	}
+	h, err := windows.CreateFile(p, windows.GENERIC_READ,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil, windows.OPEN_EXISTING,
+		windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+	if err != nil {
+		return nil, err
+	}
+	f := os.NewFile(uintptr(h), path)
+	defer f.Close()
+	var tag struct {
+		Attributes uint32
+		ReparseTag uint32
+	}
+	if err := windows.GetFileInformationByHandleEx(h, windows.FileAttributeTagInfo,
+		(*byte)(unsafe.Pointer(&tag)), uint32(unsafe.Sizeof(tag))); err != nil {
+		return nil, err
+	}
+	if tag.Attributes&(fileAttributeReparse|fileAttributeDir) != 0 {
+		return nil, fmt.Errorf("capability path is not a regular file")
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("capability path is not a regular file")
+	}
+	return io.ReadAll(f)
 }
 
 func windowsFileAttributes(path string) (uint32, error) {

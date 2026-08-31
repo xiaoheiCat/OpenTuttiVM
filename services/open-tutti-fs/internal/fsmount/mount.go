@@ -245,7 +245,14 @@ func (n *roomNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Attr
 // Setattr keeps the mount root outside the Room FS path namespace. Directory
 // descendants are represented by their own roomNode and may use the protocol.
 func (n *roomNode) Setattr(ctx context.Context, fh fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
-	if _, ok := in.GetMode(); ok {
+	// The root has no Room FS path, so every actual setattr request is
+	// unsupported. An empty Valid mask is the getattr-style probe emitted by
+	// FUSE and is safe to answer with the synthetic root attributes.
+	const modifyingAttrs = fuse.FATTR_MODE | fuse.FATTR_UID | fuse.FATTR_GID |
+		fuse.FATTR_SIZE | fuse.FATTR_ATIME | fuse.FATTR_MTIME |
+		fuse.FATTR_ATIME_NOW | fuse.FATTR_MTIME_NOW | fuse.FATTR_CTIME |
+		fuse.FATTR_KILL_SUIDGID
+	if in.Valid&modifyingAttrs != 0 {
 		return syscall.EOPNOTSUPP
 	}
 	return n.Getattr(ctx, fh, out)
