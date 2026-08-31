@@ -914,7 +914,7 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 	// handling intervenes. The caller-supplied readiness booleans say
 	// nothing about membership.
 	membership, err := s.repo.GetMembership(ctx, roomID, candidateDeviceID)
-	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq || membership.TransferPresenceEpoch != membership.PresenceEpoch {
+	if err != nil || !membership.Online || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq || membership.TransferPresenceEpoch != membership.PresenceEpoch {
 		return ErrTransferIncomplete
 	}
 	if s.currentSeq == nil {
@@ -960,7 +960,7 @@ func (s *Service) CommitRecoveryTransfer(ctx context.Context, roomID, requesterD
 		return ErrTransferIncomplete
 	}
 	membership, err := s.repo.GetMembership(ctx, roomID, requesterDeviceID)
-	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq || membership.TransferPresenceEpoch != membership.PresenceEpoch {
+	if err != nil || !membership.Online || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq || membership.TransferPresenceEpoch != membership.PresenceEpoch {
 		return ErrTransferIncomplete
 	}
 	if s.currentSeq == nil {
@@ -999,7 +999,7 @@ func (s *Service) ReportTransferReady(ctx context.Context, roomID, deviceID, gen
 	if err != nil {
 		return err
 	}
-	if appliedSeq < snapshotSeq || s.currentSeq == nil {
+	if !membership.Online || appliedSeq < snapshotSeq || s.currentSeq == nil {
 		return ErrTransferIncomplete
 	}
 	currentSeq, err := s.currentSeq(roomID)

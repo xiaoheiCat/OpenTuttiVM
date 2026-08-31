@@ -10,7 +10,7 @@ See `docs/architecture/open-tutti-vm.md` for the full model.
 ## Run
 
 ```bash
-cp .env.example .env      # from the repository root; set OPEN_TUTTI_SECRET to a unique value
+cp services/open-tutti-server/.env.example .env # from the repository root; set OPEN_TUTTI_SECRET to a unique value
 docker compose up -d      # from the repository root
 ```
 

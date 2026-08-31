@@ -211,12 +211,14 @@ func run() error {
 	}
 	var proxy *gateway.Proxy
 	dns := gateway.NewDNSServer(vips)
-	// DNS answers only names with a live route binding (see
-	// DNSServer.SetKnownHosts): unregistered queries get NODATA
-	// instead of permanently consuming a VIP allocation. The closure
-	// captures the proxy variable, assigned below before Serve starts.
-	dns.SetKnownHosts(func(host string) bool {
-		return proxy != nil && proxy.KnownHosts()[host]
+	// DNS reads only an address already owned by a live proxy binding. The
+	// resolver performs the live check and lookup atomically with route
+	// removal/release, so dead hosts return NODATA without a new allocation.
+	dns.SetHostResolver(func(host string) (net.IP, bool) {
+		if proxy == nil {
+			return nil, false
+		}
+		return proxy.ResolveHost(host)
 	})
 	// Bind SYNCHRONOUSLY: session containers resolve .tutti names
 	// through this socket, and a background bind failure previously

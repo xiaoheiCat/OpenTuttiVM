@@ -286,22 +286,36 @@ func (p *Proxy) accept(addr string, ln net.Listener) {
 	}
 }
 
-// KnownHosts reports the .tutti hostnames with a live listener binding:
-// the DNS responder answers ONLY these (plus their shared-mode aliases)
-// so an unregistered name cannot permanently consume a VIP allocation.
-func (p *Proxy) KnownHosts() map[string]bool {
+// ResolveHost returns the address of a live listener binding. The live-state
+// check, allocator lookup, and shared-mode address selection are serialized
+// with Sync's route removal/release under p.mu, so DNS cannot resurrect a dead
+// host or allocate an address after its route was removed.
+func (p *Proxy) ResolveHost(host string) (net.IP, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make(map[string]bool, len(p.listeners))
 	for _, b := range p.listeners {
-		if b.target != nil {
-			out[b.target.host] = true
+		if b.target != nil && b.target.host == host {
+			if p.vips.Shared() {
+				return probeSharedAddr(), true
+			}
+			h, err := vmprotocol.ParseTuttiHost(host)
+			if err != nil {
+				return nil, false
+			}
+			return p.vips.Lookup(h)
 		}
-		for host := range b.shared {
-			out[host] = true
+		if _, ok := b.shared[host]; ok {
+			if p.vips.Shared() {
+				return probeSharedAddr(), true
+			}
+			h, err := vmprotocol.ParseTuttiHost(host)
+			if err != nil {
+				return nil, false
+			}
+			return p.vips.Lookup(h)
 		}
 	}
-	return out
+	return nil, false
 }
 
 // handle serves one virtual-address connection: optional TLS termination,

@@ -41,6 +41,14 @@ func splitLabels(name string) []string {
 func TestDNSAnswerCarriesANonzeroANCOUNT(t *testing.T) {
 	vips := NewVIPAllocator()
 	s := NewDNSServer(vips)
+	host := vmprotocol.TuttiHost{Device: "self", Session: "sess-claude"}
+	want := vips.Assign(host)
+	s.SetHostResolver(func(name string) (net.IP, bool) {
+		if name != host.String() {
+			return nil, false
+		}
+		return vips.Lookup(host)
+	})
 	resp := s.answer(buildQuery(t, "sess-claude.self.tutti"))
 	if resp == nil {
 		t.Fatal("no answer for .tutti A query")
@@ -52,7 +60,6 @@ func TestDNSAnswerCarriesANonzeroANCOUNT(t *testing.T) {
 		t.Fatalf("NSCOUNT = %d, want 0", got)
 	}
 	// The answer's RDATA (last 4 bytes) is the synthetic VIP.
-	want := vips.Assign(vmprotocol.TuttiHost{Device: "self", Session: "sess-claude"})
 	if got := net.IP(resp[len(resp)-4:]); !got.Equal(want) {
 		t.Fatalf("answer IP = %v, want %v", got, want)
 	}
@@ -72,6 +79,14 @@ func TestDNSNonTuttiGetsNODATA(t *testing.T) {
 func TestDNSOverUDPAnswersQueries(t *testing.T) {
 	vips := NewVIPAllocator()
 	s := NewDNSServer(vips)
+	host := vmprotocol.TuttiHost{Device: "self", Session: "db"}
+	vips.Assign(host)
+	s.SetHostResolver(func(name string) (net.IP, bool) {
+		if name != host.String() {
+			return nil, false
+		}
+		return vips.Lookup(host)
+	})
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -119,5 +134,53 @@ func TestDNSOverUDPAnswersQueries(t *testing.T) {
 	}
 	if got := net.IP(resp[n-4:]); !got.Equal(want) {
 		t.Fatalf("answer IP = %v, want %v", got, want)
+	}
+}
+
+func TestDNSRouteRemovalReturnsNODATAWithoutReallocating(t *testing.T) {
+	vips := NewVIPAllocator()
+	proxy := &Proxy{vips: vips, listeners: map[string]*routeBinding{}}
+	host := vmprotocol.TuttiHost{Device: "self", Session: "gone"}
+	ip := vips.Assign(host)
+	proxy.listeners["listener"] = &routeBinding{target: &routeTarget{host: host.String()}}
+	s := NewDNSServer(vips)
+	s.SetHostResolver(proxy.ResolveHost)
+	if got, ok := s.resolve(host.String()); !ok || !got.Equal(ip) {
+		t.Fatalf("live host resolution = %v, %v; want %v, true", got, ok, ip)
+	}
+	proxy.mu.Lock()
+	delete(proxy.listeners, "listener")
+	vips.Release(host)
+	proxy.mu.Unlock()
+	if got, ok := s.resolve(host.String()); ok || got != nil {
+		t.Fatalf("dead host resolution = %v, %v; want nil, false", got, ok)
+	}
+	if _, ok := vips.Lookup(host); ok {
+		t.Fatal("dead host acquired a VIP after route removal")
+	}
+	resp := s.answer(buildQuery(t, host.String()))
+	if got := binary.BigEndian.Uint16(resp[6:8]); got != 0 {
+		t.Fatalf("dead host ANCOUNT = %d, want NODATA", got)
+	}
+}
+
+func TestDNSSharedModeReadsLiveBindingOnly(t *testing.T) {
+	vips := NewVIPAllocator()
+	vips.mode.Store(int32(modeShared))
+	proxy := &Proxy{vips: vips, listeners: map[string]*routeBinding{}}
+	host := vmprotocol.TuttiHost{Device: "self", Session: "shared"}
+	proxy.listeners["listener"] = &routeBinding{target: &routeTarget{host: host.String()}}
+	s := NewDNSServer(vips)
+	s.SetHostResolver(proxy.ResolveHost)
+	resp := s.answer(buildQuery(t, host.String()))
+	if got := binary.BigEndian.Uint16(resp[6:8]); got != 1 {
+		t.Fatalf("shared live host ANCOUNT = %d, want 1", got)
+	}
+	proxy.mu.Lock()
+	delete(proxy.listeners, "listener")
+	proxy.mu.Unlock()
+	resp = s.answer(buildQuery(t, host.String()))
+	if got := binary.BigEndian.Uint16(resp[6:8]); got != 0 {
+		t.Fatalf("shared dead host ANCOUNT = %d, want NODATA", got)
 	}
 }
