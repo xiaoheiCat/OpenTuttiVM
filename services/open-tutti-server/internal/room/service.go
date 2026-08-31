@@ -715,7 +715,7 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) (dissolved, left boo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	room, _, err := s.authorizeMember(ctx, in.RoomID, in.DeviceID)
+	room, member, err := s.authorizeMember(ctx, in.RoomID, in.DeviceID)
 	if err != nil {
 		return false, false, err
 	}
@@ -723,6 +723,9 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) (dissolved, left boo
 	if room.OwnerDeviceID == in.DeviceID {
 		if !in.WorkspaceApplied {
 			return false, false, ErrOwnerMustApply
+		}
+		if in.Disband && !member.Online {
+			return false, false, errors.New("room owner is offline; use recovery after the grace period")
 		}
 		if in.Disband {
 			// Apply-and-Leave fence (atomic with sequencing), ONLY on
@@ -813,15 +816,8 @@ func (s *Service) Leave(ctx context.Context, in LeaveInput) (dissolved, left boo
 func (s *Service) PrepareTransfer(ctx context.Context, roomID, ownerDeviceID, candidateDeviceID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	room, _, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID)
-	if err != nil {
-		return err
-	}
-	if _, err := s.repo.GetMembership(ctx, roomID, candidateDeviceID); err != nil {
-		return errors.New("transfer candidate is not a room member")
-	}
-	room.PendingTransferToDevice = candidateDeviceID
-	return s.repo.UpdateRoom(ctx, room)
+	_, err := s.prepareTransferLocked(ctx, roomID, ownerDeviceID, candidateDeviceID, 0)
+	return err
 }
 
 // PrepareTransferResult is the server-issued transfer fence.
@@ -833,9 +829,16 @@ type PrepareTransferResult struct {
 func (s *Service) PrepareTransferWithSnapshot(ctx context.Context, roomID, ownerDeviceID, candidateDeviceID string, snapshotSeq uint64) (PrepareTransferResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	room, _, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID)
+	return s.prepareTransferLocked(ctx, roomID, ownerDeviceID, candidateDeviceID, snapshotSeq)
+}
+
+func (s *Service) prepareTransferLocked(ctx context.Context, roomID, ownerDeviceID, candidateDeviceID string, snapshotSeq uint64) (PrepareTransferResult, error) {
+	room, owner, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID)
 	if err != nil {
 		return PrepareTransferResult{}, err
+	}
+	if !owner.Online {
+		return PrepareTransferResult{}, errors.New("room owner is offline; use recovery transfer after grace period")
 	}
 	if _, err := s.repo.GetMembership(ctx, roomID, candidateDeviceID); err != nil {
 		return PrepareTransferResult{}, errors.New("transfer candidate is not a room member")
@@ -844,6 +847,9 @@ func (s *Service) PrepareTransferWithSnapshot(ctx context.Context, roomID, owner
 	room.PendingTransferToDevice = candidateDeviceID
 	room.PendingTransferGeneration = generation
 	room.PendingTransferSnapshotSeq = snapshotSeq
+	room.PendingTransferOwnerPresenceEpoch = owner.PresenceEpoch
+	room.PendingTransferOwnerLastSeen = owner.LastSeenAt
+	room.PendingTransferOwnerOnline = owner.Online
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
 		return PrepareTransferResult{}, err
 	}
@@ -901,9 +907,12 @@ func (s *Service) PrepareRecoveryTransfer(ctx context.Context, roomID, requester
 func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, candidateDeviceID, generation string, snapshotSeq uint64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	room, _, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID)
+	room, owner, err := s.authorizeOwnerOf(ctx, roomID, ownerDeviceID)
 	if err != nil {
 		return err
+	}
+	if !owner.Online || owner.PresenceEpoch != room.PendingTransferOwnerPresenceEpoch || !owner.LastSeenAt.Equal(room.PendingTransferOwnerLastSeen) || !room.PendingTransferOwnerOnline {
+		return ErrTransferIncomplete
 	}
 	if room.PendingTransferToDevice != candidateDeviceID || room.PendingTransferGeneration != generation || room.PendingTransferSnapshotSeq != snapshotSeq {
 		return ErrTransferIncomplete
@@ -929,6 +938,11 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 	}
 	room.OwnerDeviceID = candidateDeviceID
 	room.PendingTransferToDevice = ""
+	room.PendingTransferGeneration = ""
+	room.PendingTransferSnapshotSeq = 0
+	room.PendingTransferOwnerPresenceEpoch = 0
+	room.PendingTransferOwnerLastSeen = time.Time{}
+	room.PendingTransferOwnerOnline = false
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
 		return err
 	}
@@ -977,6 +991,9 @@ func (s *Service) CommitRecoveryTransfer(ctx context.Context, roomID, requesterD
 	room.PendingTransferToDevice = ""
 	room.PendingTransferGeneration = ""
 	room.PendingTransferSnapshotSeq = 0
+	room.PendingTransferOwnerPresenceEpoch = 0
+	room.PendingTransferOwnerLastSeen = time.Time{}
+	room.PendingTransferOwnerOnline = false
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
 		return err
 	}
@@ -1181,6 +1198,11 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 	}
 	room.OwnerDeviceID = successor
 	room.PendingTransferToDevice = ""
+	room.PendingTransferGeneration = ""
+	room.PendingTransferSnapshotSeq = 0
+	room.PendingTransferOwnerPresenceEpoch = 0
+	room.PendingTransferOwnerLastSeen = time.Time{}
+	room.PendingTransferOwnerOnline = false
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
 		return false, err
 	}

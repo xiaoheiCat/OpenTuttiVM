@@ -6,6 +6,8 @@
 package borrow
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -29,6 +31,7 @@ var (
 	ErrInvalidChoice        = errors.New("approval choice is not one of the advertised options")
 	ErrOperatorDisconnected = errors.New("borrower disconnected; command awaiting interrupt")
 	ErrOutstandingCommands  = errors.New("borrow command limit reached; wait for an existing command to finish")
+	ErrDuplicateApproval    = errors.New("approval id already used with different payload")
 )
 
 // AgentInstance is one shared agent in one room.
@@ -50,9 +53,10 @@ type AgentInstance struct {
 // concurrent use: independent room sockets mutate the registry in
 // parallel.
 type Registry struct {
-	mu        sync.Mutex
-	agents    map[string]map[string]*AgentInstance
-	approvals map[string]openApproval
+	mu               sync.Mutex
+	agents           map[string]map[string]*AgentInstance
+	approvals        map[string]openApproval
+	approvalVersions map[string]uint64
 	// commandBorrowers remembers which borrower issued a command id, so
 	// approval prompts route to the borrower that originated the
 	// execution even after other borrowers send their own commands.
@@ -74,13 +78,16 @@ type borrowerPresence struct {
 }
 
 type openApproval struct {
-	roomID     string
-	agentOwner string
-	agentID    string
-	operator   string
-	generation uint64
-	openedAt   time.Time
-	options    []string
+	roomID        string
+	agentOwner    string
+	agentID       string
+	operator      string
+	commandID     string
+	generation    uint64
+	openedAt      time.Time
+	options       []string
+	version       uint64
+	dispatchToken string
 }
 
 type commandRecord struct {
@@ -124,6 +131,7 @@ func NewRegistry(grace ...time.Duration) *Registry {
 	return &Registry{
 		agents:           map[string]map[string]*AgentInstance{},
 		approvals:        map[string]openApproval{},
+		approvalVersions: map[string]uint64{},
 		commandBorrowers: map[string]commandRecord{},
 		terminalCommands: map[string]commandRecord{},
 		commandOrder:     map[string][]string{},
@@ -611,7 +619,14 @@ func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, comma
 			delete(r.approvals, key)
 		}
 	}
-	if _, exists := r.approvals[approvalScope(roomID, agentInstanceID, approvalID)]; !exists {
+	apKey := approvalScope(roomID, agentInstanceID, approvalID)
+	if existing, exists := r.approvals[apKey]; exists {
+		if existing.agentOwner == inst.OwnerDeviceID && existing.operator == operator && existing.generation == inst.LeaseGeneration && existing.commandID == commandID && sameStrings(existing.options, options) {
+			return operator, nil
+		}
+		return "", ErrDuplicateApproval
+	}
+	if _, exists := r.approvals[apKey]; !exists {
 		open := 0
 		for _, ap := range r.approvals {
 			if ap.roomID == roomID && ap.agentOwner == inst.OwnerDeviceID && ap.agentID == agentInstanceID {
@@ -636,13 +651,37 @@ func (r *Registry) openApprovalLocked(roomID, agentInstanceID, approvalID, comma
 			}
 		}
 	}
-	r.approvals[approvalScope(roomID, agentInstanceID, approvalID)] = openApproval{
-		roomID: roomID, agentOwner: inst.OwnerDeviceID, agentID: agentInstanceID, operator: operator,
-		generation: inst.LeaseGeneration,
-		openedAt:   now,
-		options:    append([]string(nil), options...),
+	version := r.approvalVersions[apKey] + 1
+	r.approvalVersions[apKey] = version
+	r.approvals[apKey] = openApproval{
+		roomID: roomID, agentOwner: inst.OwnerDeviceID, agentID: agentInstanceID, operator: operator, commandID: commandID,
+		generation:    inst.LeaseGeneration,
+		openedAt:      now,
+		options:       append([]string(nil), options...),
+		version:       version,
+		dispatchToken: randomApprovalToken(),
 	}
 	return operator, nil
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func randomApprovalToken() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(raw[:])
 }
 
 // ExpireDisconnectGrace returns generation-bound interrupt requests for
@@ -700,11 +739,14 @@ func (r *Registry) DispatchApproval(roomID, agentInstanceID, approvalID, command
 	generation := r.agents[roomID][agentInstanceID].LeaseGeneration
 	apKey := approvalScope(roomID, agentInstanceID, approvalID)
 	ap := r.approvals[apKey]
+	dispatchToken := ap.dispatchToken
 	r.mu.Unlock()
 	if !deliver(operator, generation) {
 		r.mu.Lock()
 		if inst := r.agents[roomID][agentInstanceID]; inst != nil && inst.LeaseGeneration == generation && inst.Shared {
-			r.approvals[apKey] = ap
+			if current, ok := r.approvals[apKey]; !ok || current.dispatchToken == dispatchToken {
+				r.approvals[apKey] = ap
+			}
 		}
 		r.mu.Unlock()
 		return ErrDeliveryUnavailable
@@ -766,11 +808,15 @@ func (r *Registry) ResolveDecisionDispatch(roomID, agentInstanceID, approvalID, 
 	}
 	delete(r.approvals, approvalScope(roomID, agentInstanceID, approvalID))
 	owner, generation := ap.agentOwner, ap.generation
+	version := ap.version
 	r.mu.Unlock()
 	if !deliver(owner, generation) {
 		r.mu.Lock()
 		if inst := r.agents[roomID][agentInstanceID]; inst != nil && inst.LeaseGeneration == generation && inst.Shared {
-			r.approvals[approvalScope(roomID, agentInstanceID, approvalID)] = ap
+			key := approvalScope(roomID, agentInstanceID, approvalID)
+			if _, ok := r.approvals[key]; !ok && r.approvalVersions[key] == version {
+				r.approvals[key] = ap
+			}
 		}
 		r.mu.Unlock()
 		return ErrDeliveryUnavailable

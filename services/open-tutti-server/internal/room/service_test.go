@@ -139,6 +139,9 @@ func TestJoinTicketSingleUseAndPasswordBound(t *testing.T) {
 	svc, _ := newTestService(t, "")
 	created := createRoom(t, svc, "")
 	ctx := context.Background()
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, _, err := svc.IssueJoinTicket(ctx, created.ShareID, "000000"); err == nil {
 		t.Fatal("wrong password must fail")
@@ -174,6 +177,9 @@ func TestOwnerLeaveRules(t *testing.T) {
 	svc, _ := newTestService(t, "")
 	created := createRoom(t, svc, "")
 	ctx := context.Background()
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Owner cannot leave before applying the final workspace state.
 	_, _, err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_owner", WorkspaceApplied: false})
@@ -207,6 +213,9 @@ func TestLastParticipantLeaveDissolvesRoom(t *testing.T) {
 	created := createRoom(t, svc, "")
 	joinRoom(t, svc, created, memberDevice("dev_bob"))
 	ctx := context.Background()
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Participant leaves first — room continues for the owner.
 	if _, _, err := svc.Leave(ctx, LeaveInput{RoomID: created.RoomID, DeviceID: "dev_bob"}); err != nil {
@@ -281,8 +290,11 @@ func TestAuthenticatedMemberCanPrepareRecoveryWithoutOwnership(t *testing.T) {
 	svc, clock := newTestService(t, "")
 	created := createRoom(t, svc, "")
 	joinRoom(t, svc, created, memberDevice("dev_bob"))
-	clock.Advance(6 * time.Minute)
 	ctx := context.Background()
+	if _, err := svc.MarkOffline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(6 * time.Minute)
 	result, err := svc.PrepareRecoveryTransfer(ctx, created.RoomID, "dev_bob", "dev_bob", 7)
 	if err != nil {
 		t.Fatalf("recovery prepare: %v", err)
@@ -396,6 +408,9 @@ func TestOwnershipTransferThreePhases(t *testing.T) {
 	created := createRoom(t, svc, "")
 	joinRoom(t, svc, created, memberDevice("dev_leo"))
 	ctx := context.Background()
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Candidate must be a member.
 	if err := svc.PrepareTransfer(ctx, created.RoomID, "dev_owner", "dev_stranger"); err == nil {
@@ -447,6 +462,96 @@ func TestOwnershipTransferThreePhases(t *testing.T) {
 	}
 }
 
+func TestPrepareTransferLegacyAPIUsesTransferFence(t *testing.T) {
+	svc, _ := newTestService(t, "")
+	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
+	svc.SetCurrentSequence(func(string) (uint64, error) { return 0, nil })
+	created := createRoom(t, svc, "")
+	joinRoom(t, svc, created, memberDevice("dev_candidate"))
+	ctx := context.Background()
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_candidate"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.PrepareTransfer(ctx, created.RoomID, "dev_owner", "dev_candidate"); err != nil {
+		t.Fatal(err)
+	}
+	room, err := svc.repo.GetRoom(ctx, created.RoomID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if room.PendingTransferGeneration == "" || room.PendingTransferOwnerPresenceEpoch == 0 || !room.PendingTransferOwnerOnline {
+		t.Fatalf("legacy prepare did not record transfer fence: %+v", room)
+	}
+	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_candidate", room.PendingTransferGeneration, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_candidate", room.PendingTransferGeneration, 0); err != nil {
+		t.Fatalf("legacy prepare commit: %v", err)
+	}
+}
+
+func TestPrepareTransferLegacyAPIFailsAfterOwnerDisconnect(t *testing.T) {
+	svc, _ := newTestService(t, "")
+	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
+	svc.SetCurrentSequence(func(string) (uint64, error) { return 0, nil })
+	created := createRoom(t, svc, "")
+	joinRoom(t, svc, created, memberDevice("dev_candidate"))
+	ctx := context.Background()
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_candidate"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.PrepareTransfer(ctx, created.RoomID, "dev_owner", "dev_candidate"); err != nil {
+		t.Fatal(err)
+	}
+	room, err := svc.repo.GetRoom(ctx, created.RoomID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_candidate", room.PendingTransferGeneration, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.MarkOffline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_candidate", room.PendingTransferGeneration, 0); !errors.Is(err, ErrTransferIncomplete) {
+		t.Fatalf("disconnected owner committed legacy transfer: %v", err)
+	}
+}
+
+func TestTransferOwnerMustStayOnlineAfterPrepare(t *testing.T) {
+	svc, _ := newTestService(t, "")
+	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
+	svc.SetCurrentSequence(func(string) (uint64, error) { return 0, nil })
+	created := createRoom(t, svc, "")
+	joinRoom(t, svc, created, memberDevice("dev_candidate"))
+	ctx := context.Background()
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_candidate"); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := svc.PrepareTransferWithSnapshot(ctx, created.RoomID, "dev_owner", "dev_candidate", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_candidate", prepared.Generation, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.MarkOffline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_candidate", prepared.Generation, 0); !errors.Is(err, ErrTransferIncomplete) {
+		t.Fatalf("offline owner committed transfer: %v", err)
+	}
+}
+
 func TestOwnershipTransferAcceptsEmptyWorkspaceSequences(t *testing.T) {
 	svc, _ := newTestService(t, "")
 	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
@@ -454,6 +559,9 @@ func TestOwnershipTransferAcceptsEmptyWorkspaceSequences(t *testing.T) {
 	created := createRoom(t, svc, "")
 	joinRoom(t, svc, created, memberDevice("dev_empty"))
 	ctx := context.Background()
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
 	prepared, err := svc.PrepareTransferWithSnapshot(ctx, created.RoomID, "dev_owner", "dev_empty", 0)
 	if err != nil {
 		t.Fatal(err)

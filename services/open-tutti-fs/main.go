@@ -44,12 +44,12 @@ func dialRoomFS(addr string) (*roomfs.Client, error) {
 		if path == "" {
 			path = "/run/open-tutti/roomfs.cap"
 		}
-		data, readErr := os.ReadFile(path)
+		data, readErr := roomfs.ReadCapabilityFile(path)
 		if readErr != nil {
 			_ = conn.Close()
 			return nil, fmt.Errorf("read roomfs capability: %w", readErr)
 		}
-		capability = string(data)
+		capability = data
 	}
 	client, err := roomfs.NewClient(conn, capability)
 	if err != nil {

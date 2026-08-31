@@ -267,7 +267,7 @@ func run() error {
 		capabilityFile = filepath.Join(filepath.Dir(roomfsAddr), "roomfs.cap")
 	}
 	if capabilityFile != "" {
-		if err := os.WriteFile(capabilityFile, []byte(capability), 0o600); err != nil {
+		if err := roomfs.WriteCapabilityFile(capabilityFile, capability); err != nil {
 			return fmt.Errorf("write roomfs capability: %w", err)
 		}
 	}

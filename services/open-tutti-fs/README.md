@@ -26,6 +26,10 @@ host).
 | `OPEN_TUTTI_DEVICE_ID` | — (required) | Device id for submissions |
 | `OPEN_TUTTI_ROOMFS_CAPABILITY` | — | Per-process capability supplied by room-sync |
 | `OPEN_TUTTI_ROOMFS_CAPABILITY_FILE` | `/run/open-tutti/roomfs.cap` | Private capability file |
+
+Capability-file reads fail closed for symlinks/reparse points, non-regular files,
+and unsafe POSIX permissions. room-sync publishes the file through a private
+temporary file, fsync, and an atomic platform-specific rename.
 | `OPEN_TUTTI_ROOMFS_CAPABILITY` | — | Per-process capability supplied by room-sync |
 | `OPEN_TUTTI_ROOMFS_CAPABILITY_FILE` | `/run/open-tutti/roomfs.cap` | Private capability file |
 

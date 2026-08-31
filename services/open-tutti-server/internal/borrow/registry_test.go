@@ -558,3 +558,54 @@ func TestApprovalChoiceValidationDoesNotConsume(t *testing.T) {
 		t.Fatalf("approval was consumed: %v", err)
 	}
 }
+
+func TestApprovalIDIsIdempotentButCannotOverwrite(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "approval-cmd", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+	if _, err := r.Command("room1", cmd); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.OpenApproval("room1", cmd.AgentInstanceID, "same", cmd.CommandID, []string{"yes"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.OpenApproval("room1", cmd.AgentInstanceID, "same", cmd.CommandID, []string{"yes"}); err != nil {
+		t.Fatalf("same approval retry: %v", err)
+	}
+	if _, err := r.OpenApproval("room1", cmd.AgentInstanceID, "same", cmd.CommandID, []string{"no"}); !errors.Is(err, ErrDuplicateApproval) {
+		t.Fatalf("different options = %v", err)
+	}
+}
+
+func TestApprovalDeliveryFailureDoesNotRestoreOverNewApproval(t *testing.T) {
+	r := NewRegistry()
+	shared := shareClaude(t, r)
+	cmd := borrowagent.BorrowCommandPayload{CommandID: "approval-cas", AgentInstanceID: shared.AgentInstanceID, BorrowerDeviceID: "dev_bob", LeaseGeneration: shared.LeaseGeneration}
+	if _, err := r.Command("room1", cmd); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	finish := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- r.DispatchApproval("room1", cmd.AgentInstanceID, "cas", cmd.CommandID, []string{"old"}, func(string, uint64) bool {
+			close(started)
+			<-finish
+			return false
+		})
+	}()
+	<-started
+	if _, err := r.ResolveDecision("room1", cmd.AgentInstanceID, "cas", "dev_bob", 0); err != nil {
+		t.Fatalf("consume original approval: %v", err)
+	}
+	if _, err := r.OpenApproval("room1", cmd.AgentInstanceID, "cas", cmd.CommandID, []string{"new"}); err != nil {
+		t.Fatalf("open replacement approval: %v", err)
+	}
+	close(finish)
+	if !errors.Is(<-done, ErrDeliveryUnavailable) {
+		t.Fatal("delivery failure was not returned")
+	}
+	if _, err := r.ResolveDecision("room1", cmd.AgentInstanceID, "cas", "dev_bob", 0); err != nil {
+		t.Fatalf("replacement approval was overwritten: %v", err)
+	}
+}

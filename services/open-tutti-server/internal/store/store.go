@@ -30,6 +30,9 @@ type Room struct {
 	PendingTransferToDevice           string
 	PendingTransferGeneration         string
 	PendingTransferSnapshotSeq        uint64
+	PendingTransferOwnerPresenceEpoch uint64
+	PendingTransferOwnerLastSeen      time.Time
+	PendingTransferOwnerOnline        bool
 	PendingRecoveryOwnerPresenceEpoch uint64
 	PendingRecoveryOwnerLastSeen      time.Time
 	PendingRecoveryOwnerOnline        bool

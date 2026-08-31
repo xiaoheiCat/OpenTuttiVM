@@ -464,7 +464,7 @@ func TestTransferEndpointsEnforceOwner(t *testing.T) {
 
 	// Owner prepares, then an incomplete transfer cannot commit.
 	preparePath := "/api/rooms/" + created.RoomID + "/transfer/prepare"
-	if code := doAuthed(preparePath, map[string]string{"to_device_id": "dev_leo"}); code != http.StatusOK {
+	if code := doAuthed(preparePath, map[string]string{"to_device_id": "dev_leo"}); code != http.StatusConflict {
 		t.Fatalf("transfer prepare status %d", code)
 	}
 

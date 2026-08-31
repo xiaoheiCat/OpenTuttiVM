@@ -52,6 +52,9 @@ CREATE TABLE IF NOT EXISTS rooms (
 	pending_transfer_to_device TEXT NOT NULL DEFAULT '',
 	pending_transfer_generation TEXT NOT NULL DEFAULT '',
 	pending_transfer_snapshot_seq INTEGER NOT NULL DEFAULT 0,
+	pending_transfer_owner_presence_epoch INTEGER NOT NULL DEFAULT 0,
+	pending_transfer_owner_last_seen INTEGER NOT NULL DEFAULT 0,
+	pending_transfer_owner_online INTEGER NOT NULL DEFAULT 0,
 	share_revoked_at INTEGER,
 	pending_recovery_owner_presence_epoch INTEGER NOT NULL DEFAULT 0,
 	pending_recovery_owner_last_seen INTEGER NOT NULL DEFAULT 0,
@@ -144,6 +147,9 @@ CREATE INDEX IF NOT EXISTS idx_cas_pending_expiry ON cas_pending_refs(expires_at
 		`ALTER TABLE rooms ADD COLUMN pending_recovery_owner_presence_epoch INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE rooms ADD COLUMN pending_recovery_owner_last_seen INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE rooms ADD COLUMN pending_recovery_owner_online INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE rooms ADD COLUMN pending_transfer_owner_presence_epoch INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE rooms ADD COLUMN pending_transfer_owner_last_seen INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE rooms ADD COLUMN pending_transfer_owner_online INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE memberships ADD COLUMN presence_epoch INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
@@ -197,18 +203,20 @@ func (r *Repo) ClearTransferReadiness(ctx context.Context, roomID string) error 
 // Close closes the database.
 func (r *Repo) Close() error { return r.db.Close() }
 
-const roomCols = "id, share_id, password_hash, owner_device_id, created_at, dissolved_at, pending_transfer_to_device, pending_transfer_generation, pending_transfer_snapshot_seq, share_revoked_at, pending_recovery_owner_presence_epoch, pending_recovery_owner_last_seen, pending_recovery_owner_online"
+const roomCols = "id, share_id, password_hash, owner_device_id, created_at, dissolved_at, pending_transfer_to_device, pending_transfer_generation, pending_transfer_snapshot_seq, pending_transfer_owner_presence_epoch, pending_transfer_owner_last_seen, pending_transfer_owner_online, share_revoked_at, pending_recovery_owner_presence_epoch, pending_recovery_owner_last_seen, pending_recovery_owner_online"
 
 func scanRoom(row interface{ Scan(...any) error }) (store.Room, error) {
 	var room store.Room
 	var created int64
 	var dissolved sql.NullInt64
 	var snapshotSeq uint64
+	var transferOwnerLastSeen int64
+	var transferOwnerOnline int
 	var shareRevoked sql.NullInt64
 	var recoveryLastSeen int64
 	var recoveryOnline int
 	err := row.Scan(&room.ID, &room.ShareID, &room.PasswordHash, &room.OwnerDeviceID,
-		&created, &dissolved, &room.PendingTransferToDevice, &room.PendingTransferGeneration, &snapshotSeq, &shareRevoked,
+		&created, &dissolved, &room.PendingTransferToDevice, &room.PendingTransferGeneration, &snapshotSeq, &room.PendingTransferOwnerPresenceEpoch, &transferOwnerLastSeen, &transferOwnerOnline, &shareRevoked,
 		&room.PendingRecoveryOwnerPresenceEpoch, &recoveryLastSeen, &recoveryOnline)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.Room{}, store.ErrNotFound
@@ -218,6 +226,8 @@ func scanRoom(row interface{ Scan(...any) error }) (store.Room, error) {
 	}
 	room.CreatedAt = time.Unix(created, 0).UTC()
 	room.PendingTransferSnapshotSeq = snapshotSeq
+	room.PendingTransferOwnerLastSeen = time.Unix(transferOwnerLastSeen, 0).UTC()
+	room.PendingTransferOwnerOnline = transferOwnerOnline != 0
 	room.PendingRecoveryOwnerLastSeen = time.Unix(recoveryLastSeen, 0).UTC()
 	room.PendingRecoveryOwnerOnline = recoveryOnline != 0
 	if dissolved.Valid {
@@ -233,9 +243,9 @@ func scanRoom(row interface{ Scan(...any) error }) (store.Room, error) {
 
 func (r *Repo) CreateRoom(ctx context.Context, room store.Room) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		room.ID, room.ShareID, room.PasswordHash, room.OwnerDeviceID,
-		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice, room.PendingTransferGeneration, room.PendingTransferSnapshotSeq,
+		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice, room.PendingTransferGeneration, room.PendingTransferSnapshotSeq, room.PendingTransferOwnerPresenceEpoch, room.PendingTransferOwnerLastSeen.Unix(), boolInt(room.PendingTransferOwnerOnline),
 		nilTime(room.ShareRevokedAt), room.PendingRecoveryOwnerPresenceEpoch, room.PendingRecoveryOwnerLastSeen.Unix(), boolInt(room.PendingRecoveryOwnerOnline))
 	return err
 }
@@ -259,9 +269,9 @@ func (r *Repo) CreateRoomWithOwner(ctx context.Context, d store.Device, room sto
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		room.ID, room.ShareID, room.PasswordHash, room.OwnerDeviceID,
-		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice, room.PendingTransferGeneration, room.PendingTransferSnapshotSeq,
+		room.CreatedAt.Unix(), nilTime(room.DissolvedAt), room.PendingTransferToDevice, room.PendingTransferGeneration, room.PendingTransferSnapshotSeq, room.PendingTransferOwnerPresenceEpoch, room.PendingTransferOwnerLastSeen.Unix(), boolInt(room.PendingTransferOwnerOnline),
 		nilTime(room.ShareRevokedAt), room.PendingRecoveryOwnerPresenceEpoch, room.PendingRecoveryOwnerLastSeen.Unix(), boolInt(room.PendingRecoveryOwnerOnline)); err != nil {
 		return err
 	}
@@ -337,9 +347,9 @@ func (r *Repo) UpdateRoomPassword(ctx context.Context, roomID, passwordHash stri
 
 func (r *Repo) UpdateRoom(ctx context.Context, room store.Room) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE rooms SET password_hash=?, owner_device_id=?, dissolved_at=?, pending_transfer_to_device=?, pending_transfer_generation=?, pending_transfer_snapshot_seq=?, share_revoked_at=?, pending_recovery_owner_presence_epoch=?, pending_recovery_owner_last_seen=?, pending_recovery_owner_online=? WHERE id=?`,
+		`UPDATE rooms SET password_hash=?, owner_device_id=?, dissolved_at=?, pending_transfer_to_device=?, pending_transfer_generation=?, pending_transfer_snapshot_seq=?, pending_transfer_owner_presence_epoch=?, pending_transfer_owner_last_seen=?, pending_transfer_owner_online=?, share_revoked_at=?, pending_recovery_owner_presence_epoch=?, pending_recovery_owner_last_seen=?, pending_recovery_owner_online=? WHERE id=?`,
 		room.PasswordHash, room.OwnerDeviceID, nilTime(room.DissolvedAt), room.PendingTransferToDevice,
-		room.PendingTransferGeneration, room.PendingTransferSnapshotSeq, nilTime(room.ShareRevokedAt), room.PendingRecoveryOwnerPresenceEpoch, room.PendingRecoveryOwnerLastSeen.Unix(), boolInt(room.PendingRecoveryOwnerOnline), room.ID)
+		room.PendingTransferGeneration, room.PendingTransferSnapshotSeq, room.PendingTransferOwnerPresenceEpoch, room.PendingTransferOwnerLastSeen.Unix(), boolInt(room.PendingTransferOwnerOnline), nilTime(room.ShareRevokedAt), room.PendingRecoveryOwnerPresenceEpoch, room.PendingRecoveryOwnerLastSeen.Unix(), boolInt(room.PendingRecoveryOwnerOnline), room.ID)
 	if err != nil {
 		return err
 	}
