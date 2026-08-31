@@ -4,11 +4,9 @@
 # truth for shared state, and the relay for cross-device traffic.
 services:
   open-tutti-server:
-    image: ghcr.io/xiaoheicat/open-tutti-server:latest
-    # Build locally instead:
-    # build:
-    #   context: .
-    #   dockerfile: services/open-tutti-server/Dockerfile
+    build:
+      context: .
+      dockerfile: services/open-tutti-server/Dockerfile
     restart: unless-stopped
     networks:
       - open-tutti
@@ -18,6 +16,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
+      OPEN_TUTTI_SECRET: ${OPEN_TUTTI_SECRET:?set OPEN_TUTTI_SECRET in .env or the environment}
       OPEN_TUTTI_LISTEN_ADDR: 0.0.0.0:8080
       OPEN_TUTTI_PUBLIC_URL: http://localhost:8080
       # Docker forwards to the container listener, so the server needs a

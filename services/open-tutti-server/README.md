@@ -10,7 +10,7 @@ See `docs/architecture/open-tutti-vm.md` for the full model.
 ## Run
 
 ```bash
-cp .env.example .env      # from the repository root; set OPEN_TUTTI_SECRET
+cp .env.example .env      # from the repository root; set OPEN_TUTTI_SECRET to a unique value
 docker compose up -d      # from the repository root
 ```
 
@@ -34,8 +34,14 @@ Do not publish the server port or the `/data` volume to an untrusted network.
 
 ## Configuration
 
-Environment > `.env` > defaults. Every variable is documented in
+Environment > `.env` > defaults. `OPEN_TUTTI_SECRET` is required, must be at
+least 32 characters, and placeholder values such as `change-me`, `replace-me`,
+and `default` are rejected. Every variable is documented in
 [`.env.example`](./.env.example).
+
+The checked-in Compose file builds the server from the repository Dockerfile;
+it does not pull a mutable `latest` image. Compose also fails before startup
+unless `OPEN_TUTTI_SECRET` is explicitly supplied in `.env` or the environment.
 
 `OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES` limits each room's distinct referenced CAS
 bytes. Repeated references to the same hash count once per room; the same hash

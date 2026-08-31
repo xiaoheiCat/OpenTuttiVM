@@ -914,7 +914,7 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 	// handling intervenes. The caller-supplied readiness booleans say
 	// nothing about membership.
 	membership, err := s.repo.GetMembership(ctx, roomID, candidateDeviceID)
-	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq {
+	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq || membership.TransferPresenceEpoch != membership.PresenceEpoch {
 		return ErrTransferIncomplete
 	}
 	if s.currentSeq == nil {
@@ -930,6 +930,9 @@ func (s *Service) CommitTransfer(ctx context.Context, roomID, ownerDeviceID, can
 	room.OwnerDeviceID = candidateDeviceID
 	room.PendingTransferToDevice = ""
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
+		return err
+	}
+	if err := s.repo.ClearTransferReadiness(ctx, roomID); err != nil {
 		return err
 	}
 	s.broadcast(roomID, vmprotocol.Event{
@@ -957,7 +960,7 @@ func (s *Service) CommitRecoveryTransfer(ctx context.Context, roomID, requesterD
 		return ErrTransferIncomplete
 	}
 	membership, err := s.repo.GetMembership(ctx, roomID, requesterDeviceID)
-	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq {
+	if err != nil || !membership.TransferReady || membership.TransferGeneration != generation || membership.TransferSnapshotSeq != snapshotSeq || membership.TransferAppliedSeq < snapshotSeq || membership.TransferPresenceEpoch != membership.PresenceEpoch {
 		return ErrTransferIncomplete
 	}
 	if s.currentSeq == nil {
@@ -977,6 +980,9 @@ func (s *Service) CommitRecoveryTransfer(ctx context.Context, roomID, requesterD
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
 		return err
 	}
+	if err := s.repo.ClearTransferReadiness(ctx, roomID); err != nil {
+		return err
+	}
 	s.broadcast(roomID, vmprotocol.Event{Topic: vmprotocol.TopicPresence, RoomID: roomID, Payload: mustJSON(vmprotocol.PresenceDevice{DeviceID: requesterDeviceID, Online: true, IsOwner: true})})
 	return nil
 }
@@ -989,7 +995,8 @@ func (s *Service) ReportTransferReady(ctx context.Context, roomID, deviceID, gen
 	if err != nil || room.PendingTransferToDevice != deviceID || room.PendingTransferGeneration != generation || room.PendingTransferSnapshotSeq != snapshotSeq {
 		return ErrTransferIncomplete
 	}
-	if _, err := s.repo.GetMembership(ctx, roomID, deviceID); err != nil {
+	membership, err := s.repo.GetMembership(ctx, roomID, deviceID)
+	if err != nil {
 		return err
 	}
 	if appliedSeq < snapshotSeq || s.currentSeq == nil {
@@ -1002,7 +1009,7 @@ func (s *Service) ReportTransferReady(ctx context.Context, roomID, deviceID, gen
 	if s.hostReady == nil || !s.hostReady(ctx, roomID, deviceID) {
 		return ErrTransferIncomplete
 	}
-	return s.repo.UpdateTransferReadiness(ctx, roomID, deviceID, generation, snapshotSeq, appliedSeq)
+	return s.repo.UpdateTransferReadiness(ctx, roomID, deviceID, generation, snapshotSeq, appliedSeq, membership.PresenceEpoch)
 }
 
 // AbortTransfer cancels an in-flight transfer; the original owner keeps the
@@ -1135,7 +1142,7 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 	// transfer. A client policy report is not evidence.
 	full := make([]store.Membership, 0, len(online))
 	for _, m := range online {
-		if m.TransferReady && m.TransferGeneration != "" && s.currentSeq != nil {
+		if m.TransferReady && m.TransferGeneration != "" && m.TransferPresenceEpoch == m.PresenceEpoch && s.currentSeq != nil {
 			seq, err := s.currentSeq(roomID)
 			if err == nil && m.TransferAppliedSeq == seq {
 				full = append(full, m)
@@ -1175,6 +1182,9 @@ func (s *Service) CheckGracePeriods(ctx context.Context, roomID string) (dissolv
 	room.OwnerDeviceID = successor
 	room.PendingTransferToDevice = ""
 	if err := s.repo.UpdateRoom(ctx, room); err != nil {
+		return false, err
+	}
+	if err := s.repo.ClearTransferReadiness(ctx, roomID); err != nil {
 		return false, err
 	}
 	s.broadcast(roomID, vmprotocol.Event{

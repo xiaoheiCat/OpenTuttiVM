@@ -507,6 +507,37 @@ func TestAutomaticSuccessionAcceptsEmptyWorkspaceSequences(t *testing.T) {
 	}
 }
 
+func TestTransferReadinessExpiresWithPresenceSession(t *testing.T) {
+	svc, _ := newTestService(t, "")
+	svc.SetTransferHostReadiness(func(context.Context, string, string) bool { return true })
+	svc.SetCurrentSequence(func(string) (uint64, error) { return 0, nil })
+	created := createRoom(t, svc, "")
+	joinRoom(t, svc, created, memberDevice("dev_candidate"))
+	ctx := context.Background()
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_owner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_candidate"); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := svc.PrepareTransferWithSnapshot(ctx, created.RoomID, "dev_owner", "dev_candidate", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReportTransferReady(ctx, created.RoomID, "dev_candidate", prepared.Generation, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.MarkOffline(ctx, created.RoomID, "dev_candidate"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkOnline(ctx, created.RoomID, "dev_candidate"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CommitTransfer(ctx, created.RoomID, "dev_owner", "dev_candidate", prepared.Generation, 0); !errors.Is(err, ErrTransferIncomplete) {
+		t.Fatalf("stale readiness committed after a new presence session: %v", err)
+	}
+}
+
 func TestSessionTokenValidation(t *testing.T) {
 	svc, _ := newTestService(t, "")
 	created := createRoom(t, svc, "")

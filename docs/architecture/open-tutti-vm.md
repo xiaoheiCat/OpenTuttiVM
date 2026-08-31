@@ -111,7 +111,10 @@ Hybrid, by content class:
 - Transfer readiness is not a client boolean: room-sync materializes the
   candidate's full replica before calling `ReportTransferReady`, and the
   server accepts that report only for the authenticated prepared candidate and
-  exact generation/snapshot pair. A real host-workspace initialization adapter
+  exact generation/snapshot pair in the candidate's current presence epoch.
+  Rejoin, a new presence session, or local replica reconstruction clears old
+  readiness evidence; successful transfer commits clear it as well. A real
+  host-workspace initialization adapter
   must be injected before the report can succeed; the current standalone
   room-sync binary has no such Host adapter and therefore fails closed rather
   than claiming initialization.
@@ -145,6 +148,10 @@ topology; it is accepted only with the fixed listener and
 `http://localhost:8080`, so `.env` cannot create a general localhost exception.
 Remote deployments must provide a separate override with TLS and must not
 publish the server or its data volume directly to an untrusted network.
+The checked-in `docker-compose.yml` builds `services/open-tutti-server/Dockerfile`
+instead of pulling a mutable `:latest` image, and requires an explicit
+`OPEN_TUTTI_SECRET` value of at least 32 characters; placeholder values are
+rejected by the server.
 
 ## `.tutti` virtual network
 

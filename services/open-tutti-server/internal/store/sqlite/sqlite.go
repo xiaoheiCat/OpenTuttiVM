@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS memberships (
 	transfer_generation TEXT NOT NULL DEFAULT '',
 	transfer_snapshot_seq INTEGER NOT NULL DEFAULT 0,
 	transfer_applied_seq INTEGER NOT NULL DEFAULT 0,
+	transfer_presence_epoch INTEGER NOT NULL DEFAULT 0,
 	transfer_ready INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY (room_id, device_id)
 );
@@ -160,6 +161,7 @@ CREATE INDEX IF NOT EXISTS idx_cas_pending_expiry ON cas_pending_refs(expires_at
 		`ALTER TABLE memberships ADD COLUMN transfer_generation TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE memberships ADD COLUMN transfer_snapshot_seq INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE memberships ADD COLUMN transfer_applied_seq INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE memberships ADD COLUMN transfer_presence_epoch INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE memberships ADD COLUMN transfer_ready INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
@@ -179,12 +181,17 @@ func (r *Repo) UpdateMembershipPolicy(ctx context.Context, roomID, deviceID, pol
 	return err
 }
 
-func (r *Repo) UpdateTransferReadiness(ctx context.Context, roomID, deviceID, generation string, snapshotSeq, appliedSeq uint64) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE memberships SET transfer_generation=?, transfer_snapshot_seq=?, transfer_applied_seq=?, transfer_ready=1 WHERE room_id=? AND device_id=?`, generation, snapshotSeq, appliedSeq, roomID, deviceID)
+func (r *Repo) UpdateTransferReadiness(ctx context.Context, roomID, deviceID, generation string, snapshotSeq, appliedSeq, presenceEpoch uint64) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE memberships SET transfer_generation=?, transfer_snapshot_seq=?, transfer_applied_seq=?, transfer_presence_epoch=?, transfer_ready=1 WHERE room_id=? AND device_id=?`, generation, snapshotSeq, appliedSeq, presenceEpoch, roomID, deviceID)
 	if err != nil {
 		return err
 	}
 	return requireUpdated(res)
+}
+
+func (r *Repo) ClearTransferReadiness(ctx context.Context, roomID string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE memberships SET transfer_generation='', transfer_snapshot_seq=0, transfer_applied_seq=0, transfer_presence_epoch=0, transfer_ready=0 WHERE room_id=?`, roomID)
+	return err
 }
 
 // Close closes the database.
@@ -263,8 +270,8 @@ func (r *Repo) CreateRoomWithOwner(ctx context.Context, d store.Device, room sto
 		connected = m.ConnectedAt.Unix()
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), 0, m.PresenceEpoch, m.SessionTokenHash, "lazy", "", 0, 0, 0); err != nil {
+		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), 0, m.PresenceEpoch, m.SessionTokenHash, "lazy", "", 0, 0, 0, 0); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -308,9 +315,14 @@ func (r *Repo) UpdatePresence(ctx context.Context, roomID, deviceID string, onli
 			connected_at = CASE WHEN ? AND online=0 THEN ? ELSE connected_at END,
 			online = ?,
 			last_seen_at = ?,
-			presence_epoch = CASE WHEN online != ? THEN presence_epoch + 1 ELSE presence_epoch END
+			presence_epoch = CASE WHEN online != ? THEN presence_epoch + 1 ELSE presence_epoch END,
+			transfer_generation = CASE WHEN online != ? THEN '' ELSE transfer_generation END,
+			transfer_snapshot_seq = CASE WHEN online != ? THEN 0 ELSE transfer_snapshot_seq END,
+			transfer_applied_seq = CASE WHEN online != ? THEN 0 ELSE transfer_applied_seq END,
+			transfer_presence_epoch = CASE WHEN online != ? THEN 0 ELSE transfer_presence_epoch END,
+			transfer_ready = CASE WHEN online != ? THEN 0 ELSE transfer_ready END
 		WHERE room_id=? AND device_id=?`,
-		onlineInt, now.Unix(), onlineInt, now.Unix(), onlineInt, roomID, deviceID)
+		onlineInt, now.Unix(), onlineInt, now.Unix(), onlineInt, onlineInt, onlineInt, onlineInt, onlineInt, onlineInt, roomID, deviceID)
 	return err
 }
 
@@ -401,7 +413,7 @@ func (r *Repo) GetDevice(ctx context.Context, id string) (store.Device, error) {
 	return d, nil
 }
 
-const membershipCols = "room_id, device_id, joined_at, connected_at, last_seen_at, online, presence_epoch, session_token_hash, replica_policy, transfer_generation, transfer_snapshot_seq, transfer_applied_seq, transfer_ready"
+const membershipCols = "room_id, device_id, joined_at, connected_at, last_seen_at, online, presence_epoch, session_token_hash, replica_policy, transfer_generation, transfer_snapshot_seq, transfer_applied_seq, transfer_presence_epoch, transfer_ready"
 
 func scanMembership(row interface{ Scan(...any) error }) (store.Membership, error) {
 	var m store.Membership
@@ -409,7 +421,7 @@ func scanMembership(row interface{ Scan(...any) error }) (store.Membership, erro
 	var joined, lastSeen int64
 	var online int
 	var ready int
-	err := row.Scan(&m.RoomID, &m.DeviceID, &joined, &connected, &lastSeen, &online, &m.PresenceEpoch, &m.SessionTokenHash, &m.ReplicaPolicy, &m.TransferGeneration, &m.TransferSnapshotSeq, &m.TransferAppliedSeq, &ready)
+	err := row.Scan(&m.RoomID, &m.DeviceID, &joined, &connected, &lastSeen, &online, &m.PresenceEpoch, &m.SessionTokenHash, &m.ReplicaPolicy, &m.TransferGeneration, &m.TransferSnapshotSeq, &m.TransferAppliedSeq, &m.TransferPresenceEpoch, &ready)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.Membership{}, store.ErrNotFound
 	}
@@ -444,14 +456,19 @@ func (r *Repo) UpsertMembership(ctx context.Context, m store.Membership) error {
 		policy = "lazy"
 	}
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(room_id, device_id) DO UPDATE SET
 		   connected_at=excluded.connected_at,
 		   last_seen_at=excluded.last_seen_at,
 		   online=excluded.online,
 		   session_token_hash=excluded.session_token_hash,
-			   replica_policy=excluded.replica_policy`,
-		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), online, m.PresenceEpoch, m.SessionTokenHash, policy, m.TransferGeneration, m.TransferSnapshotSeq, m.TransferAppliedSeq, boolInt(m.TransferReady))
+		   replica_policy=excluded.replica_policy,
+		   transfer_generation=excluded.transfer_generation,
+		   transfer_snapshot_seq=excluded.transfer_snapshot_seq,
+		   transfer_applied_seq=excluded.transfer_applied_seq,
+		   transfer_presence_epoch=excluded.transfer_presence_epoch,
+		   transfer_ready=excluded.transfer_ready`,
+		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), connected, m.LastSeenAt.Unix(), online, m.PresenceEpoch, m.SessionTokenHash, policy, m.TransferGeneration, m.TransferSnapshotSeq, m.TransferAppliedSeq, m.TransferPresenceEpoch, boolInt(m.TransferReady))
 	return err
 }
 
@@ -552,14 +569,19 @@ func (r *Repo) EnrollWithTicket(ctx context.Context, hash string, now time.Time,
 		policy = "lazy"
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+		`INSERT INTO memberships (`+membershipCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(room_id, device_id) DO UPDATE SET
 		   connected_at=excluded.connected_at,
 		   last_seen_at=excluded.last_seen_at,
 		   online=excluded.online,
 		   session_token_hash=excluded.session_token_hash,
-			   replica_policy=excluded.replica_policy`,
-		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), nil, m.LastSeenAt.Unix(), 0, m.PresenceEpoch, m.SessionTokenHash, policy, "", 0, 0, 0); err != nil {
+		   replica_policy=excluded.replica_policy,
+		   transfer_generation=excluded.transfer_generation,
+		   transfer_snapshot_seq=excluded.transfer_snapshot_seq,
+		   transfer_applied_seq=excluded.transfer_applied_seq,
+		   transfer_presence_epoch=excluded.transfer_presence_epoch,
+		   transfer_ready=excluded.transfer_ready`,
+		m.RoomID, m.DeviceID, m.JoinedAt.Unix(), nil, m.LastSeenAt.Unix(), 0, m.PresenceEpoch, m.SessionTokenHash, policy, "", 0, 0, 0, 0); err != nil {
 		return err
 	}
 	return tx.Commit()

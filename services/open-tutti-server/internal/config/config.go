@@ -101,8 +101,8 @@ func Load(envFile string) (Config, error) {
 	cfg.DatabasePath = get("OPEN_TUTTI_DATABASE_PATH", filepath.Join(cfg.DataDir, "open-tutti.db"))
 	cfg.ObjectsDir = get("OPEN_TUTTI_OBJECTS_DIR", filepath.Join(cfg.DataDir, "objects"))
 
-	if cfg.Secret == "" {
-		return Config{}, errors.New("OPEN_TUTTI_SECRET must be set (generate one, e.g. `openssl rand -hex 32`)")
+	if err := validateSecret(cfg.Secret); err != nil {
+		return Config{}, err
 	}
 	u, err := url.Parse(cfg.PublicURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
@@ -117,6 +117,21 @@ func Load(envFile string) (Config, error) {
 		return Config{}, errors.New("grace period, ticket TTL, snapshot interval, CAS quotas, workspace limits, and active room limit must be positive")
 	}
 	return cfg, nil
+}
+
+func validateSecret(secret string) error {
+	trimmed := strings.TrimSpace(secret)
+	if trimmed == "" {
+		return errors.New("OPEN_TUTTI_SECRET must be set (generate one, e.g. `openssl rand -hex 32`)")
+	}
+	switch strings.ToLower(trimmed) {
+	case "change-me", "replace-me", "default":
+		return errors.New("OPEN_TUTTI_SECRET must not be a placeholder value")
+	}
+	if len(trimmed) < 32 {
+		return errors.New("OPEN_TUTTI_SECRET must be at least 32 characters")
+	}
+	return nil
 }
 
 func isComposeLocalMode(enabled bool, cfg Config) bool {

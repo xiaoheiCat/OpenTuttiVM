@@ -22,7 +22,7 @@ func TestLoadHTTPRequiresNonWildcardLoopback(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+			t.Setenv("OPEN_TUTTI_SECRET", "test-secret-012345678901234567890")
 			t.Setenv("OPEN_TUTTI_LISTEN_ADDR", tc.addr)
 			t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
 			_, err := Load("")
@@ -34,7 +34,7 @@ func TestLoadHTTPRequiresNonWildcardLoopback(t *testing.T) {
 }
 
 func TestLoadHTTPSAllowsWildcard(t *testing.T) {
-	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+	t.Setenv("OPEN_TUTTI_SECRET", "test-secret-012345678901234567890")
 	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "[::]:8080")
 	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "https://example.test")
 	if _, err := Load(""); err != nil {
@@ -43,7 +43,7 @@ func TestLoadHTTPSAllowsWildcard(t *testing.T) {
 }
 
 func TestLoadComposeLocalModeAllowsDockerBridgeListener(t *testing.T) {
-	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+	t.Setenv("OPEN_TUTTI_SECRET", "test-secret-012345678901234567890")
 	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080")
 	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
 	t.Setenv("OPEN_TUTTI_COMPOSE_LOCAL_MODE", "1")
@@ -53,7 +53,7 @@ func TestLoadComposeLocalModeAllowsDockerBridgeListener(t *testing.T) {
 }
 
 func TestLoadComposeLocalModeDoesNotAllowArbitraryLocalURL(t *testing.T) {
-	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+	t.Setenv("OPEN_TUTTI_SECRET", "test-secret-012345678901234567890")
 	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080")
 	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:9999")
 	t.Setenv("OPEN_TUTTI_COMPOSE_LOCAL_MODE", "1")
@@ -63,7 +63,7 @@ func TestLoadComposeLocalModeDoesNotAllowArbitraryLocalURL(t *testing.T) {
 }
 
 func TestLoadEnvFileCannotEnableComposeLocalMode(t *testing.T) {
-	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+	t.Setenv("OPEN_TUTTI_SECRET", "test-secret-012345678901234567890")
 	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "0.0.0.0:8080")
 	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
 	t.Setenv("OPEN_TUTTI_COMPOSE_LOCAL_MODE", "")
@@ -77,7 +77,7 @@ func TestLoadEnvFileCannotEnableComposeLocalMode(t *testing.T) {
 }
 
 func TestLoadCASQuotaOverride(t *testing.T) {
-	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+	t.Setenv("OPEN_TUTTI_SECRET", "test-secret-012345678901234567890")
 	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "127.0.0.1:8080")
 	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
 	t.Setenv("OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES", "1234")
@@ -91,12 +91,25 @@ func TestLoadCASQuotaOverride(t *testing.T) {
 }
 
 func TestLoadActiveRoomLimitOverride(t *testing.T) {
-	t.Setenv("OPEN_TUTTI_SECRET", "test-secret")
+	t.Setenv("OPEN_TUTTI_SECRET", "test-secret-012345678901234567890")
 	t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "127.0.0.1:8080")
 	t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
 	t.Setenv("OPEN_TUTTI_ACTIVE_ROOM_LIMIT", "7")
 	cfg, err := Load("")
 	if err != nil || cfg.ActiveRoomLimit != 7 {
 		t.Fatalf("cfg=%+v err=%v", cfg, err)
+	}
+}
+
+func TestLoadRejectsWeakSecrets(t *testing.T) {
+	for _, secret := range []string{"", "change-me", "replace-me", "default", "short-secret"} {
+		t.Run(secret, func(t *testing.T) {
+			t.Setenv("OPEN_TUTTI_SECRET", secret)
+			t.Setenv("OPEN_TUTTI_LISTEN_ADDR", "127.0.0.1:8080")
+			t.Setenv("OPEN_TUTTI_PUBLIC_URL", "http://localhost:8080")
+			if _, err := Load(""); err == nil {
+				t.Fatal("weak secret was accepted")
+			}
+		})
 	}
 }
