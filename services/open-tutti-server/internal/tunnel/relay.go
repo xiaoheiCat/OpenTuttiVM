@@ -23,6 +23,10 @@ import (
 const (
 	defaultMaxStreamsPerDevice = 128
 	defaultMaxStreamsTotal     = 2048
+	defaultMaxPendingTotal     = 256
+	defaultMaxPendingPerRoom   = 64
+	defaultMaxPendingPerDevice = 2
+	defaultHandshakeTimeout    = 15 * time.Second
 )
 
 var ErrStreamLimit = fmt.Errorf("tunnel stream limit reached")
@@ -40,12 +44,19 @@ type Relay struct {
 	log    *slog.Logger
 	routes RouteAuthorizer
 
-	mu           sync.Mutex
-	sessions     map[string]map[string]*yamux.Session // roomID → deviceID → session
-	streams      map[streamOwner]int
-	total        int
-	maxPerDevice int
-	maxTotal     int
+	mu               sync.Mutex
+	sessions         map[string]map[string]*yamux.Session // roomID → deviceID → session
+	streams          map[streamOwner]int
+	total            int
+	maxPerDevice     int
+	maxTotal         int
+	pendingTotal     int
+	pendingRooms     map[string]int
+	pendingDevices   map[streamOwner]int
+	pending          map[*handshakeAdmission]struct{}
+	maxPendingTotal  int
+	maxPendingRoom   int
+	maxPendingDevice int
 }
 
 type streamOwner struct{ roomID, deviceID string }
@@ -58,13 +69,28 @@ func NewRelay(log *slog.Logger, routes RouteAuthorizer) *Relay {
 // NewRelayWithLimits is primarily useful to embedders and tests that need a
 // smaller resource budget. Limits are enforced before stream work starts.
 func NewRelayWithLimits(log *slog.Logger, routes RouteAuthorizer, maxPerDevice, maxTotal int) *Relay {
+	return NewRelayWithPendingLimits(log, routes, maxPerDevice, maxTotal, defaultMaxPendingTotal, defaultMaxPendingPerRoom, defaultMaxPendingPerDevice)
+}
+
+// NewRelayWithPendingLimits also bounds authenticated WebSockets that have
+// upgraded but have not completed the yamux registration handshake.
+func NewRelayWithPendingLimits(log *slog.Logger, routes RouteAuthorizer, maxPerDevice, maxTotal, maxPendingTotal, maxPendingRoom, maxPendingDevice int) *Relay {
 	if maxPerDevice <= 0 {
 		maxPerDevice = defaultMaxStreamsPerDevice
 	}
 	if maxTotal <= 0 {
 		maxTotal = defaultMaxStreamsTotal
 	}
-	return &Relay{log: log, routes: routes, sessions: map[string]map[string]*yamux.Session{}, streams: map[streamOwner]int{}, maxPerDevice: maxPerDevice, maxTotal: maxTotal}
+	if maxPendingTotal <= 0 {
+		maxPendingTotal = defaultMaxPendingTotal
+	}
+	if maxPendingRoom <= 0 {
+		maxPendingRoom = defaultMaxPendingPerRoom
+	}
+	if maxPendingDevice <= 0 {
+		maxPendingDevice = defaultMaxPendingPerDevice
+	}
+	return &Relay{log: log, routes: routes, sessions: map[string]map[string]*yamux.Session{}, streams: map[streamOwner]int{}, pendingRooms: map[string]int{}, pendingDevices: map[streamOwner]int{}, pending: map[*handshakeAdmission]struct{}{}, maxPerDevice: maxPerDevice, maxTotal: maxTotal, maxPendingTotal: maxPendingTotal, maxPendingRoom: maxPendingRoom, maxPendingDevice: maxPendingDevice}
 }
 
 // ServeTunnel upgrades an authenticated device websocket into a yamux
@@ -78,6 +104,14 @@ func NewRelayWithLimits(log *slog.Logger, routes RouteAuthorizer, maxPerDevice, 
 func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, deviceID string, admit func() error) error {
 	netConn := websocket.NetConn(ctx, ws, websocket.MessageBinary)
 	defer netConn.Close()
+	pending, err := r.admitHandshake(roomID, deviceID, netConn)
+	if err != nil {
+		return err
+	}
+	defer pending.Release()
+	if err := netConn.SetReadDeadline(time.Now().Add(defaultHandshakeTimeout)); err != nil {
+		return err
+	}
 
 	// Short StreamOpenTimeout: a wedged device's un-ACKed opens fail
 	// fast instead of parking the SYN window for the 75s default (the
@@ -99,6 +133,8 @@ func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, dev
 	if err := r.register(roomID, deviceID, sess, admit); err != nil {
 		return err
 	}
+	_ = netConn.SetReadDeadline(time.Time{})
+	pending.Release()
 	// Unregister ONLY our own registration: a replacement tunnel may
 	// have overwritten the map entry before this handler exits, and an
 	// unconditional delete would evict the live replacement and strand
@@ -117,6 +153,52 @@ func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, dev
 			continue
 		}
 		go r.handleStream(stream, roomID, admission)
+	}
+}
+
+type handshakeAdmission struct {
+	relay *Relay
+	owner streamOwner
+	conn  net.Conn
+	once  sync.Once
+}
+
+func (a *handshakeAdmission) Release() { a.once.Do(func() { a.relay.releaseHandshake(a) }) }
+
+func (r *Relay) admitHandshake(roomID, deviceID string, conn net.Conn) (*handshakeAdmission, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner := streamOwner{roomID: roomID, deviceID: deviceID}
+	if r.pendingTotal >= r.maxPendingTotal || r.pendingRooms[roomID] >= r.maxPendingRoom || r.pendingDevices[owner] >= r.maxPendingDevice {
+		return nil, ErrStreamLimit
+	}
+	r.pendingTotal++
+	r.pendingRooms[roomID]++
+	r.pendingDevices[owner]++
+	a := &handshakeAdmission{relay: r, owner: owner, conn: conn}
+	r.pending[a] = struct{}{}
+	return a, nil
+}
+func (r *Relay) releaseHandshake(a *handshakeAdmission) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner := a.owner
+	if _, ok := r.pending[a]; !ok {
+		return
+	}
+	delete(r.pending, a)
+	if r.pendingTotal > 0 {
+		r.pendingTotal--
+	}
+	if n := r.pendingRooms[owner.roomID]; n > 1 {
+		r.pendingRooms[owner.roomID] = n - 1
+	} else {
+		delete(r.pendingRooms, owner.roomID)
+	}
+	if n := r.pendingDevices[owner]; n > 1 {
+		r.pendingDevices[owner] = n - 1
+	} else {
+		delete(r.pendingDevices, owner)
 	}
 }
 
@@ -175,10 +257,20 @@ func (r *Relay) unregisterLocked(roomID, deviceID string) {
 func (r *Relay) DropDevice(roomID, deviceID string) {
 	r.mu.Lock()
 	sess := r.sessions[roomID][deviceID]
+	var pending []*handshakeAdmission
+	owner := streamOwner{roomID: roomID, deviceID: deviceID}
+	for admission := range r.pending {
+		if admission.owner == owner {
+			pending = append(pending, admission)
+		}
+	}
 	r.unregisterLocked(roomID, deviceID)
 	r.mu.Unlock()
 	if sess != nil {
 		_ = sess.Close()
+	}
+	for _, admission := range pending {
+		_ = admission.conn.Close()
 	}
 }
 
@@ -186,6 +278,12 @@ func (r *Relay) DropDevice(roomID, deviceID string) {
 func (r *Relay) DropRoom(roomID string) {
 	r.mu.Lock()
 	var sessions []*yamux.Session
+	var pending []*handshakeAdmission
+	for admission := range r.pending {
+		if admission.owner.roomID == roomID {
+			pending = append(pending, admission)
+		}
+	}
 	for deviceID, sess := range r.sessions[roomID] {
 		if sess != nil {
 			sessions = append(sessions, sess)
@@ -196,6 +294,9 @@ func (r *Relay) DropRoom(roomID string) {
 	r.mu.Unlock()
 	for _, sess := range sessions {
 		_ = sess.Close()
+	}
+	for _, admission := range pending {
+		_ = admission.conn.Close()
 	}
 }
 
