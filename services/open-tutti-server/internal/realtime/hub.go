@@ -347,6 +347,9 @@ func (h *Hub) Attach(c *Conn, admit func() error) error {
 		}
 	}
 	h.conns[c.RoomID][c.DeviceID] = c
+	// Registration and presence must advance together. A superseded socket
+	// can finish Handle after this point, but it must never start a new epoch.
+	h.borrows.BeginPresence(c.RoomID, c.DeviceID)
 	return nil
 }
 
@@ -413,7 +416,6 @@ func (h *Hub) Handle(c *Conn, ws *websocket.Conn, admit func() error) {
 		ws.Close(websocket.StatusPolicyViolation, "membership revoked")
 		return
 	}
-	h.borrows.BeginPresence(c.RoomID, c.DeviceID)
 	defer h.Detach(c)
 	defer ws.Close(websocket.StatusNormalClosure, "")
 

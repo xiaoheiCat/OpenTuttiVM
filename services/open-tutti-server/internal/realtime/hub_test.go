@@ -1,11 +1,13 @@
 package realtime
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/borrow"
 )
 
 func TestInboundMessageBudgetKeepsLargeFramesForOpsOnly(t *testing.T) {
@@ -89,5 +91,39 @@ func TestValidApprovalDecisionBoundsUntrustedFieldsAndChoice(t *testing.T) {
 				t.Fatalf("validApprovalDecision() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAttachReplacementDoesNotLetOldConnectionAdvancePresence(t *testing.T) {
+	borrows := borrow.NewRegistry()
+	shared := borrowagent.AgentSharedPayload{
+		AgentInstanceID: "agent-1", OwnerDeviceID: "owner", Borrowable: true, Shared: true,
+	}
+	if _, err := borrows.Share("room", shared); err != nil {
+		t.Fatal(err)
+	}
+	hub := NewHub(nil, nil, nil, borrows, nil)
+	old := NewConn(context.Background(), "room", "borrower", "old")
+	current := NewConn(context.Background(), "room", "borrower", "current")
+	if err := hub.Attach(old, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := hub.Attach(current, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := borrowagent.BorrowCommandPayload{
+		CommandID: "command", AgentInstanceID: shared.AgentInstanceID,
+		BorrowerDeviceID: "borrower", LeaseGeneration: 1,
+	}
+	if err := borrows.DispatchCommand("room", cmd, func(string, uint64, borrowagent.BorrowCommandPayload) bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	if !borrows.ValidateDeliveryForBorrower("room", shared.AgentInstanceID, "", cmd.CommandID, "owner", "borrower", 1) {
+		t.Fatal("current connection presence was invalidated by old connection ordering")
+	}
+	hub.Detach(old)
+	if !borrows.ValidateDeliveryForBorrower("room", shared.AgentInstanceID, "", cmd.CommandID, "owner", "borrower", 1) {
+		t.Fatal("old connection detach invalidated current connection presence")
 	}
 }

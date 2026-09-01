@@ -26,15 +26,31 @@ services:
       - open-tutti-data:/data
     # The server remains loopback-only even inside the container. socat is the
     # deliberately dumb container-internal forwarder for Docker's port map.
-    command:
+    entrypoint:
       - /bin/sh
       - -c
+    command:
       - >-
+        set -u;
         /usr/local/bin/open-tutti-server & server_pid=$$!;
-        trap 'kill $$server_pid 2>/dev/null || true; wait $$server_pid 2>/dev/null || true' TERM INT;
-        socat TCP-LISTEN:8080,bind=0.0.0.0,reuseaddr,fork TCP:127.0.0.1:8081;
-        status=$$?; kill $$server_pid 2>/dev/null || true;
-        wait $$server_pid 2>/dev/null || true; exit $$status
+        socat TCP-LISTEN:8080,bind=0.0.0.0,reuseaddr,fork TCP:127.0.0.1:8081 & socat_pid=$$!;
+        watch_server() {
+          wait "$$server_pid" 2>/dev/null || true;
+          kill -TERM "$$socat_pid" 2>/dev/null || true;
+        };
+        watch_server & watcher_pid=$$!;
+        stop() {
+          trap - TERM INT;
+          kill -TERM "$$server_pid" "$$socat_pid" "$$watcher_pid" 2>/dev/null || true;
+          wait "$$server_pid" 2>/dev/null || true;
+          wait "$$socat_pid" 2>/dev/null || true;
+          wait "$$watcher_pid" 2>/dev/null || true;
+        };
+        trap stop TERM INT;
+        status=0;
+        wait "$$socat_pid" 2>/dev/null || status=$$?;
+        stop;
+        exit "$$status"
 
 volumes:
   open-tutti-data:
