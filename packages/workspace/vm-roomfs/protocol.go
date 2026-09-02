@@ -160,6 +160,16 @@ func WriteFrame(w *bufio.Writer, header any, body []byte) error {
 // network boundary).
 const MaxBodyBytes = 256 << 20
 
+// MaxHeaderBytes is deliberately small: protocol metadata is bounded even
+// when a body is allowed to be a large file.
+const MaxHeaderBytes = 64 << 10
+
+const (
+	MaxPathBytes        = 4096
+	MaxBaseHashBytes    = 256
+	MaxRequestTypeBytes = 64
+)
+
 // ReadFrame reads one framed message into header (pointer) and returns the
 // raw body.
 func ReadFrame(r *bufio.Reader, header any) ([]byte, error) {
@@ -182,35 +192,79 @@ func ReadFrameWithBodyBudget(r *bufio.Reader, header any, bodyLimit uint32, rese
 	return body, release, nil
 }
 
+// ReadFrameWithBudgets reserves header bytes until the caller finishes using
+// the decoded request, preventing many concurrent metadata allocations.
+func ReadFrameWithBudgets(r *bufio.Reader, header any, bodyLimit uint32, reserveBody func(uint32) (func(), bool), reserveHeader func(uint32) (func(), bool)) ([]byte, func(), func(), error) {
+	body, releaseBody, releaseHeader, err := readFrameWithBudgets(r, header, bodyLimit, reserveBody, reserveHeader)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return body, releaseBody, releaseHeader, nil
+}
+
 func readFrame(r *bufio.Reader, header any, bodyLimit uint32, reserve func(uint32) (func(), bool)) ([]byte, func(), error) {
+	body, release, _, err := readFrameWithBudgets(r, header, bodyLimit, reserve, nil)
+	return body, release, err
+}
+
+func readFrameWithBudgets(r *bufio.Reader, header any, bodyLimit uint32, reserve func(uint32) (func(), bool), reserveHeader func(uint32) (func(), bool)) ([]byte, func(), func(), error) {
 	var lenBuf [4]byte
 	if _, err := io.ReadFull(r, lenBuf[:]); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	n := binary.BigEndian.Uint32(lenBuf[:])
-	if n > 1<<22 {
-		return nil, nil, fmt.Errorf("frame header too large: %d", n)
+	if n == 0 || n > MaxHeaderBytes {
+		return nil, nil, nil, fmt.Errorf("frame header too large: %d", n)
+	}
+	var releaseHeader func()
+	if reserveHeader != nil {
+		var ok bool
+		releaseHeader, ok = reserveHeader(n)
+		if !ok {
+			return nil, nil, nil, fmt.Errorf("frame header exceeds active connection budget: %d", n)
+		}
 	}
 	headerJSON := make([]byte, n)
 	if _, err := io.ReadFull(r, headerJSON); err != nil {
-		return nil, nil, err
+		if releaseHeader != nil {
+			releaseHeader()
+		}
+		return nil, nil, nil, err
 	}
 	if err := json.Unmarshal(headerJSON, header); err != nil {
-		return nil, nil, err
+		if releaseHeader != nil {
+			releaseHeader()
+		}
+		return nil, nil, nil, err
+	}
+	if req, ok := header.(*Request); ok && !validRequestMetadata(req) {
+		if releaseHeader != nil {
+			releaseHeader()
+		}
+		return nil, nil, nil, fmt.Errorf("request metadata exceeds protocol limits")
 	}
 	if _, err := io.ReadFull(r, lenBuf[:]); err != nil {
-		return nil, nil, err
+		if releaseHeader != nil {
+			releaseHeader()
+		}
+		return nil, nil, nil, err
 	}
 	n = binary.BigEndian.Uint32(lenBuf[:])
 	if uint64(n) > uint64(bodyLimit) || uint64(n) > MaxBodyBytes {
-		return nil, nil, fmt.Errorf("frame body too large: %d", n)
+		if releaseHeader != nil {
+			releaseHeader()
+		}
+		return nil, nil, nil, fmt.Errorf("frame body too large: %d", n)
 	}
 	var release func()
 	if reserve != nil {
 		var ok bool
 		release, ok = reserve(n)
 		if !ok {
-			return nil, nil, fmt.Errorf("frame body exceeds active connection budget: %d", n)
+			if releaseHeader != nil {
+				releaseHeader()
+			}
+			return nil, nil, nil, fmt.Errorf("frame body exceeds active connection budget: %d", n)
 		}
 	}
 	body := make([]byte, n)
@@ -218,9 +272,16 @@ func readFrame(r *bufio.Reader, header any, bodyLimit uint32, reserve func(uint3
 		if release != nil {
 			release()
 		}
-		return nil, nil, err
+		if releaseHeader != nil {
+			releaseHeader()
+		}
+		return nil, nil, nil, err
 	}
-	return body, release, nil
+	return body, release, releaseHeader, nil
+}
+
+func validRequestMetadata(req *Request) bool {
+	return len(req.Type) <= MaxRequestTypeBytes && len(req.Path) <= MaxPathBytes && len(req.To) <= MaxPathBytes && len(req.BaseHash) <= MaxBaseHashBytes
 }
 
 // ReadCapabilityHello reads only the fixed, body-less authentication frame.

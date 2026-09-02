@@ -114,6 +114,15 @@ func NewService(repo store.Repository, cfg config.Config, clock Clock, bcast Bro
 	if cfg.ActiveRoomLimit <= 0 {
 		cfg.ActiveRoomLimit = 100
 	}
+	if cfg.JoinTicketMaxPerShare <= 0 {
+		cfg.JoinTicketMaxPerShare = 100
+	}
+	if cfg.JoinTicketMaxPerRoom <= 0 {
+		cfg.JoinTicketMaxPerRoom = 1000
+	}
+	if cfg.JoinTicketMaxGlobal <= 0 {
+		cfg.JoinTicketMaxGlobal = 10000
+	}
 	return &Service{
 		repo: repo, cfg: cfg, clock: clock, bcast: bcast, tokens: newTokenMinter(cfg.Secret),
 		shareAttempts: map[string][]time.Time{},
@@ -516,9 +525,9 @@ func (s *Service) IssueJoinTicket(ctx context.Context, shareID, password string)
 	if !revalidated {
 		return "", time.Time{}, errors.New("wrong room password")
 	}
-	if err := s.repo.CreateJoinTicket(ctx, store.JoinTicket{
+	if err := s.repo.CreateJoinTicketBounded(ctx, store.JoinTicket{
 		Hash: hashToken(ticket), RoomID: room.ID, ShareID: shareID, ExpiresAt: expiresAt,
-	}); err != nil {
+	}, s.clock.Now(), s.cfg.JoinTicketMaxPerShare, s.cfg.JoinTicketMaxPerRoom, s.cfg.JoinTicketMaxGlobal); err != nil {
 		return "", time.Time{}, err
 	}
 	return ticket, expiresAt, nil

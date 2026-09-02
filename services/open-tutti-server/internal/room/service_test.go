@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/config"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/store"
 	store_sqlite "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/internal/store/sqlite"
 )
 
@@ -170,6 +171,22 @@ func TestJoinTicketExpiry(t *testing.T) {
 	clock.Advance(61 * time.Second)
 	if _, _, err := svc.JoinRedeem(context.Background(), created.RoomID, ticket, memberDevice("dev_late")); err == nil {
 		t.Fatal("expired ticket must fail")
+	}
+}
+
+func TestJoinTicketIssuanceLimitCleansExpiredTickets(t *testing.T) {
+	svc, clock := newTestService(t, "")
+	svc.cfg.JoinTicketMaxPerShare = 1
+	created := createRoom(t, svc, "")
+	if _, _, err := svc.IssueJoinTicket(context.Background(), created.ShareID, created.Password); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.IssueJoinTicket(context.Background(), created.ShareID, created.Password); !errors.Is(err, store.ErrJoinTicketLimit) {
+		t.Fatalf("limit error = %v", err)
+	}
+	clock.Advance(61 * time.Second)
+	if _, _, err := svc.IssueJoinTicket(context.Background(), created.ShareID, created.Password); err != nil {
+		t.Fatalf("expired ticket was not cleaned: %v", err)
 	}
 }
 

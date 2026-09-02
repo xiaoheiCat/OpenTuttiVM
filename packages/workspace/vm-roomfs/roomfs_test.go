@@ -2,8 +2,10 @@ package roomfs
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -443,6 +445,14 @@ func TestServerDoesNotReadLargeUnauthenticatedBody(t *testing.T) {
 	var one [1]byte
 	if _, err := conn.Read(one[:]); err == nil {
 		t.Fatal("oversized unauthenticated hello remained open")
+	}
+}
+
+func TestReadFrameRejectsLargeHeader(t *testing.T) {
+	var frame [4]byte
+	binary.BigEndian.PutUint32(frame[:], MaxHeaderBytes+1)
+	if _, err := ReadFrame(bufio.NewReader(bytes.NewReader(frame[:])), &Request{}); err == nil {
+		t.Fatal("oversized header was accepted")
 	}
 }
 

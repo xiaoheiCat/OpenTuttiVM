@@ -36,7 +36,10 @@ type Config struct {
 	OwnerGracePeriod        time.Duration
 	BorrowerDisconnectGrace time.Duration
 	// JoinTicketTTL bounds the one-time share join tickets.
-	JoinTicketTTL time.Duration
+	JoinTicketTTL         time.Duration
+	JoinTicketMaxPerShare int
+	JoinTicketMaxPerRoom  int
+	JoinTicketMaxGlobal   int
 	// SnapshotIntervalOps triggers a checkpoint after this many operations.
 	SnapshotIntervalOps           int
 	CASRoomQuotaBytes             int64
@@ -80,6 +83,9 @@ func Load(envFile string) (Config, error) {
 		OwnerGracePeriod:        secondsOrDefault(get("OPEN_TUTTI_OWNER_GRACE_SECONDS", ""), 5*time.Minute),
 		BorrowerDisconnectGrace: secondsOrDefault(get("OPEN_TUTTI_BORROWER_DISCONNECT_GRACE_SECONDS", ""), 5*time.Minute),
 		JoinTicketTTL:           secondsOrDefault(get("OPEN_TUTTI_JOIN_TICKET_TTL_SECONDS", ""), 60*time.Second),
+		JoinTicketMaxPerShare:   intOrDefault(get("OPEN_TUTTI_JOIN_TICKET_MAX_PER_SHARE", ""), 100),
+		JoinTicketMaxPerRoom:    intOrDefault(get("OPEN_TUTTI_JOIN_TICKET_MAX_PER_ROOM", ""), 1000),
+		JoinTicketMaxGlobal:     intOrDefault(get("OPEN_TUTTI_JOIN_TICKET_MAX_GLOBAL", ""), 10000),
 		// An operation count, not a duration.
 		SnapshotIntervalOps:           intOrDefault(get("OPEN_TUTTI_SNAPSHOT_INTERVAL_OPS", ""), 512),
 		CASRoomQuotaBytes:             int64OrDefault(get("OPEN_TUTTI_CAS_ROOM_QUOTA_BYTES", ""), 1<<30),
@@ -112,7 +118,7 @@ func Load(envFile string) (Config, error) {
 			return Config{}, errors.New("plain HTTP public URL requires a loopback listen address; use a TLS reverse proxy for remote deployment")
 		}
 	}
-	if cfg.OwnerGracePeriod <= 0 || cfg.BorrowerDisconnectGrace <= 0 || cfg.JoinTicketTTL <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 || cfg.CASPendingQuotaBytes <= 0 || cfg.CASPendingRoomQuotaBytes <= 0 || cfg.CASPendingTTL <= 0 || cfg.WorkspaceMaxEntries <= 0 || cfg.WorkspaceMaxPathBytes <= 0 || cfg.WorkspaceMaxLivePathBytes <= 0 || cfg.WorkspaceMaxContentBytes <= 0 || cfg.WorkspaceMaxIdentities <= 0 || cfg.WorkspaceMaxIdentityBytes <= 0 || cfg.WorkspaceMaxOperationIDBytes <= 0 || cfg.WorkspaceMaxAgentSessionBytes <= 0 || cfg.ActiveRoomLimit <= 0 {
+	if cfg.OwnerGracePeriod <= 0 || cfg.BorrowerDisconnectGrace <= 0 || cfg.JoinTicketTTL <= 0 || cfg.JoinTicketMaxPerShare <= 0 || cfg.JoinTicketMaxPerRoom <= 0 || cfg.JoinTicketMaxGlobal <= 0 || cfg.SnapshotIntervalOps <= 0 || cfg.CASRoomQuotaBytes <= 0 || cfg.CASPendingQuotaBytes <= 0 || cfg.CASPendingRoomQuotaBytes <= 0 || cfg.CASPendingTTL <= 0 || cfg.WorkspaceMaxEntries <= 0 || cfg.WorkspaceMaxPathBytes <= 0 || cfg.WorkspaceMaxLivePathBytes <= 0 || cfg.WorkspaceMaxContentBytes <= 0 || cfg.WorkspaceMaxIdentities <= 0 || cfg.WorkspaceMaxIdentityBytes <= 0 || cfg.WorkspaceMaxOperationIDBytes <= 0 || cfg.WorkspaceMaxAgentSessionBytes <= 0 || cfg.ActiveRoomLimit <= 0 {
 		return Config{}, errors.New("grace period, ticket TTL, snapshot interval, CAS quotas, workspace limits, and active room limit must be positive")
 	}
 	return cfg, nil

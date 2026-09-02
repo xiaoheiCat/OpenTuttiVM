@@ -67,17 +67,20 @@ type Server struct {
 }
 
 type serverConn struct {
-	conn       net.Conn
-	writer     *bufio.Writer
-	mu         sync.Mutex
-	requestsMu sync.Mutex
-	requests   map[uint64]context.CancelFunc
-	bodyMu     sync.Mutex
-	bodyBytes  uint64
+	conn        net.Conn
+	writer      *bufio.Writer
+	mu          sync.Mutex
+	requestsMu  sync.Mutex
+	requests    map[uint64]context.CancelFunc
+	bodyMu      sync.Mutex
+	bodyBytes   uint64
+	headerMu    sync.Mutex
+	headerBytes uint64
 }
 
 const maxActiveRequests = 1024
 const maxConnectionBodyBytes = 512 << 20
+const maxConnectionHeaderBytes = 4 << 20
 
 // NewServer creates a protocol server over a handler. The handler may be
 // attached later with SetHandler when it needs the server first (e.g. to
@@ -164,7 +167,7 @@ func (s *Server) serveConnReader(conn net.Conn, sc *serverConn, reader *bufio.Re
 	var wg sync.WaitGroup
 	for {
 		var req Request
-		body, releaseBody, err := ReadFrameWithBodyBudget(reader, &req, MaxBodyBytes, sc.reserveBody)
+		body, releaseBody, releaseHeader, err := ReadFrameWithBudgets(reader, &req, MaxBodyBytes, sc.reserveBody, sc.reserveHeader)
 		if err != nil {
 			cancel()
 			wg.Wait()
@@ -172,12 +175,14 @@ func (s *Server) serveConnReader(conn net.Conn, sc *serverConn, reader *bufio.Re
 		}
 		if req.Type == TypeCancel {
 			releaseBody()
+			releaseHeader()
 			sc.cancelRequest(req.ID)
 			continue
 		}
 		requestCtx, requestCancel := context.WithCancel(connCtx)
 		if !sc.addRequest(req.ID, requestCancel) {
 			releaseBody()
+			releaseHeader()
 			requestCancel()
 			go func() {
 				if err := s.writeResponse(sc, errorResponse(req.ID, fmt.Errorf("roomfs: too many active requests"))); err != nil {
@@ -191,6 +196,7 @@ func (s *Server) serveConnReader(conn net.Conn, sc *serverConn, reader *bufio.Re
 			defer wg.Done()
 			defer sc.removeRequest(req.ID)
 			defer releaseBody()
+			defer releaseHeader()
 			res := s.dispatch(requestCtx, req, body)
 			writeErr := s.writeResponse(sc, res)
 			if writeErr != nil {
@@ -199,6 +205,17 @@ func (s *Server) serveConnReader(conn net.Conn, sc *serverConn, reader *bufio.Re
 			}
 		}(req, body, requestCtx)
 	}
+}
+
+func (sc *serverConn) reserveHeader(n uint32) (func(), bool) {
+	sc.headerMu.Lock()
+	if sc.headerBytes+uint64(n) > maxConnectionHeaderBytes {
+		sc.headerMu.Unlock()
+		return nil, false
+	}
+	sc.headerBytes += uint64(n)
+	sc.headerMu.Unlock()
+	return func() { sc.headerMu.Lock(); sc.headerBytes -= uint64(n); sc.headerMu.Unlock() }, true
 }
 
 func (sc *serverConn) reserveBody(n uint32) (func(), bool) {

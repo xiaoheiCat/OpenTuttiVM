@@ -22,6 +22,9 @@ are intentionally not part of the Tutti daemon override namespace.
 | `OPEN_TUTTI_MAX_PENDING_OPERATIONS` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds room-sync operations awaiting authoritative acknowledgement; default 128. |
 | `OPEN_TUTTI_MAX_PENDING_BYTES` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds cumulative JSON envelope bytes awaiting acknowledgement; default 64 MiB. |
 | `OPEN_TUTTI_BORROWER_DISCONNECT_GRACE_SECONDS` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | PDF v1 reconnect grace for unexpectedly disconnected borrowers; default 300 seconds. Active leave/kick fencing remains immediate. |
+| `OPEN_TUTTI_JOIN_TICKET_MAX_PER_SHARE` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds pending unredeemed join tickets for one share; default 100. |
+| `OPEN_TUTTI_JOIN_TICKET_MAX_PER_ROOM` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds pending unredeemed join tickets for one room; default 1000. |
+| `OPEN_TUTTI_JOIN_TICKET_MAX_GLOBAL` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds pending unredeemed join tickets globally; default 10000. |
 
 | Variable                      | Owner document                                                                                             | Purpose                                                                              |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |

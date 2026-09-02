@@ -535,6 +535,35 @@ func (r *Repo) CreateJoinTicket(ctx context.Context, t store.JoinTicket) error {
 	return err
 }
 
+func (r *Repo) CreateJoinTicketBounded(ctx context.Context, t store.JoinTicket, nowTime time.Time, maxShare, maxRoom, maxGlobal int) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	now := nowTime.Unix()
+	if _, err = tx.ExecContext(ctx, `DELETE FROM join_tickets WHERE redeemed=1 OR expires_at<?`, now); err != nil {
+		return err
+	}
+	var share, room, global int
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM join_tickets WHERE share_id=?`, t.ShareID).Scan(&share); err != nil {
+		return err
+	}
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM join_tickets WHERE room_id=?`, t.RoomID).Scan(&room); err != nil {
+		return err
+	}
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM join_tickets`).Scan(&global); err != nil {
+		return err
+	}
+	if share >= maxShare || room >= maxRoom || global >= maxGlobal {
+		return store.ErrJoinTicketLimit
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO join_tickets (hash, room_id, share_id, expires_at, redeemed) VALUES (?,?,?,?,0)`, t.Hash, t.RoomID, t.ShareID, t.ExpiresAt.Unix()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (r *Repo) GetJoinTicket(ctx context.Context, hash string) (store.JoinTicket, error) {
 	var t store.JoinTicket
 	var redeemed int

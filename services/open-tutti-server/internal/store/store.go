@@ -116,6 +116,7 @@ type CASPendingRef struct {
 // Repository is the durable metadata store.
 // ErrTicketUsed reports a lost redemption race.
 var ErrTicketUsed = errors.New("join ticket already used")
+var ErrJoinTicketLimit = errors.New("join ticket limit reached")
 
 type Repository interface {
 	// Rooms
@@ -153,6 +154,7 @@ type Repository interface {
 
 	// Join tickets
 	CreateJoinTicket(ctx context.Context, t JoinTicket) error
+	CreateJoinTicketBounded(ctx context.Context, t JoinTicket, now time.Time, maxShare, maxRoom, maxGlobal int) error
 	GetJoinTicket(ctx context.Context, hash string) (JoinTicket, error)
 	MarkTicketRedeemed(ctx context.Context, hash string) error
 

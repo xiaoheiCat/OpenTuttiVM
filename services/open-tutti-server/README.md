@@ -86,6 +86,10 @@ length limits. The corresponding overrides are listed in `.env.example`.
 All room-scoped routes require `Authorization: Bearer <session-token>`; query
 parameters are never accepted for session tokens.
 
+Join tickets are removed when redeemed or expired. Issuance is bounded by
+`OPEN_TUTTI_JOIN_TICKET_MAX_PER_SHARE`, `OPEN_TUTTI_JOIN_TICKET_MAX_PER_ROOM`,
+and `OPEN_TUTTI_JOIN_TICKET_MAX_GLOBAL` (defaults 100, 1000, and 10000).
+
 ## Business WebSocket messages (summary)
 
 Client → server: `op` (workspace operation), `ports` (session port
