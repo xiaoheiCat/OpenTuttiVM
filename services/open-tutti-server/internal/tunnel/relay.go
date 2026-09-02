@@ -1,0 +1,466 @@
+// Package tunnel implements the multiplexed relay: every device holds one
+// WebSocket tunnel to the server, and yamux multiplexes logical streams
+// over it. Preview and raw-TCP traffic always flows device → server →
+// device; there is no peer-to-peer path.
+package tunnel
+
+import (
+	"context"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"sync"
+	"time"
+
+	"github.com/coder/websocket"
+	"github.com/hashicorp/yamux"
+	vmprotocol "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol"
+)
+
+const (
+	defaultMaxStreamsPerDevice = 128
+	defaultMaxStreamsTotal     = 2048
+	defaultMaxPendingTotal     = 256
+	defaultMaxPendingPerRoom   = 64
+	defaultMaxPendingPerDevice = 2
+	defaultHandshakeTimeout    = 15 * time.Second
+)
+
+var ErrStreamLimit = fmt.Errorf("tunnel stream limit reached")
+
+// RouteAuthorizer validates that a requested route is actually
+// advertised by the target device: relay targets must be announced
+// ports, not a member's private TCP scanner.
+type RouteAuthorizer interface {
+	HasRoute(roomID, deviceID, sessionID string, port int) bool
+}
+
+// Relay tracks one yamux session per online device per room and stitches
+// connect streams between them.
+type Relay struct {
+	log    *slog.Logger
+	routes RouteAuthorizer
+
+	mu               sync.Mutex
+	sessions         map[string]map[string]*yamux.Session // roomID → deviceID → session
+	streams          map[streamOwner]int
+	total            int
+	maxPerDevice     int
+	maxTotal         int
+	pendingTotal     int
+	pendingRooms     map[string]int
+	pendingDevices   map[streamOwner]int
+	pending          map[*handshakeAdmission]struct{}
+	maxPendingTotal  int
+	maxPendingRoom   int
+	maxPendingDevice int
+}
+
+type streamOwner struct{ roomID, deviceID string }
+
+// NewRelay wires the relay. routes may be nil (no authorization; tests).
+func NewRelay(log *slog.Logger, routes RouteAuthorizer) *Relay {
+	return NewRelayWithLimits(log, routes, defaultMaxStreamsPerDevice, defaultMaxStreamsTotal)
+}
+
+// NewRelayWithLimits is primarily useful to embedders and tests that need a
+// smaller resource budget. Limits are enforced before stream work starts.
+func NewRelayWithLimits(log *slog.Logger, routes RouteAuthorizer, maxPerDevice, maxTotal int) *Relay {
+	return NewRelayWithPendingLimits(log, routes, maxPerDevice, maxTotal, defaultMaxPendingTotal, defaultMaxPendingPerRoom, defaultMaxPendingPerDevice)
+}
+
+// NewRelayWithPendingLimits also bounds authenticated WebSockets that have
+// upgraded but have not completed the yamux registration handshake.
+func NewRelayWithPendingLimits(log *slog.Logger, routes RouteAuthorizer, maxPerDevice, maxTotal, maxPendingTotal, maxPendingRoom, maxPendingDevice int) *Relay {
+	if maxPerDevice <= 0 {
+		maxPerDevice = defaultMaxStreamsPerDevice
+	}
+	if maxTotal <= 0 {
+		maxTotal = defaultMaxStreamsTotal
+	}
+	if maxPendingTotal <= 0 {
+		maxPendingTotal = defaultMaxPendingTotal
+	}
+	if maxPendingRoom <= 0 {
+		maxPendingRoom = defaultMaxPendingPerRoom
+	}
+	if maxPendingDevice <= 0 {
+		maxPendingDevice = defaultMaxPendingPerDevice
+	}
+	return &Relay{log: log, routes: routes, sessions: map[string]map[string]*yamux.Session{}, streams: map[streamOwner]int{}, pendingRooms: map[string]int{}, pendingDevices: map[streamOwner]int{}, pending: map[*handshakeAdmission]struct{}{}, maxPerDevice: maxPerDevice, maxTotal: maxTotal, maxPendingTotal: maxPendingTotal, maxPendingRoom: maxPendingRoom, maxPendingDevice: maxPendingDevice}
+}
+
+// ServeTunnel upgrades an authenticated device websocket into a yamux
+// server session and pumps streams until close. The caller has already
+// validated the session token into (roomID, deviceID); admit re-runs
+// membership admission INSIDE the registration lock, so a kick landing
+// between validation and registration cannot leave a deleted member's
+// tunnel open indefinitely (DropDevice and registration serialize on
+// r.mu: the kick either lands first and admission fails, or DropDevice
+// closes the just-registered session).
+func (r *Relay) ServeTunnel(ctx context.Context, ws *websocket.Conn, roomID, deviceID string, admit func() error) error {
+	netConn := websocket.NetConn(ctx, ws, websocket.MessageBinary)
+	defer netConn.Close()
+	pending, err := r.admitHandshake(roomID, deviceID, netConn)
+	if err != nil {
+		return err
+	}
+	defer pending.Release()
+	if err := netConn.SetReadDeadline(time.Now().Add(defaultHandshakeTimeout)); err != nil {
+		return err
+	}
+
+	// Short StreamOpenTimeout: a wedged device's un-ACKed opens fail
+	// fast instead of parking the SYN window for the 75s default (the
+	// per-connection Open still bounded the stall, but failing fast
+	// returns errors to dialers instead of queueing them).
+	sess, err := yamux.Server(netConn, &yamux.Config{
+		AcceptBacklog:      256,
+		EnableKeepAlive:    true,
+		KeepAliveInterval:  30 * time.Second,
+		StreamOpenTimeout:  10 * time.Second,
+		StreamCloseTimeout: 5 * time.Minute,
+		LogOutput:          io.Discard,
+	})
+	if err != nil {
+		return fmt.Errorf("tunnel yamux server: %w", err)
+	}
+	defer sess.Close()
+
+	if err := r.register(roomID, deviceID, sess, admit); err != nil {
+		return err
+	}
+	_ = netConn.SetReadDeadline(time.Time{})
+	pending.Release()
+	// Unregister ONLY our own registration: a replacement tunnel may
+	// have overwritten the map entry before this handler exits, and an
+	// unconditional delete would evict the live replacement and strand
+	// its advertised routes.
+	defer r.unregisterIfCurrent(roomID, deviceID, sess)
+
+	for {
+		stream, err := sess.Accept()
+		if err != nil {
+			return nil // session closed
+		}
+		admission, err := r.admitStream(roomID, deviceID)
+		if err != nil {
+			writeHeaderError(stream, ErrStreamLimit.Error())
+			_ = stream.Close()
+			continue
+		}
+		go r.handleStream(stream, roomID, admission)
+	}
+}
+
+type handshakeAdmission struct {
+	relay *Relay
+	owner streamOwner
+	conn  net.Conn
+	once  sync.Once
+}
+
+func (a *handshakeAdmission) Release() { a.once.Do(func() { a.relay.releaseHandshake(a) }) }
+
+func (r *Relay) admitHandshake(roomID, deviceID string, conn net.Conn) (*handshakeAdmission, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner := streamOwner{roomID: roomID, deviceID: deviceID}
+	if r.pendingTotal >= r.maxPendingTotal || r.pendingRooms[roomID] >= r.maxPendingRoom || r.pendingDevices[owner] >= r.maxPendingDevice {
+		return nil, ErrStreamLimit
+	}
+	r.pendingTotal++
+	r.pendingRooms[roomID]++
+	r.pendingDevices[owner]++
+	a := &handshakeAdmission{relay: r, owner: owner, conn: conn}
+	r.pending[a] = struct{}{}
+	return a, nil
+}
+func (r *Relay) releaseHandshake(a *handshakeAdmission) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner := a.owner
+	if _, ok := r.pending[a]; !ok {
+		return
+	}
+	delete(r.pending, a)
+	if r.pendingTotal > 0 {
+		r.pendingTotal--
+	}
+	if n := r.pendingRooms[owner.roomID]; n > 1 {
+		r.pendingRooms[owner.roomID] = n - 1
+	} else {
+		delete(r.pendingRooms, owner.roomID)
+	}
+	if n := r.pendingDevices[owner]; n > 1 {
+		r.pendingDevices[owner] = n - 1
+	} else {
+		delete(r.pendingDevices, owner)
+	}
+}
+
+func (r *Relay) register(roomID, deviceID string, sess *yamux.Session, admit func() error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if admit != nil {
+		if err := admit(); err != nil {
+			return err
+		}
+	}
+	if r.sessions[roomID] == nil {
+		r.sessions[roomID] = map[string]*yamux.Session{}
+	}
+	if old := r.sessions[roomID][deviceID]; old != nil && old != sess {
+		// Superseded predecessor: close it so its handler exits and its
+		// conditional unregister cannot touch the replacement.
+		go old.Close()
+	}
+	r.sessions[roomID][deviceID] = sess
+	return nil
+}
+
+func (r *Relay) unregister(roomID, deviceID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.unregisterLocked(roomID, deviceID)
+}
+
+// unregisterIfCurrent drops the registration only when it still points at
+// the exiting session: a replacement registration must survive the
+// predecessor handler's deferred cleanup.
+func (r *Relay) unregisterIfCurrent(roomID, deviceID string, sess *yamux.Session) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if devs := r.sessions[roomID]; devs != nil && devs[deviceID] == sess {
+		delete(devs, deviceID)
+		if len(devs) == 0 {
+			delete(r.sessions, roomID)
+		}
+	}
+}
+
+func (r *Relay) unregisterLocked(roomID, deviceID string) {
+	if devs := r.sessions[roomID]; devs != nil {
+		delete(devs, deviceID)
+		if len(devs) == 0 {
+			delete(r.sessions, roomID)
+		}
+	}
+}
+
+// DropDevice closes and removes one device's tunnel session (membership
+// revoked, device kicked, or room ending). Live streams die with the
+// yamux session.
+func (r *Relay) DropDevice(roomID, deviceID string) {
+	r.mu.Lock()
+	sess := r.sessions[roomID][deviceID]
+	var pending []*handshakeAdmission
+	owner := streamOwner{roomID: roomID, deviceID: deviceID}
+	for admission := range r.pending {
+		if admission.owner == owner {
+			pending = append(pending, admission)
+		}
+	}
+	r.unregisterLocked(roomID, deviceID)
+	r.mu.Unlock()
+	if sess != nil {
+		_ = sess.Close()
+	}
+	for _, admission := range pending {
+		_ = admission.conn.Close()
+	}
+}
+
+// DropRoom closes every tunnel session in one room (dissolution).
+func (r *Relay) DropRoom(roomID string) {
+	r.mu.Lock()
+	var sessions []*yamux.Session
+	var pending []*handshakeAdmission
+	for admission := range r.pending {
+		if admission.owner.roomID == roomID {
+			pending = append(pending, admission)
+		}
+	}
+	for deviceID, sess := range r.sessions[roomID] {
+		if sess != nil {
+			sessions = append(sessions, sess)
+		}
+		delete(r.sessions[roomID], deviceID)
+	}
+	delete(r.sessions, roomID)
+	r.mu.Unlock()
+	for _, sess := range sessions {
+		_ = sess.Close()
+	}
+	for _, admission := range pending {
+		_ = admission.conn.Close()
+	}
+}
+
+type streamAdmission struct {
+	relay *Relay
+	owner streamOwner
+	once  sync.Once
+}
+
+func (a *streamAdmission) Release() {
+	a.once.Do(func() {
+		a.relay.releaseStream(a.owner)
+	})
+}
+
+func (r *Relay) admitStream(roomID, deviceID string) (*streamAdmission, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owner := streamOwner{roomID: roomID, deviceID: deviceID}
+	if r.total >= r.maxTotal || r.streams[owner] >= r.maxPerDevice {
+		return nil, ErrStreamLimit
+	}
+	r.streams[owner]++
+	r.total++
+	return &streamAdmission{relay: r, owner: owner}, nil
+}
+
+func (r *Relay) releaseStream(owner streamOwner) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if n := r.streams[owner]; n > 1 {
+		r.streams[owner] = n - 1
+	} else {
+		delete(r.streams, owner)
+	}
+	if r.total > 0 {
+		r.total--
+	}
+}
+
+func (r *Relay) handleStream(stream net.Conn, authenticatedRoom string, source *streamAdmission) {
+	defer source.Release()
+	header, err := readHeader(stream)
+	if err != nil {
+		stream.Close()
+		return
+	}
+	if header.Action != vmprotocol.TunnelConnect || header.Route.Port == 0 || header.Route.SessionID == "" {
+		stream.Close()
+		return
+	}
+	// The route is bound to the authenticated room: a client-supplied
+	// cross-room RoomID never reaches the dial.
+	header.Route.RoomID = authenticatedRoom
+	// The target must be an advertised route: relaying arbitrary
+	// (device, session, port) triples would turn the tunnel into a
+	// member-driven port scanner over other devices' session networks.
+	if r.routes != nil && !r.routes.HasRoute(authenticatedRoom, header.Route.DeviceID, header.Route.SessionID, header.Route.Port) {
+		writeHeaderError(stream, fmt.Sprintf("route %s/%s:%d not advertised", header.Route.DeviceID, header.Route.SessionID, header.Route.Port))
+		stream.Close()
+		return
+	}
+	target, targetAdmission, err := r.dial(header.Route)
+	if errors.Is(err, ErrStreamLimit) {
+		writeHeaderError(stream, ErrStreamLimit.Error())
+		stream.Close()
+		return
+	}
+	if target == nil {
+		writeHeaderError(stream, fmt.Sprintf("route %s:%d unreachable", header.Route.DeviceID, header.Route.Port))
+		stream.Close()
+		return
+	}
+	defer targetAdmission.Release()
+	if err := writeHeader(target, *header); err != nil {
+		target.Close()
+		stream.Close()
+		return
+	}
+	pipe(stream, target)
+}
+
+func (r *Relay) dial(route vmprotocol.RouteKey) (net.Conn, *streamAdmission, error) {
+	// Snapshot the session under the lock, OPEN outside it: yamux's
+	// Open blocks on the peer's SYN-ACK window (up to 75s with the
+	// default StreamOpenTimeout when a registered-but-wedged device
+	// stops processing frames), and holding r.mu across that stall
+	// froze tunnel registration, DropDevice/DropRoom teardown, and
+	// every other room's relaying.
+	r.mu.Lock()
+	sess := r.sessions[route.RoomID][route.DeviceID]
+	r.mu.Unlock()
+	if sess == nil {
+		return nil, nil, nil
+	}
+	admission, err := r.admitStream(route.RoomID, route.DeviceID)
+	if err != nil {
+		return nil, nil, err
+	}
+	stream, err := sess.Open()
+	if err != nil {
+		admission.Release()
+		return nil, nil, err
+	}
+	return stream, admission, nil
+}
+
+func pipe(a, b net.Conn) {
+	done := make(chan struct{}, 2)
+	go func() { io.Copy(a, b); done <- struct{}{} }()
+	go func() { io.Copy(b, a); done <- struct{}{} }()
+	<-done
+	a.Close()
+	b.Close()
+}
+
+// readHeader reads one length-prefixed JSON header frame.
+func readHeader(conn net.Conn) (*vmprotocol.TunnelHeader, error) {
+	// Bound the initial framed header: yamux streams carry no deadline,
+	// and a member opening streams and sending nothing would otherwise
+	// pin a goroutine and stream EACH until the long-lived tunnel
+	// closes — a cheap resource-exhaustion vector.
+	if dl, ok := conn.(interface{ SetReadDeadline(time.Time) error }); ok {
+		_ = dl.SetReadDeadline(time.Now().Add(15 * time.Second))
+		defer func() { _ = dl.SetReadDeadline(time.Time{}) }()
+	}
+	var lenBuf [4]byte
+	if _, err := io.ReadFull(conn, lenBuf[:]); err != nil {
+		return nil, err
+	}
+	n := binary.BigEndian.Uint32(lenBuf[:])
+	if n == 0 || n > 1<<20 {
+		return nil, fmt.Errorf("bad header length %d", n)
+	}
+	buf := make([]byte, n)
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		return nil, err
+	}
+	return decodeHeader(buf)
+}
+
+// writeHeader writes one length-prefixed JSON header frame.
+func writeHeader(conn net.Conn, h vmprotocol.TunnelHeader) error {
+	data, err := h.Encode()
+	if err != nil {
+		return err
+	}
+	var lenBuf [4]byte
+	binary.BigEndian.PutUint32(lenBuf[:], uint32(len(data)))
+	if _, err := conn.Write(lenBuf[:]); err != nil {
+		return err
+	}
+	_, err = conn.Write(data)
+	return err
+}
+
+func writeHeaderError(conn net.Conn, msg string) {
+	_ = writeHeader(conn, vmprotocol.TunnelHeader{Action: "error", Route: vmprotocol.RouteKey{}, DeviceID: msg})
+}
+
+func decodeHeader(data []byte) (*vmprotocol.TunnelHeader, error) {
+	h, err := vmprotocol.DecodeTunnelHeader(data)
+	if err != nil {
+		return nil, err
+	}
+	return &h, nil
+}

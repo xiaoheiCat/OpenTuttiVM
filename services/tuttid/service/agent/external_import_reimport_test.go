@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func TestServiceImportsExternalAgentSessionsByProject(t *testing.T) {

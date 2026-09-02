@@ -5,10 +5,10 @@ import (
 	"errors"
 	"strings"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 type agentEditRetryService interface {

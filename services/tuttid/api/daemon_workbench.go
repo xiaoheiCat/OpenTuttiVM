@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	workspaceapi "github.com/tutti-os/tutti/services/tuttid/api/workspace"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	workspaceapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/workspace"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
 )
 
 func (api DaemonAPI) GetWorkspaceWorkbench(ctx context.Context, request tuttigenerated.GetWorkspaceWorkbenchRequestObject) (tuttigenerated.GetWorkspaceWorkbenchResponseObject, error) {

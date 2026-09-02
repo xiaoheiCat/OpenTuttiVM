@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentgui"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	agentextensionservice "github.com/tutti-os/tutti/services/tuttid/service/agentextension"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentgui"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	agentextensionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentextension"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 const appID = "agent-context"

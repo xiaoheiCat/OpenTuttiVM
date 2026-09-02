@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	workspaceagentbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceagent"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	workspaceagentbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceagent"
 )
 
 type staticWorkspaceAgentResolver struct {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 type stubAppCenterService struct {

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/managednpm"
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/managednpm"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 func TestAgentNPMRegistriesDefaultsToOfficialFirstThenMirrors(t *testing.T) {

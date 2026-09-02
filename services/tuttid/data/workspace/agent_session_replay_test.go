@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	agentsessionreplay "github.com/tutti-os/tutti/services/tuttid/service/agentsessionreplay"
+	agentsessionreplay "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentsessionreplay"
 )
 
 func TestAgentSessionReplayMetadataPersistsRecordingAndCassette(t *testing.T) {

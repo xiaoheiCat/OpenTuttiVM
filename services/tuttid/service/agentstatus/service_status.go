@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerstatus"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerstatus"
 	"golang.org/x/sync/errgroup"
 )
 

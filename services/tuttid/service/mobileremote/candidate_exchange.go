@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/device-link/authenticated"
-	"github.com/tutti-os/tutti/packages/device-link/candidateexchange"
-	mobileremotebiz "github.com/tutti-os/tutti/services/tuttid/biz/mobileremote"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/authenticated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/candidateexchange"
+	mobileremotebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/mobileremote"
 )
 
 var (

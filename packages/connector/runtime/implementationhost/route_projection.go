@@ -1,6 +1,6 @@
 package implementationhost
 
-import market "github.com/tutti-os/tutti/packages/connector/daemon/core"
+import market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
 
 type SkillSummary = market.ConnectorSkillSummary
 type ConnectorSummary = market.ConnectorSummary

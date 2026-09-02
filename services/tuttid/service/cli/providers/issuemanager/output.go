@@ -3,8 +3,8 @@ package issuemanager
 import (
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 var issueColumns = []cliservice.TableColumn{

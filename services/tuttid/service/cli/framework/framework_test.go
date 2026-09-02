@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 type sampleInput struct {

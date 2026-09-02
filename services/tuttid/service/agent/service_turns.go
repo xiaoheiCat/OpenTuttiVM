@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 )
 
 // TurnStore is the narrow persisted-turn read surface the service needs for

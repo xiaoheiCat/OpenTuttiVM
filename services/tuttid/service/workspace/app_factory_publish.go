@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 func (s *AppFactoryService) Publish(ctx context.Context, workspaceID string, jobID string) (workspacebiz.AppFactoryJob, workspacebiz.WorkspaceApp, error) {

@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agentproviderbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agentproviderbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
 )
 
 // ExternalImportValidProjectPaths returns the canonical paths of the selected

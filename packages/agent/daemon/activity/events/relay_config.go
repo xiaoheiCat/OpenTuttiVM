@@ -1,6 +1,6 @@
 package events
 
-import hostservicespkg "github.com/tutti-os/tutti/packages/agent/daemon/internal/hostservices"
+import hostservicespkg "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/internal/hostservices"
 
 const (
 	ServiceGroup = "agent-activity"

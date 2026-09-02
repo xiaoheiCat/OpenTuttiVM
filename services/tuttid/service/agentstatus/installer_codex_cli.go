@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/managednpm"
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/managednpm"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 const managedNPMReplacementRetryDelay = 150 * time.Millisecond

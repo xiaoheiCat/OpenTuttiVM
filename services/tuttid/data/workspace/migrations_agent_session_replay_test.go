@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	agentsessionreplay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	agentsessionreplay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 func TestAgentSessionReplayV3MigratesMainSchema(t *testing.T) {

@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
-	tuttimodeexecutionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
+	tuttimodeexecutionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
 )
 
 type issueLookupFailingStore struct {

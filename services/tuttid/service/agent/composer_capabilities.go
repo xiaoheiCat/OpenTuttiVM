@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
 )
 
 func (s *Service) extensionComposerProfileForLaunch(ctx context.Context, providerTargetRef map[string]any) (ExtensionComposerProfile, error) {

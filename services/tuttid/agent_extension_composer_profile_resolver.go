@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	agentextensionservice "github.com/tutti-os/tutti/services/tuttid/service/agentextension"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	agentextensionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentextension"
 )
 
 type agentExtensionComposerProfileResolver struct {

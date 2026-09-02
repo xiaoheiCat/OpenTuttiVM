@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	agentdaemon "github.com/tutti-os/tutti/packages/agent/daemon"
-	sessionreplay "github.com/tutti-os/tutti/packages/agent/session-replay"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
+	agentdaemon "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon"
+	sessionreplay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
 )
 
 type replayVerifierTransport struct {

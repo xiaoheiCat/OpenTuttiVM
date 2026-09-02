@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 )
 
 const desktopPreferencesRowID = "desktop"

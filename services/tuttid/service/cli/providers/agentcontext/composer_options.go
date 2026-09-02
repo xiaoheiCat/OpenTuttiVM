@@ -3,9 +3,9 @@ package agentcontext
 import (
 	"context"
 
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/framework"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/framework"
 )
 
 type composerOptionsInput struct {

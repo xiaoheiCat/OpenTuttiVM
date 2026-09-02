@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
 )
 
 const connectorAuthorizationResponseLimit = 4 << 20

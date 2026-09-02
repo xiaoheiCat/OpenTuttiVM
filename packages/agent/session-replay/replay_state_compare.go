@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 // normalizeReplayStateForComparison preserves relationships while replacing

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
 )
 
 func TestServiceListRebuildsExtensionTargetRefForPersistedSessionResume(t *testing.T) {

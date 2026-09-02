@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	marketv1 "github.com/tutti-os/tutti/packages/clients/market-go/generated/sandbox/v1"
+	marketv1 "github.com/xiaoheiCat/OpenTuttiVM/packages/clients/market-go/generated/sandbox/v1"
 )
 
 func TestGeneratedClientPreservesGatewayPathQueryAndCategoryFields(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/tutti-os/tutti/packages/device-link/authenticated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/authenticated"
 )
 
 // ActionKind identifies product I/O requested by an ActionPump.

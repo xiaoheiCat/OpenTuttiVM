@@ -5,12 +5,12 @@ import (
 	"errors"
 	"strings"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	userprojectbiz "github.com/tutti-os/tutti/services/tuttid/biz/userproject"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	agentmaintenance "github.com/tutti-os/tutti/services/tuttid/service/agentmaintenance"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	userprojectbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/userproject"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	agentmaintenance "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentmaintenance"
 )
 
 type workspaceDeletedAgentSessionService interface {

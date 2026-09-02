@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func cloneSessionMessages(messages []SessionMessage) []SessionMessage {

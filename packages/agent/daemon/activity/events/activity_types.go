@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
 )
 
 type Provider string

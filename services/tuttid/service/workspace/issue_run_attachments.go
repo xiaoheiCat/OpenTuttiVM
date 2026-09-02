@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 // issueRunImageAttachments projects managed Issue and task ContextRefs into

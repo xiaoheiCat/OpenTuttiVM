@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 const issueTaskWorktreeTimeout = 30 * time.Second

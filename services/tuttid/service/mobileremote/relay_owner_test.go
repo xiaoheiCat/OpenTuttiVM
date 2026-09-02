@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
-	deviceauthority "github.com/tutti-os/tutti/packages/clients/device-authority-go"
-	devicelink "github.com/tutti-os/tutti/packages/device-link"
-	"github.com/tutti-os/tutti/packages/device-link/relaytransport"
-	mobileremotebiz "github.com/tutti-os/tutti/services/tuttid/biz/mobileremote"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
+	deviceauthority "github.com/xiaoheiCat/OpenTuttiVM/packages/clients/device-authority-go"
+	devicelink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/relaytransport"
+	mobileremotebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/mobileremote"
 )
 
 func TestRelayOwnerLifecyclePreparesAndActivatesBoundSession(t *testing.T) {

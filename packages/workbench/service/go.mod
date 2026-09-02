@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/workbench/service
+module github.com/xiaoheiCat/OpenTuttiVM/packages/workbench/service
 
 go 1.24.3
 

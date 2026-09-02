@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/managednpm"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/managednpm"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
 )
 
 // MinSupportedCodexVersion is the lowest Codex CLI version Tutti supports.

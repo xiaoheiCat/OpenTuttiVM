@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
 )
 
 func TestServiceCreateRecordsCurrentProviderRuntimeCredentialGeneration(t *testing.T) {

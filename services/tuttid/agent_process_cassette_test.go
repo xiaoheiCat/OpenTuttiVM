@@ -10,10 +10,10 @@ import (
 	"sync"
 	"testing"
 
-	agentdaemon "github.com/tutti-os/tutti/packages/agent/daemon"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	sessionreplay "github.com/tutti-os/tutti/packages/agent/session-replay"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	agentdaemon "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	sessionreplay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 type cassetteWiringTestTransport struct {

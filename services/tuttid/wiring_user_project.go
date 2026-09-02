@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	userprojectservice "github.com/tutti-os/tutti/services/tuttid/service/userproject"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	userprojectservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/userproject"
 )
 
 func configureUserProjectSessionDeletion(

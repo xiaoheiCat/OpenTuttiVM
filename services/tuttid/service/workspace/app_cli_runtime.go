@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	appcliservice "github.com/tutti-os/tutti/services/tuttid/service/cli/appcli"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	appcliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/appcli"
 )
 
 func (s *AppCenterService) activateAppCLI(ctx context.Context, workspaceID string, appPackage workspacebiz.AppPackage, baseURL string) workspacebiz.AppCLIState {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 type agentSessionCLIProjectionResolver struct {

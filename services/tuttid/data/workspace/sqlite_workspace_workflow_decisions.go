@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
 )
 
 // DecideWorkspaceWorkflowCheckpoint persists the user decision, resulting

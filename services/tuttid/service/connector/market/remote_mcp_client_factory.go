@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	implementationhost "github.com/tutti-os/tutti/packages/connector/runtime/implementationhost"
-	"github.com/tutti-os/tutti/packages/connector/runtime/mcp"
+	implementationhost "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/implementationhost"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/mcp"
 )
 
 type DirectRemoteMCPClientFactoryConfig struct {

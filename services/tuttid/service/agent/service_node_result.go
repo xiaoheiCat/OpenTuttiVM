@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentanalytics"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
-	agentnoderesult "github.com/tutti-os/tutti/services/tuttid/service/reporter/events/agent/node_result"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentanalytics"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
+	agentnoderesult "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter/events/agent/node_result"
 )
 
 type agentServiceNodeResultInput struct {

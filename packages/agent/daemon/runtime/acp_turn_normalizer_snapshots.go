@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
-	"github.com/tutti-os/tutti/packages/agent/daemon/liveprotocol"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/liveprotocol"
 )
 
 // ApplyStreamingThinkingSnapshot replaces the open thinking segment with a full

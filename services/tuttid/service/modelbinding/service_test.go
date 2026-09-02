@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	modelbindingbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelbinding"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	modelpolicybiz "github.com/tutti-os/tutti/services/tuttid/biz/modelpolicy"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	modelbindingbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelbinding"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	modelpolicybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelpolicy"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 type memoryBindingStore struct {

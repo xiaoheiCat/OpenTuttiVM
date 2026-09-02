@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerstatus"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerstatus"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
 )
 
 func TestResolveProviderCommandPrefersCompleteManagedNPMPackageOverStaleShim(t *testing.T) {

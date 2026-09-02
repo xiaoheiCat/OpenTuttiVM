@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
 )
 
 // mcpProtocolVersion is the MCP version advertised at initialize. We do NOT

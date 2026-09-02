@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 // RecoverEligibleIssueDispatches retries automatic dispatch frontiers after a

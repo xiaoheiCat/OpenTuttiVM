@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	marketv1 "github.com/tutti-os/tutti/packages/clients/market-go/generated/sandbox/v1"
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
+	marketv1 "github.com/xiaoheiCat/OpenTuttiVM/packages/clients/market-go/generated/sandbox/v1"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 

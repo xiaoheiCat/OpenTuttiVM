@@ -3,8 +3,8 @@ package turn_terminal
 import (
 	"context"
 
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
-	reporterevents "github.com/tutti-os/tutti/services/tuttid/service/reporter/events"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
+	reporterevents "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter/events"
 )
 
 const (

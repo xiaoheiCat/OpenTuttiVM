@@ -1,8 +1,8 @@
 package reporter
 
 import (
-	analyticsreporter "github.com/tutti-os/tutti/packages/analytics/reporter-go"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	analyticsreporter "github.com/xiaoheiCat/OpenTuttiVM/packages/analytics/reporter-go"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 type Event = analyticsreporter.Event

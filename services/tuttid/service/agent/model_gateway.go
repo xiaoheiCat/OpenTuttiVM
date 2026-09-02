@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 
-	modelgatewayservice "github.com/tutti-os/tutti/services/tuttid/service/modelgateway"
+	modelgatewayservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelgateway"
 )
 
 // ModelGatewayRegistry is the daemon-owned, session-scoped Responses-to-Chat

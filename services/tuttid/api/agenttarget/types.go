@@ -5,8 +5,8 @@ import (
 	"errors"
 	"log/slog"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
 )
 
 func GeneratedListAgentTargetsResponseFromBiz(targets []agenttargetbiz.Target) (tuttigenerated.ListAgentTargetsResponse, error) {

@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
-	agentdaemon "github.com/tutti-os/tutti/packages/agent/daemon"
-	sessionreplay "github.com/tutti-os/tutti/packages/agent/session-replay"
-	tuttiapi "github.com/tutti-os/tutti/services/tuttid/api"
-	accountservice "github.com/tutti-os/tutti/services/tuttid/service/account"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
-	agenttargetservice "github.com/tutti-os/tutti/services/tuttid/service/agenttarget"
-	tuttiagentservice "github.com/tutti-os/tutti/services/tuttid/service/tuttiagent"
+	agentdaemon "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon"
+	sessionreplay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
+	tuttiapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api"
+	accountservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/account"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
+	agenttargetservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agenttarget"
+	tuttiagentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttiagent"
 )
 
 // replayProviderAvailabilityChecker is part of the isolated replay

@@ -3,7 +3,7 @@ import { join, relative, sep } from "node:path";
 
 import { parseStablePackageReleaseVersion } from "./package-release-version.mjs";
 
-const internalModulePrefix = "github.com/tutti-os/tutti/packages/";
+const internalModulePrefix = "github.com/xiaoheiCat/OpenTuttiVM/packages/";
 
 export async function preparePackageGoModuleReleaseTree({
   releaseVersion,

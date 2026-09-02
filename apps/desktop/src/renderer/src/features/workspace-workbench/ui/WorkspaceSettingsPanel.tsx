@@ -148,7 +148,7 @@ const computerUseAutoCheckIntervalMs = 1_500;
 const computerUseAutoCheckMaxMs = 120_000;
 const computerUseFocusRefreshMinIntervalMs = 5_000;
 const tuttiWebsiteUrl = "https://tutti.sh/";
-const tuttiGitHubUrl = "https://github.com/tutti-os/tutti";
+const tuttiGitHubUrl = "https://github.com/xiaoheiCat/OpenTuttiVM";
 const tuttiDesktopIconUrl = new URL(
   "../../../../../../build/icon.png",
   import.meta.url

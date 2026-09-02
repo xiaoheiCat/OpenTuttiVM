@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"testing"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 func enabledSideConversationAPI(service SideConversationService) DaemonAPI {

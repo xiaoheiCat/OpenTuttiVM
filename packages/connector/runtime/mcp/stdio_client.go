@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
 )
 
 const defaultMaxMessageBytes = 4 * 1024 * 1024

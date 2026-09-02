@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	builtinapps "github.com/tutti-os/tutti/services/tuttid/builtin-apps"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	builtinapps "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/builtin-apps"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 type appFactoryStoreStub struct {

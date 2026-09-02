@@ -6,8 +6,8 @@ import (
 	"errors"
 	"os"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
-	sessionreplay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
+	sessionreplay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 var ErrLiveSessionBusy = errors.New("agent live session is busy")

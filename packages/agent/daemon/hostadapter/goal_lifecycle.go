@@ -3,8 +3,8 @@ package hostadapter
 import (
 	"context"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	host "github.com/tutti-os/tutti/packages/agent/host"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	host "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
 )
 
 type goalControlLifecycleBackend interface {

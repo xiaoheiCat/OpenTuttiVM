@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	preferencesservice "github.com/tutti-os/tutti/services/tuttid/service/preferences"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	preferencesservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/preferences"
 )
 
 type stubPreferencesService struct {

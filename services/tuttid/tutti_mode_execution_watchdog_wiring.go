@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
-	tuttimodeexecutionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
+	tuttimodeexecutionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
 )
 
 func newTuttiModeWatchdogWorker(

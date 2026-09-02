@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerstatus"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerstatus"
 )
 
 // TestServiceListDetectsProvidersConcurrently proves provider detection fans

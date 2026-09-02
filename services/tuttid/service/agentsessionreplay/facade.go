@@ -3,9 +3,9 @@ package agentsessionreplay
 import (
 	"context"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	replay "github.com/tutti-os/tutti/packages/agent/session-replay"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 var (

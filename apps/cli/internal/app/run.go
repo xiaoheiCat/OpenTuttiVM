@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tutti-os/tutti/apps/cli/internal/daemon"
-	"github.com/tutti-os/tutti/apps/cli/internal/defaults"
+	"github.com/xiaoheiCat/OpenTuttiVM/apps/cli/internal/daemon"
+	"github.com/xiaoheiCat/OpenTuttiVM/apps/cli/internal/defaults"
 )
 
 const prefixHelpGroupPreviewLimit = 5

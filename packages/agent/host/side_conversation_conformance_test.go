@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	"github.com/tutti-os/tutti/packages/agent/host/conformance"
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host/conformance"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 )
 
 type sideHostConformanceDriver struct {

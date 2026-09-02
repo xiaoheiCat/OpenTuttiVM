@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	agentmaintenance "github.com/tutti-os/tutti/services/tuttid/service/agentmaintenance"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	agentmaintenance "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentmaintenance"
 )
 
 func (api DaemonAPI) PurgeDeletedAgentConversations(

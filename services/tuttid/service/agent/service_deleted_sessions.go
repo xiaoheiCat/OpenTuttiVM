@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	userprojectbiz "github.com/tutti-os/tutti/services/tuttid/biz/userproject"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	userprojectbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/userproject"
 )
 
 const maximumDeletedSessionPageLimit = 100

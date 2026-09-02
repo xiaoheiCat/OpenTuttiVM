@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 type captureActivityClient struct {

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	automationrulebiz "github.com/tutti-os/tutti/services/tuttid/biz/automationrule"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	automationrulebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/automationrule"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 // ExecutionRecorder persists automation launch attempts. The durable row is

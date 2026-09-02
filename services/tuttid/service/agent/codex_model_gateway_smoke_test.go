@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	modelgatewayservice "github.com/tutti-os/tutti/services/tuttid/service/modelgateway"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	modelgatewayservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelgateway"
 )
 
 // TestCodexModelPlanGatewayCLISmoke is an opt-in real Codex CLI smoke test.

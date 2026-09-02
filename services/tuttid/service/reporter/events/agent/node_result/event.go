@@ -3,8 +3,8 @@ package node_result
 import (
 	"context"
 
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
-	reporterevents "github.com/tutti-os/tutti/services/tuttid/service/reporter/events"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
+	reporterevents "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter/events"
 )
 
 type Params map[string]any

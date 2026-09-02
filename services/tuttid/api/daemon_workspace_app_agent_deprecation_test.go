@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
 )
 
 func TestTrackDeprecatedWorkspaceAppAgentAPIRecordsMigrationDimensions(t *testing.T) {

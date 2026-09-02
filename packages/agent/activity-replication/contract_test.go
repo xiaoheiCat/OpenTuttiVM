@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	activityreplication "github.com/tutti-os/tutti/packages/agent/activity-replication"
+	activityreplication "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/activity-replication"
 )
 
 func TestLegacyCommandStateOnlyDecodesAsDeleteTombstone(t *testing.T) {

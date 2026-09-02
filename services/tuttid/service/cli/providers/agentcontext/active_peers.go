@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/framework"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/framework"
 )
 
 func (p Provider) newActivePeersCommand() cliservice.Command {

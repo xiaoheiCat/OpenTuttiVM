@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 )
 
 func (s *Service) Get(ctx context.Context, workspaceID string, agentSessionID string) (Session, error) {

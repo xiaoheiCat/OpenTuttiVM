@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	deviceauthority "github.com/tutti-os/tutti/packages/clients/device-authority-go"
-	devicelink "github.com/tutti-os/tutti/packages/device-link"
-	"github.com/tutti-os/tutti/packages/device-link/relaytransport"
+	deviceauthority "github.com/xiaoheiCat/OpenTuttiVM/packages/clients/device-authority-go"
+	devicelink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/relaytransport"
 )
 
 const (

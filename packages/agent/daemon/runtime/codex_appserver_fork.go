@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtime/codexproto"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime/codexproto"
 )
 
 type codexForkThreadReadResponse struct {

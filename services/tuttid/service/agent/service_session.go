@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 )
 
 func runtimeResumeInputFromRuntimeSession(session ProviderRuntimeSession) RuntimeResumeInput {

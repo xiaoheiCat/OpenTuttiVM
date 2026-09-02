@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
 )
 
 type SessionSeed struct {

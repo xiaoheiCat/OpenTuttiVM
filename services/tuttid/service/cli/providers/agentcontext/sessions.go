@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/framework"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/framework"
 )
 
 var sessionColumns = []cliservice.TableColumn{

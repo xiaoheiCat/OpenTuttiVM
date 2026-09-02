@@ -629,6 +629,23 @@ Current first-pass scope:
 - TypeScript business paths under `apps/desktop/src/main/*`, `apps/desktop/src/preload/*`, and `packages/clients/*`
 - Go business paths under `packages/workspace/files/*` and `services/tuttid/app/*`, `api/*`, `biz/*`, `data/*`, `server/*`, and `service/*`
 
+## OpenTutti Go Lanes
+
+The OpenTutti collaboration stack (server, room-sync, fs, and the
+`packages/workspace/vm-protocol`, `vm-cas`, `vm-roomfs`, `vm-sync`
+modules) validates through two repository-managed lanes:
+
+- `.github/workflows/open-tutti-ci.yml` — OS-matrix (ubuntu, windows)
+  `go build` + `go vet` + `go test` plus `gofmt -l` over every OpenTutti
+  module, triggered by changes under `services/open-tutti-*` and
+  `packages/workspace/vm-*`
+- `make check-server`, `check-room-sync`, `check-fs`, and
+  `check-workspace` run the same gates locally per module
+
+The workspace must build on both OSes: the FUSE mount compiles under a
+`linux` build tag on non-Linux runners, and adapters must not assume
+POSIX-only behavior.
+
 ## Workflow Rules
 
 - keep `pre-commit` focused on staged formatting and cheap boundary checks

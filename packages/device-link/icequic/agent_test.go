@@ -10,7 +10,7 @@ import (
 
 	"github.com/pion/logging"
 
-	corelink "github.com/tutti-os/tutti/packages/device-link"
+	corelink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link"
 )
 
 // TestAgentWireFormCarriesDeviceLinkQUIC exercises the M4 v3 lane end to end

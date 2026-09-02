@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	automationrulebiz "github.com/tutti-os/tutti/services/tuttid/biz/automationrule"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	automationruleservice "github.com/tutti-os/tutti/services/tuttid/service/automationrule"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	automationrulebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/automationrule"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	automationruleservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/automationrule"
 )
 
 type stubAutomationRuleService struct {

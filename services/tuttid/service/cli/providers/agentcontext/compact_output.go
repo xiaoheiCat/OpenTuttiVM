@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 type imageLocalPathResolver func(agentSessionID string, attachmentID string, mimeType string) (string, bool)

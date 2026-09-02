@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	modelpolicybiz "github.com/tutti-os/tutti/services/tuttid/biz/modelpolicy"
+	modelpolicybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelpolicy"
 )
 
 func seedModelPolicyWorkspace(t *testing.T, store *SQLiteStore, workspaceID string) {

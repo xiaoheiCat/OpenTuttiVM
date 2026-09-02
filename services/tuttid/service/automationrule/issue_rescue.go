@@ -3,7 +3,7 @@ package automationrule
 import (
 	"context"
 
-	automationrulebiz "github.com/tutti-os/tutti/services/tuttid/biz/automationrule"
+	automationrulebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/automationrule"
 )
 
 // IssueRescueInput describes a failure-triggered Agent launch before the

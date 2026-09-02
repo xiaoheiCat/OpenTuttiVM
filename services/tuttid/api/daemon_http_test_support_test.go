@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
 )
 
 func performGeneratedRouteRequest(t *testing.T, handler http.Handler, method string, path string, body any) *httptest.ResponseRecorder {

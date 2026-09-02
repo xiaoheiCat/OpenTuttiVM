@@ -21,7 +21,7 @@ test("desktop release latest metadata exposes CloudFront URLs for every asset", 
       releaseAssetBaseUrl:
         "https://d111111abcdef8.cloudfront.net/desktop-release-assets/",
       releaseTag: "v1.2.3",
-      releaseNotesUrl: "https://github.com/tutti-os/tutti/releases/tag/v1.2.3",
+      releaseNotesUrl: "https://github.com/xiaoheiCat/OpenTuttiVM/releases/tag/v1.2.3",
       releasedAt: "2026-07-04T12:00:00.000Z",
       sourceRef: "main"
     });

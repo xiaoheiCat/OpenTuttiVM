@@ -12,8 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
 )
 
 const (

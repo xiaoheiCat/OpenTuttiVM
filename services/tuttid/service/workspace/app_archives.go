@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 const maxWorkspaceAppArtifactBytes int64 = 512 * 1024 * 1024

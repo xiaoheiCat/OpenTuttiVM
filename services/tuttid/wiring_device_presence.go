@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"strings"
 
-	accountservice "github.com/tutti-os/tutti/services/tuttid/service/account"
-	devicepresenceservice "github.com/tutti-os/tutti/services/tuttid/service/devicepresence"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	accountservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/account"
+	devicepresenceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/devicepresence"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func buildDevicePresenceService(stateDir string, account *accountservice.Service) (*devicepresenceservice.Service, error) {

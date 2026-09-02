@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/device-link/authenticated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/authenticated"
 )
 
 const (

@@ -1,6 +1,6 @@
 package agentruntime
 
-import activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+import activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 
 func claudeSDKSidecarBackgroundTaskEvents(
 	adapterSession *claudeSDKAdapterSession,

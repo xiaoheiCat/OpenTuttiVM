@@ -3,7 +3,7 @@ package agentruntime
 import (
 	"strings"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 // storeTurnSession commits a mid-turn lifecycle snapshot produced by a turn

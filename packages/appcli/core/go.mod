@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/appcli/core
+module github.com/xiaoheiCat/OpenTuttiVM/packages/appcli/core
 
 go 1.24.3
 

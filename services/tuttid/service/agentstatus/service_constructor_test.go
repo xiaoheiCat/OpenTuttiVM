@@ -3,7 +3,7 @@ package agentstatus
 import (
 	"testing"
 
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 func TestNewServiceInitializesProductionDependencies(t *testing.T) {

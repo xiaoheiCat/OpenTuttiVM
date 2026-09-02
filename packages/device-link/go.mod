@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/device-link
+module github.com/xiaoheiCat/OpenTuttiVM/packages/device-link
 
 go 1.24.3
 

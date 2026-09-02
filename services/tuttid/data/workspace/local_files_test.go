@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
+	workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
 )
 
 func TestLocalFilesAdapterListsLogicalChildren(t *testing.T) {

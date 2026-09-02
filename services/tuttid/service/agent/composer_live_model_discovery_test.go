@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
 )
 
 func TestHiddenModelDiscoveryTriggeredLogIsInfoAndSanitized(t *testing.T) {

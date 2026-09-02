@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	connectorartifact "github.com/tutti-os/tutti/packages/connector/runtime/artifact"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	connectorartifact "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/artifact"
 )
 
 type releaseArtifactStub struct {

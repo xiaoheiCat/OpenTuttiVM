@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 type listenerInfo struct {

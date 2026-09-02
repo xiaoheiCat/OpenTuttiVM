@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/composercatalog"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/composercatalog"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 	"golang.org/x/sync/errgroup"
 )
 

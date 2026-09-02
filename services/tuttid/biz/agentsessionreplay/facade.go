@@ -1,6 +1,6 @@
 package agentsessionreplay
 
-import replay "github.com/tutti-os/tutti/packages/agent/session-replay"
+import replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 
 var ErrTuttiReplayStateConflict = replay.ErrTuttiReplayStateConflict
 

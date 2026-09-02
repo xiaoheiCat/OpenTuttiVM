@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	agentsessionreplay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	agentsessionreplay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 func (s *SQLiteStore) PutRecording(

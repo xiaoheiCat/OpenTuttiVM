@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
 )
 
 func TestNewRuntimeCreatesDefaultController(t *testing.T) {

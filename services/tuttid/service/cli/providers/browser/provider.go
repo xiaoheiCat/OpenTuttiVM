@@ -8,9 +8,9 @@ import (
 	"errors"
 	"strings"
 
-	browsersvc "github.com/tutti-os/tutti/services/tuttid/service/browser"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/framework"
+	browsersvc "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/browser"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/framework"
 )
 
 const appID = "browser"

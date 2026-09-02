@@ -1,8 +1,8 @@
 package providerregistry
 
 import (
-	"github.com/tutti-os/tutti/packages/agent/daemon/managednpm"
-	canonical "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/managednpm"
+	canonical "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 // RuntimeKind identifies the adapter family used to execute a provider. The

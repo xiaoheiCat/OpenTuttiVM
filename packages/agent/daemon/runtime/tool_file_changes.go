@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 var unifiedDiffHunkPattern = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?:.*)$`)

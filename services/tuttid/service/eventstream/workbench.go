@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	workbenchbiz "github.com/tutti-os/tutti/services/tuttid/biz/workbench"
+	workbenchbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workbench"
 )
 
 type WorkbenchNodeLaunchPublisher struct {

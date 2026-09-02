@@ -14,6 +14,7 @@ Stable change rules live in [Conventions](../conventions/README.md).
 - [Business Event Stream](./business-event-stream.md)
 - [Analytics Tracking](./analytics-tracking.md)
 - [Browser Node Package](./browser-node-package.md)
+- [OpenTuttiVM Rooms](./open-tutti-vm.md)
 
 ## Agent System
 

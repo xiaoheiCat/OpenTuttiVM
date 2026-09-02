@@ -40,6 +40,12 @@ Rules:
 Current area:
 
 - `services/tuttid`: local daemon and primary business core
+- `services/open-tutti-server`: authoritative multi-device room server
+  (rooms, sequencing, CAS, relay; see docs/architecture/open-tutti-vm.md)
+- `services/open-tutti-room-sync`: per-device collaboration runtime
+  joining a device to a room (workspace replica, gateway, RoomFS host)
+- `services/open-tutti-fs`: Linux FUSE mount speaking the Room FS
+  Protocol to a room-sync bridge
 
 Rules:
 

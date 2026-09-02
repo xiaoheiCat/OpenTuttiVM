@@ -7,10 +7,10 @@ import (
 	"runtime"
 	"time"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	connectorruntime "github.com/tutti-os/tutti/packages/connector/runtime"
-	implementationhost "github.com/tutti-os/tutti/packages/connector/runtime/implementationhost"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	connectorruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime"
+	implementationhost "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/implementationhost"
 )
 
 type PreparedArtifactResolver = implementationhost.PreparedArtifactResolver

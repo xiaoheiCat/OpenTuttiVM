@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	userprojectbiz "github.com/tutti-os/tutti/services/tuttid/biz/userproject"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	userprojectbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/userproject"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 func TestServiceUseNormalizesDirectoryAndPersistsRecentProject(t *testing.T) {

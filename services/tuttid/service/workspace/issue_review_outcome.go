@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
 )
 
 const maxIssueReviewSummaryChars = 16 * 1024

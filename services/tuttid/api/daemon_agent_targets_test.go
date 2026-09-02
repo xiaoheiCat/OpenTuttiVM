@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	agenttargetservice "github.com/tutti-os/tutti/services/tuttid/service/agenttarget"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	agenttargetservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agenttarget"
 )
 
 func TestDaemonAPIGeneratedRoutesListAgentTargets(t *testing.T) {

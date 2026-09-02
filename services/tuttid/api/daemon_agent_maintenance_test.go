@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	agentmaintenance "github.com/tutti-os/tutti/services/tuttid/service/agentmaintenance"
+	agentmaintenance "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentmaintenance"
 )
 
 type stubAgentMaintenanceService struct {

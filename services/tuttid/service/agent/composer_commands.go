@@ -3,7 +3,7 @@ package agent
 import (
 	"strings"
 
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
 )
 
 func (s *Service) composerCommandsFromRunningSession(

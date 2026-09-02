@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	eventprotocol "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
+	eventprotocol "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
 )
 
 func validPublishFrameJSON(t *testing.T, eventOverrides string) []byte {

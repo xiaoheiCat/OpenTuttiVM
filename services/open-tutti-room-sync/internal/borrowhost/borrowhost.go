@@ -1,0 +1,94 @@
+// Package borrowhost is the owning-device side of Agent Borrowing: the
+// events the server routes here (a borrower's command, permission
+// prompts and decisions, share/revocation notices) delegate to the host
+// application for execution against the real agent runtime.
+//
+// The room-sync container itself never runs agent code — per the room
+// model, agents execute on each user's own device through the host
+// (Tutti's Agent Host owns session/turn lifecycle). Hosts inject their
+// adapter at startup; Noop logs and acks nothing, which keeps the
+// server's routing observable while a host is absent.
+package borrowhost
+
+import (
+	"errors"
+	"log/slog"
+
+	borrowagent "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow"
+)
+
+// Host executes borrowed-agent lifecycle work on the owning device.
+// Implementations live in the host application (Agent Host adapter);
+// every method may be called from the WS event loop.
+type Host interface {
+	// ExecuteCommand runs one borrower instruction against the shared
+	// agent instance; results stream back through the host's own
+	// channels (terminal/file operations), not this return value.
+	ExecuteCommand(p borrowagent.BorrowCommandPayload) error
+	// ApprovalRequest surfaces a permission prompt raised during a
+	// borrowed execution to the OWNER's UI? No — the server routes
+	// prompts to the borrower; the owner receives nothing. This lands
+	// here only for owner-authored sessions.
+	ApprovalRequest(p borrowagent.ApprovalRequestPayload) error
+	// ApprovalDecision resumes a borrowed execution that was waiting on
+	// the borrower's choice.
+	ApprovalDecision(p borrowagent.ApprovalDecisionPayload) error
+	// Shared reflects this device's own share-state changes.
+	Shared(p borrowagent.AgentSharedPayload) error
+	// Revoked ends every in-flight command holding the old generation.
+	Revoked(p borrowagent.BorrowRevokedPayload) error
+	NeedsInterrupt(p borrowagent.BorrowNeedsInterruptPayload) error
+}
+
+// Noop is the default host: it observes routed events without executing
+// anything, so deployments without a host adapter still see the traffic
+// (and revocations still fence local state) in logs.
+type Noop struct{ Log *slog.Logger }
+
+func (n *Noop) log(what string, v ...any) {
+	if n.Log != nil {
+		n.Log.Info("borrowhost: no host adapter; event observed", append([]any{"what", what}, v...)...)
+	}
+}
+
+// ErrHostNotWired is returned by the Noop host for actions a real
+// Agent Host integration must perform: pretending success would make
+// the borrower believe their command executed. Observation-only events
+// (Shared/Revoked) stay success; the wired seam is the repository's
+// ApplicationHost() integration, explicitly out of scope for this PR.
+var ErrHostNotWired = errors.New("borrow execution requires an Agent Host adapter; room-sync runs without one")
+
+// ExecuteCommand implements Host.
+func (n *Noop) ExecuteCommand(p borrowagent.BorrowCommandPayload) error {
+	n.log("borrow_command_rejected_not_wired", "agent", p.AgentInstanceID, "command", p.CommandID)
+	return ErrHostNotWired
+}
+
+// ApprovalRequest implements Host.
+func (n *Noop) ApprovalRequest(p borrowagent.ApprovalRequestPayload) error {
+	n.log("approval_request", "approval", p.ApprovalID)
+	return nil
+}
+
+// ApprovalDecision implements Host.
+func (n *Noop) ApprovalDecision(p borrowagent.ApprovalDecisionPayload) error {
+	n.log("approval_decision", "approval", p.ApprovalID, "choice", p.Choice)
+	return nil
+}
+
+// Shared implements Host.
+func (n *Noop) Shared(p borrowagent.AgentSharedPayload) error {
+	n.log("agent_shared", "agent", p.AgentInstanceID, "shared", p.Shared)
+	return nil
+}
+
+// Revoked implements Host.
+func (n *Noop) Revoked(p borrowagent.BorrowRevokedPayload) error {
+	n.log("borrow_revoked", "agent", p.AgentInstanceID, "generation", p.FinalGeneration)
+	return nil
+}
+
+func (n *Noop) NeedsInterrupt(p borrowagent.BorrowNeedsInterruptPayload) error {
+	n.log("borrow_needs_interrupt_not_wired", "agent", p.AgentInstanceID, "command", p.CommandID, "generation", p.LeaseGeneration)
+	return ErrHostNotWired
+}

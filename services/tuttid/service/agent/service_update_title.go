@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/titletext"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/titletext"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
 )
 
 const MaxSessionTitleRunes = titletext.MaxSessionTitleRunes

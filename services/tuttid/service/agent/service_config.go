@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
 )
 
 // ServiceConfig groups the tuttid adapter dependencies by their owning

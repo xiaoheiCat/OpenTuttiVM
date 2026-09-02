@@ -5,12 +5,12 @@ import (
 	"errors"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	automationrulebiz "github.com/tutti-os/tutti/services/tuttid/biz/automationrule"
-	collabrunbiz "github.com/tutti-os/tutti/services/tuttid/biz/collabrun"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	automationruleservice "github.com/tutti-os/tutti/services/tuttid/service/automationrule"
-	collabrunservice "github.com/tutti-os/tutti/services/tuttid/service/collabrun"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	automationrulebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/automationrule"
+	collabrunbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/collabrun"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	automationruleservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/automationrule"
+	collabrunservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/collabrun"
 )
 
 func gateTestPreferences(flags map[string]bool, err error) stubPreferencesService {

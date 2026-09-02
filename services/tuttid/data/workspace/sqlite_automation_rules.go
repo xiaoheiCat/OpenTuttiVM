@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	automationrulebiz "github.com/tutti-os/tutti/services/tuttid/biz/automationrule"
+	automationrulebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/automationrule"
 )
 
 var ErrAutomationRuleNotFound = errors.New("automation rule not found")

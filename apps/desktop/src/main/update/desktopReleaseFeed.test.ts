@@ -67,7 +67,7 @@ test("desktop release feed ignores legacy release notes metadata", async () => {
       jsonResponse(
         createPointerDocument({
           releaseNotesUrl:
-            "https://github.com/tutti-os/tutti/releases/tag/v1.2.3"
+            "https://github.com/xiaoheiCat/OpenTuttiVM/releases/tag/v1.2.3"
         })
       )
   });

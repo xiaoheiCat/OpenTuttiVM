@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	agentextensionbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentextension"
+	agentextensionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentextension"
 )
 
 const accountUsageCompanionFailureRelativeDir = "agent/extension-account-usage-companion-failures"

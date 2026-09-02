@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
 )
 
 type fakeAgentTargetLookup struct {

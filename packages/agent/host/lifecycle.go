@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 )
 
 // CreateSession reports at most one aggregated TerminalFailure for a failed

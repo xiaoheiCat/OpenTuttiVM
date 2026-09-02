@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
 )
 
 // applyCreateSessionReasoningIntensity compiles the Issue-level continuous

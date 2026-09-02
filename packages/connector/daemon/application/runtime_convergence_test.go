@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	marketdata "github.com/tutti-os/tutti/packages/connector/daemon/adapters/sqlite"
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
+	marketdata "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/adapters/sqlite"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
 )
 
 func TestRuntimeConvergenceWorkerAppliesDurableDesiredState(t *testing.T) {

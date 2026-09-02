@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/tutti-os/tutti/apps/cli/internal/app"
+	"github.com/xiaoheiCat/OpenTuttiVM/apps/cli/internal/app"
 )
 
 func main() {

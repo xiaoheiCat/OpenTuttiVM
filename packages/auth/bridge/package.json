@@ -4,7 +4,7 @@
   "private": false,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tutti-os/tutti.git",
+    "url": "git+https://github.com/xiaoheiCat/OpenTuttiVM.git",
     "directory": "packages/auth/bridge"
   },
   "type": "module",

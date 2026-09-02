@@ -13,6 +13,19 @@ Use the owner documents linked below for detailed behavior. This file exists to 
 
 ## Local State And Runtime Paths
 
+OpenTuttiVM server overrides are documented in the service `.env.example` and
+are intentionally not part of the Tutti daemon override namespace.
+
+| `OPEN_TUTTI_ACTIVE_ROOM_LIMIT` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Limits active rooms, including concurrent creations in progress. |
+| `OPEN_TUTTI_LISTEN_ADDR` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | HTTP listener address; plain HTTP requires an explicit loopback address. |
+| `OPEN_TUTTI_PUBLIC_URL` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Public URL for links; remote deployments require HTTPS termination. |
+| `OPEN_TUTTI_MAX_PENDING_OPERATIONS` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds room-sync operations awaiting authoritative acknowledgement; default 128. |
+| `OPEN_TUTTI_MAX_PENDING_BYTES` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds cumulative JSON envelope bytes awaiting acknowledgement; default 64 MiB. |
+| `OPEN_TUTTI_BORROWER_DISCONNECT_GRACE_SECONDS` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | PDF v1 reconnect grace for unexpectedly disconnected borrowers; default 300 seconds. Active leave/kick fencing remains immediate. |
+| `OPEN_TUTTI_JOIN_TICKET_MAX_PER_SHARE` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds pending unredeemed join tickets for one share; default 100. |
+| `OPEN_TUTTI_JOIN_TICKET_MAX_PER_ROOM` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds pending unredeemed join tickets for one room; default 1000. |
+| `OPEN_TUTTI_JOIN_TICKET_MAX_GLOBAL` | [OpenTuttiVM architecture](../architecture/open-tutti-vm.md) | Bounds pending unredeemed join tickets globally; default 10000. |
+
 | Variable                      | Owner document                                                                                             | Purpose                                                                              |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `TUTTI_ENV`                   | [Local State Storage](./local-state-storage.md)                                                            | Selects production or development default state roots.                               |

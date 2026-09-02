@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	workspaceapi "github.com/tutti-os/tutti/services/tuttid/api/workspace"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	workspaceapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/workspace"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 func (api DaemonAPI) ListWorkspaces(ctx context.Context, _ tuttigenerated.ListWorkspacesRequestObject) (tuttigenerated.ListWorkspacesResponseObject, error) {

@@ -4,13 +4,13 @@ import (
 	"errors"
 	"testing"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 func TestClassifyPendingAgentProcessCleanupPreservesRetryableReason(t *testing.T) {

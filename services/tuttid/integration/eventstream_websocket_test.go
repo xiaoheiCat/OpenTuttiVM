@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	eventprotocol "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
+	eventprotocol "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
 )
 
 type eventStreamEnvelopeFrame struct {

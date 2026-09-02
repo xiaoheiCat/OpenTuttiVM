@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
-	executionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
+	executionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
 )
 
 var tuttiModeExecutionTables = []string{

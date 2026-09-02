@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 type Routes interface {

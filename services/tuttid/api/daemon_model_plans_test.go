@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	modelplanservice "github.com/tutti-os/tutti/services/tuttid/service/modelplan"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	modelplanservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelplan"
 )
 
 type modelPlanServiceStub struct {

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func (s *AppFactoryService) store() workspacedata.AppFactoryStore {

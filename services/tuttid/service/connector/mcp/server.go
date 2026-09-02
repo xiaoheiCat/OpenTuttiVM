@@ -2,7 +2,7 @@
 // service composition without owning a second transport implementation.
 package connectormcp
 
-import connectormcpserver "github.com/tutti-os/tutti/packages/connector/runtime/mcpserver"
+import connectormcpserver "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/mcpserver"
 
 type Config = connectormcpserver.Config
 type Binding = connectormcpserver.Binding

@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/framework"
-	tuttimodeexecutionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
-	tuttimodeplanservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeplan"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/framework"
+	tuttimodeexecutionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
+	tuttimodeplanservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeplan"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 const maxPlanFileSize = 1 << 20

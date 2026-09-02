@@ -6,15 +6,15 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	agentdaemon "github.com/tutti-os/tutti/packages/agent/daemon"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	replay "github.com/tutti-os/tutti/packages/agent/session-replay"
-	replaydata "github.com/tutti-os/tutti/services/tuttid/data/agentsessionreplay"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	agentsessionreplay "github.com/tutti-os/tutti/services/tuttid/service/agentsessionreplay"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	agentdaemon "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
+	replaydata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/agentsessionreplay"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	agentsessionreplay "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentsessionreplay"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 type agentCommitObservers []agenthost.CommitObserver

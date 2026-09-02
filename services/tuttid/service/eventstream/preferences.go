@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	agentproviderbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	preferencesservice "github.com/tutti-os/tutti/services/tuttid/service/preferences"
+	agentproviderbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	preferencesservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/preferences"
 )
 
 type PreferencesMutator interface {

@@ -3,9 +3,9 @@ package agent
 import (
 	"context"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
 )
 
 type serviceHostLifecycleObserver struct {

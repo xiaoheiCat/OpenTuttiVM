@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
-	"github.com/tutti-os/tutti/packages/commerce"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/commerce"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 var ErrAttemptNotFound = errors.New("account login attempt not found")

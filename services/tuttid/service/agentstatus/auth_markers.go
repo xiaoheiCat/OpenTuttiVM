@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
 )
 
 // authCredentialsRefreshedAfter reports whether any of the provider's credential

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
 )
 
 type stubConnectorMarketService struct {

@@ -11,13 +11,13 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentgui"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	"github.com/tutti-os/tutti/services/tuttid/service/cli/framework"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentgui"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/framework"
 )
 
 var sessionActionColumns = []cliservice.TableColumn{

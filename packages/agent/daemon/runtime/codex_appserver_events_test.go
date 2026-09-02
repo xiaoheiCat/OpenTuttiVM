@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
-	"github.com/tutti-os/tutti/packages/agent/daemon/liveprotocol"
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtime/codexproto"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/liveprotocol"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime/codexproto"
 )
 
 type appServerCaptureConn struct {

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 func TestSubscribeWhenAvailableWaitsForResumeAndReplaysState(t *testing.T) {

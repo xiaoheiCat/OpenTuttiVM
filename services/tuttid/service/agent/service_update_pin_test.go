@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 )
 
 func TestServiceUpdatePinReturnsFreshPersistedVersionAndLiveTurn(t *testing.T) {

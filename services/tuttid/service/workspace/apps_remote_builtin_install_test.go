@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	builtinapps "github.com/tutti-os/tutti/services/tuttid/builtin-apps"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	builtinapps "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/builtin-apps"
 )
 
 func TestAppCenterServiceRemoteBuiltinInstallCachesUpdateWithoutActivating(t *testing.T) {

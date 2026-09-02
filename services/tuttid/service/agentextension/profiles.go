@@ -11,9 +11,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
 )
 
 type ComposerProfile struct {

@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	implementationhost "github.com/tutti-os/tutti/packages/connector/runtime/implementationhost"
-	connectorruntimemcp "github.com/tutti-os/tutti/packages/connector/runtime/mcp"
+	implementationhost "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/implementationhost"
+	connectorruntimemcp "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/mcp"
 )
 
 const (

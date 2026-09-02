@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	marketclient "github.com/tutti-os/tutti/packages/clients/market-go"
-	marketv1 "github.com/tutti-os/tutti/packages/clients/market-go/generated/sandbox/v1"
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
+	marketclient "github.com/xiaoheiCat/OpenTuttiVM/packages/clients/market-go"
+	marketv1 "github.com/xiaoheiCat/OpenTuttiVM/packages/clients/market-go/generated/sandbox/v1"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
 )
 
 const maxCatalogResponseBytes = marketclient.MaxResponseBodyBytes

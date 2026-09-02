@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	modelplanservice "github.com/tutti-os/tutti/services/tuttid/service/modelplan"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	modelplanservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelplan"
 )
 
 type modelPlanNativeSubscriptionProbe struct {

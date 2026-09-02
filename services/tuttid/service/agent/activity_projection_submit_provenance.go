@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	canonical "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	canonical "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 // ReportSubmitProvenance is a deliberately narrower contract than Report.

@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"strings"
 
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	connectorruntime "github.com/tutti-os/tutti/packages/connector/runtime"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	connectorruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime"
 )
 
 func (host *Host) deactivateConnector(request market.RuntimeDeactivationRequest) error {

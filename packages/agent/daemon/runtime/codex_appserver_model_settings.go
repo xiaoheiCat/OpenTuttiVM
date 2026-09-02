@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/modelcatalog"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/modelcatalog"
 )
 
 // codexAppServerExecState owns the mutable model/config snapshot used to build

@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	implementationhost "github.com/tutti-os/tutti/packages/connector/runtime/implementationhost"
-	"github.com/tutti-os/tutti/packages/connector/runtime/mcp"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	implementationhost "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/implementationhost"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/mcp"
 )
 
 func TestDirectRemoteMCPClientFactoryBuildsFixedGatewayRouteAndAuthorizesAccount(t *testing.T) {

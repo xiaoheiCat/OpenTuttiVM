@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	tuttimodeexecutionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	tuttimodeexecutionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 type wrappedMissingWakeSessionHost struct{}

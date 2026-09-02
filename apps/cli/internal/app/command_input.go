@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tutti-os/tutti/apps/cli/internal/daemon"
+	"github.com/xiaoheiCat/OpenTuttiVM/apps/cli/internal/daemon"
 )
 
 func parseCommandInput(command daemon.Capability, args []string) (map[string]any, error) {

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	implementationhost "github.com/tutti-os/tutti/packages/connector/runtime/implementationhost"
-	connectormcpserver "github.com/tutti-os/tutti/packages/connector/runtime/mcpserver"
+	implementationhost "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/implementationhost"
+	connectormcpserver "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/mcpserver"
 )
 
 const protocolVersion = "2026-07-28"

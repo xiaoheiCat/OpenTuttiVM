@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	hostconformance "github.com/tutti-os/tutti/packages/agent/host/conformance"
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	hostconformance "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host/conformance"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 	_ "modernc.org/sqlite"
 )
 

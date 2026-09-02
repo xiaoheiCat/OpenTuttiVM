@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	agentstore "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agentturnanalyticsbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentturnanalytics"
+	agentstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agentturnanalyticsbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentturnanalytics"
 )
 
 type agentTransactionParticipants []agentstore.TransactionParticipant

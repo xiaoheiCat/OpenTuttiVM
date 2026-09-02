@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
-	canonical "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
+	canonical "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func TestSubmittedTurnActivityEventProjectsCapabilityReferences(t *testing.T) {

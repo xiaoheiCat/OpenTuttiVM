@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	modelbindingbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelbinding"
-	modelpolicybiz "github.com/tutti-os/tutti/services/tuttid/biz/modelpolicy"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	modelbindingbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelbinding"
+	modelpolicybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelpolicy"
 )
 
 // BindingSource resolves the agent target binding that carries the default

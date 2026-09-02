@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
 )
 
 func configureAgentProviderGoalAdoption(controller *agentruntime.Controller, host *agenthost.Host) {

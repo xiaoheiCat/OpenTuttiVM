@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
 )
 
 const (

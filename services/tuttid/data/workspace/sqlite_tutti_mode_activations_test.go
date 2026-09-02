@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	activationbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeactivation"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	activationbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeactivation"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func TestSQLiteStoreTuttiModeActivationRevisionLifecycle(t *testing.T) {

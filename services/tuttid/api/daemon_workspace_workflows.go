@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	tuttimodeplanservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeplan"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	tuttimodeplanservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeplan"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 type TuttiModePlanService interface {

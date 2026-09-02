@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	canonical "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	canonical "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 const planImplementationPrompt = "Implement the plan."

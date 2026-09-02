@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 )
 
 func sessionForkInput() agenthost.ForkSessionInput {

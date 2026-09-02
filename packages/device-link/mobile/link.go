@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	devicelink "github.com/tutti-os/tutti/packages/device-link"
-	authenticated "github.com/tutti-os/tutti/packages/device-link/authenticated"
-	"github.com/tutti-os/tutti/packages/device-link/candidateexchange"
-	"github.com/tutti-os/tutti/packages/device-link/linkmanager"
-	"github.com/tutti-os/tutti/packages/device-link/relaytransport"
+	devicelink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link"
+	authenticated "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/authenticated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/candidateexchange"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/linkmanager"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/relaytransport"
 )
 
 const (

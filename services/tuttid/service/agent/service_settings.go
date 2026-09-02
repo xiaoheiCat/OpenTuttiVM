@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
 )
 
 func (s *Service) clampReasoningEffortForModel(

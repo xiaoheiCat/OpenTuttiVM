@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	agentextensionservice "github.com/tutti-os/tutti/services/tuttid/service/agentextension"
+	agentextensionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentextension"
 	"golang.org/x/sync/singleflight"
 )
 

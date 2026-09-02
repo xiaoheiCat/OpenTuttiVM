@@ -5,11 +5,11 @@ import (
 	"errors"
 	"strings"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	agentstoresqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	agentstoresqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 type issueRunAgentSessionCreator interface {

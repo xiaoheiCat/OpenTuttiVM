@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
 )
 
 func (s *Service) Delete(ctx context.Context, workspaceID string, agentSessionID string) (DeleteSessionResult, error) {

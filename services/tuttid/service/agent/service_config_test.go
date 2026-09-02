@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
 )
 
 func TestConfiguredServiceReturnsPrecomposedApplicationHost(t *testing.T) {

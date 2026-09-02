@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	tuttiapi "github.com/tutti-os/tutti/services/tuttid/api"
-	accountservice "github.com/tutti-os/tutti/services/tuttid/service/account"
-	accountrealtimeservice "github.com/tutti-os/tutti/services/tuttid/service/accountrealtime"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
-	mobileremoteservice "github.com/tutti-os/tutti/services/tuttid/service/mobileremote"
-	userpresenceservice "github.com/tutti-os/tutti/services/tuttid/service/userpresence"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttiapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api"
+	accountservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/account"
+	accountrealtimeservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/accountrealtime"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
+	mobileremoteservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/mobileremote"
+	userpresenceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/userpresence"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func (w *tuttiWiring) configureAccountRealtime(api *tuttiapi.DaemonAPI, account *accountservice.Service) error {

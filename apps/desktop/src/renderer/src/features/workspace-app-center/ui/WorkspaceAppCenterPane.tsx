@@ -74,7 +74,7 @@ const communityAppDeveloperOverrides: Record<
 > = {
   "group-chat": {
     name: "svenzeng",
-    url: "https://github.com/tutti-os/tutti"
+    url: "https://github.com/xiaoheiCat/OpenTuttiVM"
   }
 };
 

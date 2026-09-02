@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	modelpolicybiz "github.com/tutti-os/tutti/services/tuttid/biz/modelpolicy"
+	modelpolicybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelpolicy"
 )
 
 // ErrModelPolicyNotFound reports a missing model usage policy row.

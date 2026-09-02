@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
 )
 
 type agentActivityUpdatedDataHeader struct {

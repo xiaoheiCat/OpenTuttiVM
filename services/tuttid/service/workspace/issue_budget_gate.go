@@ -3,8 +3,8 @@ package workspace
 import (
 	"context"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
 )
 
 func issueAutomaticBudgetSlots(issue workspaceissues.Issue, activeRunCount int) int {

@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	replay "github.com/tutti-os/tutti/packages/agent/session-replay"
-	canonical "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
+	canonical "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 const (

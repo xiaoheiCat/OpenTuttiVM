@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 // IssueAttachmentLaunchPins keeps managed source images alive between a Run's

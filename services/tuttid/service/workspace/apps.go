@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
-	workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	builtinapps "github.com/tutti-os/tutti/services/tuttid/builtin-apps"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	appcliservice "github.com/tutti-os/tutti/services/tuttid/service/cli/appcli"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
+	workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	builtinapps "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/builtin-apps"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	appcliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli/appcli"
 )
 
 type AppCenterService struct {

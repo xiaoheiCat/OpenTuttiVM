@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	agentextensionbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentextension"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
+	agentextensionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentextension"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
 )
 
 const (

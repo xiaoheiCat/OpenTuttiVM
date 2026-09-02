@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	modelbindingbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelbinding"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	workspaceagentbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceagent"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	modelbindingbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelbinding"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	workspaceagentbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceagent"
 )
 
 func TestSQLiteStoreWorkspaceAgentRoundTrip(t *testing.T) {

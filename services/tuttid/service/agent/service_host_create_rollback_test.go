@@ -5,12 +5,12 @@ import (
 	"errors"
 	"testing"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 type unavailableSessionReader struct {

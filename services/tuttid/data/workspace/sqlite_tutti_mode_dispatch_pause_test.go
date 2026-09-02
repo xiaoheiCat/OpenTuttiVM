@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
-	executionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
+	executionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
 )
 
 func TestTuttiModeDispatchPauseFencesMainWakeDelivery(t *testing.T) {

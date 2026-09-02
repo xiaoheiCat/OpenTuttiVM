@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
-	deviceauthority "github.com/tutti-os/tutti/packages/clients/device-authority-go"
-	mobileremotebiz "github.com/tutti-os/tutti/services/tuttid/biz/mobileremote"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
+	deviceauthority "github.com/xiaoheiCat/OpenTuttiVM/packages/clients/device-authority-go"
+	mobileremotebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/mobileremote"
 )
 
 var (

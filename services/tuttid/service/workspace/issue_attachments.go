@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 const (

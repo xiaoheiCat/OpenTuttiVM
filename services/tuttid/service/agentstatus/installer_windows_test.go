@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 func TestRunOfficialScriptInstallerRejectsUnixScriptOnNativeWindows(t *testing.T) {

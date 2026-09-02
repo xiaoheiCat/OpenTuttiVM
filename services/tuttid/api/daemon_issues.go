@@ -5,11 +5,11 @@ import (
 	"encoding/base64"
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	workspaceapi "github.com/tutti-os/tutti/services/tuttid/api/workspace"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	workspaceapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/workspace"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 func (api DaemonAPI) ListWorkspaceIssues(ctx context.Context, request tuttigenerated.ListWorkspaceIssuesRequestObject) (tuttigenerated.ListWorkspaceIssuesResponseObject, error) {

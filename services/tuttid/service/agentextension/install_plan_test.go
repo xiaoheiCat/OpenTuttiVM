@@ -13,10 +13,10 @@ import (
 	"strings"
 	"testing"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	agentextensiondata "github.com/tutti-os/tutti/services/tuttid/data/agentextension"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	agentextensiondata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/agentextension"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 type workspaceLookupStub struct {

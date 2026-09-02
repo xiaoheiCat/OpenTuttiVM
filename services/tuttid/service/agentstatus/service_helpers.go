@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/managednpm"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerstatus"
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
-	claudecodeservice "github.com/tutti-os/tutti/services/tuttid/service/claudecode"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/managednpm"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerstatus"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
+	claudecodeservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/claudecode"
 )
 
 func (s Service) probeCommandWithReadyAfter(

@@ -1,6 +1,6 @@
 # Activity Replication
 
-`github.com/tutti-os/tutti/packages/agent/activity-replication` is the official
+`github.com/xiaoheiCat/OpenTuttiVM/packages/agent/activity-replication` is the official
 versioned JSON contract for uploading canonical agent activity snapshots to a
 cloud projection.
 

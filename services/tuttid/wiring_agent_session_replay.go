@@ -4,13 +4,13 @@ import (
 	"context"
 	"log/slog"
 
-	agentdaemon "github.com/tutti-os/tutti/packages/agent/daemon"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	tuttiapi "github.com/tutti-os/tutti/services/tuttid/api"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	replaydata "github.com/tutti-os/tutti/services/tuttid/data/agentsessionreplay"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	replayservice "github.com/tutti-os/tutti/services/tuttid/service/agentsessionreplay"
+	agentdaemon "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	tuttiapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	replaydata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/agentsessionreplay"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	replayservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentsessionreplay"
 )
 
 const agentSessionReplayLocalUserID = "tutti-local-user"

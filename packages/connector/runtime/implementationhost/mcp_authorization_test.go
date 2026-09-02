@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	"github.com/tutti-os/tutti/packages/connector/runtime/mcp"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/mcp"
 )
 
 func TestWrapRemoteMCPAuthorizationErrorMapsPreconditionRequired(t *testing.T) {

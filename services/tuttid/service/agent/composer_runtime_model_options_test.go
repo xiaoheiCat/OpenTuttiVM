@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/modelcatalog"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/modelcatalog"
 )
 
 func TestComposerModelOptionsFromCanonicalCatalogDeduplicatesModelIDs(t *testing.T) {

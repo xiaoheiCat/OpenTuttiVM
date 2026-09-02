@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/liveprotocol"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/liveprotocol"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
 )
 
 func TestAgentRuntimeActivityEventBridgePublishesMessageDeltaToBusinessWebSocket(t *testing.T) {

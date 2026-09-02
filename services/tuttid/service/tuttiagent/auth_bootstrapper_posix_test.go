@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
 )
 
 type authProviderCommandResolverStub struct {

@@ -1,0 +1,333 @@
+name: open-tutti-release
+
+# Push to main: validate, cut the next version tag, build server and
+# client, publish the server image to ghcr.io and open a GitHub Release
+# carrying the client artifacts.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: open-tutti-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Go workspace
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.5"
+          cache: false
+      - name: Build + vet + test
+        run: |
+          go build github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
+          go vet github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
+          go test github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/... github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/... github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/... github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/...
+      - name: Compute next version tag
+        id: version
+        run: |
+          # OpenTuttiVM owns its own tag namespace (otv-v*) so the
+          # repository-wide desktop v* tags stay untouched.
+          last=$(git tag -l 'otv-v*' --sort=-v:refname | head -1 || true)
+          if [ -z "$last" ]; then
+            tag="otv-v0.1.0"
+          else
+            tag=$(python3 - "$last" <<'EOF'
+          import sys
+          major, minor, patch = sys.argv[1][len("otv-v"):].split(".")
+          print(f"otv-v{major}.{minor}.{int(patch)+1}")
+          EOF
+            )
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "next tag: $tag"
+
+  validate-windows:
+    name: Validate Go workspace (native windows)
+    runs-on: windows-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.5"
+          cache: false
+      - name: Build + vet + test
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          # Publication must not outrun native-Windows validation: the
+          # windows room-sync artifact ships in the release, and the
+          # separate push CI workflow cannot block this pipeline.
+          # PowerShell: an ARRAY splats into separate native arguments;
+          # a joined string would arrive as one malformed import path.
+          $mods = @(
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/..."
+          )
+          go build $mods
+          go vet $mods
+          go test $mods
+
+  validate-macos:
+    name: Validate Go workspace (native macos)
+    runs-on: macos-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.5"
+          cache: false
+        # The release publishes Darwin room-sync binaries, but the push
+        # CI's macOS lane cannot block THIS pipeline — a Darwin-only
+        # failure would coexist with published Darwin assets and a
+        # promoted :latest image. Native validation gates publication.
+      - name: Build + vet + test
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          mods=(
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-server/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-room-sync/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/services/open-tutti-fs/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/borrow/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-protocol/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-roomfs/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-cas/..."
+            "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/vm-sync/..."
+          )
+          go build "${mods[@]}"
+          go vet "${mods[@]}"
+          go test "${mods[@]}"
+
+  server-image:
+    name: Server image → ghcr.io
+    runs-on: ubuntu-latest
+    # The image push publishes BOTH the version tag and the mutable
+    # :latest to GHCR — it must not land while any release-validation
+    # lane (native Windows included) can still fail, or an unqualified
+    # partial release goes live with no matching GitHub release.
+    # Gating on the client jobs keeps GHCR's version tag and mutable
+    # :latest in step with the GitHub release: pushing the image while
+    # desktop/runtime packaging still runs would promote a partial
+    # release that the (possibly failed) release job can no longer match.
+    needs: [validate, validate-windows, validate-macos, client-desktop, client-runtimes]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Compute lowercase image name
+        id: image
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "name=ghcr.io/${owner}/open-tutti-server" >> "$GITHUB_OUTPUT"
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/open-tutti-server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ needs.validate.outputs.tag }}
+            ${{ steps.image.outputs.name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+  client-desktop:
+    name: Client desktop (${{ matrix.build }})
+    runs-on: ${{ matrix.os }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            build: build:mac
+            artifact: mac
+          - os: windows-latest
+            build: build:win
+            artifact: win
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Derive installer version
+        # The installers embed the OTV release tag as their semver: the
+        # shallow checkout cannot see the not-yet-existing otv-v* tag,
+        # so the fallback would stamp a "0.0.0-<sha>" hash prerelease
+        # whose ordering contradicts the release chronology (update
+        # comparisons could treat a newer OpenTutti release as older).
+        shell: bash
+        run: |
+          v="${{ needs.validate.outputs.tag }}"
+          v="${v#otv-v}"
+          echo "TUTTI_DESKTOP_BUILD_VERSION=$v" >> "$GITHUB_ENV"
+          echo "installer version: $v"
+      - name: Build renderer + main
+        run: pnpm --filter @tutti-os/desktop build
+      - name: Package (${{ matrix.build }})
+        run: pnpm --filter @tutti-os/desktop ${{ matrix.build }}
+        env:
+          # Unsigned CI artifacts; signing secrets attach via repository
+          # variables when available.
+          OT_RELEASE_CHANNEL: ci
+      - name: Collect artifacts
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          # A missing installer must FAIL this job: swallowing it with
+          # `|| true` plus a warn-only upload would let the release job
+          # publish a GitHub release silently missing the macOS or
+          # Windows client while other artifacts keep release-assets/*
+          # nonempty.
+          find apps/desktop -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} artifacts/ \;
+          if [ -z "$(ls artifacts/ 2>/dev/null)" ]; then
+            echo "::error::no desktop installer produced for this platform"
+            exit 1
+          fi
+          ls -la artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-${{ matrix.artifact }}
+          path: artifacts/
+          if-no-files-found: error
+
+  client-runtimes:
+    name: Client runtimes (room-sync)
+    runs-on: ubuntu-latest
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.5"
+          cache: false
+      - name: Build open-tutti-room-sync
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+          GOTOOLCHAIN: local
+        run: |
+          # The per-device collaboration runtime ships beside the desktop
+          # client: without it the released client cannot join the room
+          # topology.
+          ext=""
+          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          out="open-tutti-room-sync-${GOOS}-${GOARCH}${ext}"
+          go -C services/open-tutti-room-sync build -trimpath -ldflags="-s -w" -o "../../dist/${out}" .
+          cd dist && sha256sum "${out}" > "${out}.sha256"
+      - name: Build open-tutti-fs (linux)
+        # The Room FS Protocol mount ships with the release too: the
+        # documented Linux-container topology needs this executable
+        # inside the room container, and nothing else packages it (no
+        # room VM image exists). It is Linux-only (fsmount build tag),
+        # statically linked, and rides the same per-OS/arch artifact.
+        if: matrix.goos == 'linux'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+          GOTOOLCHAIN: local
+        run: |
+          out="open-tutti-fs-${GOOS}-${GOARCH}"
+          go -C services/open-tutti-fs build -trimpath -ldflags="-s -w" -o "../../dist/${out}" .
+          cd dist && sha256sum "${out}" > "${out}.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-runtime-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    needs: [validate, validate-windows, validate-macos, server-image, client-desktop, client-runtimes]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          GITHUB_SHA: ${{ github.sha }}
+          OWNER_LC: ${{ github.repository_owner }}
+        run: |
+          owner=$(echo "$OWNER_LC" | tr '[:upper:]' '[:lower:]')
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+            # An interrupted first attempt (canceled job, transient
+            # API failure mid-asset-upload) leaves a DRAFT behind:
+            # upload has no publish behavior, so retrying the upload
+            # alone kept a fully-uploaded release hidden forever while
+            # its GHCR images were already live. Publish the draft and
+            # keep it Latest per the repository owner's policy.
+            if gh release view "$TAG" --json isDraft --jq .isDraft | grep -q true; then
+              gh release edit "$TAG" --draft=false --latest
+            fi
+          else
+            # --target pins the release to the commit this workflow
+            # validated, even if main advances mid-build. Every push to
+            # main promotes this release to GitHub Latest by design
+            # (repository owner's explicit choice).
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "OpenTuttiVM $TAG" \
+              --notes "Automated release from main.
+
+          Server image: \`ghcr.io/${owner}/open-tutti-server:${TAG}\` (also \`:latest\`)" \
+              --latest \
+              release-assets/*
+          fi

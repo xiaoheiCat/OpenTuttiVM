@@ -6,10 +6,10 @@ import (
 	"math"
 	"strings"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	mobileremotebiz "github.com/tutti-os/tutti/services/tuttid/biz/mobileremote"
-	mobileremoteservice "github.com/tutti-os/tutti/services/tuttid/service/mobileremote"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	mobileremotebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/mobileremote"
+	mobileremoteservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/mobileremote"
 )
 
 type MobileRemoteService interface {

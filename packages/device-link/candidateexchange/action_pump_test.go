@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/device-link/authenticated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/authenticated"
 )
 
 func TestActionPumpOwnsPublishRetryAndRemoteRefresh(t *testing.T) {

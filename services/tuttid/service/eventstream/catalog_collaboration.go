@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	collabrunbiz "github.com/tutti-os/tutti/services/tuttid/biz/collabrun"
+	collabrunbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/collabrun"
 )
 
 type agentCollaborationUpdatedPayload struct {

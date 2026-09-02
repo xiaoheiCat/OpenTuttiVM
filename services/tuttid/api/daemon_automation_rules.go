@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	automationrulebiz "github.com/tutti-os/tutti/services/tuttid/biz/automationrule"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	automationruleservice "github.com/tutti-os/tutti/services/tuttid/service/automationrule"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	automationrulebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/automationrule"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	automationruleservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/automationrule"
 )
 
 type AutomationRuleService interface {

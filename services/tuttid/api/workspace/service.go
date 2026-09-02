@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 type CatalogService interface {

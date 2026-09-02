@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
 )
 
 func TestRegisterDaemonCodexPreparerCreatesPersonalSkillRootForFreshUser(t *testing.T) {

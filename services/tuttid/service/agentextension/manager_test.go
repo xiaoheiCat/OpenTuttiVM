@@ -22,13 +22,13 @@ import (
 	"testing"
 	"time"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	agentextensiondata "github.com/tutti-os/tutti/services/tuttid/data/agentextension"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	agentextensiondata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/agentextension"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 type targetStoreStub struct {

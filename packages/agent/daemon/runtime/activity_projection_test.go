@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
-	"github.com/tutti-os/tutti/packages/agent/daemon/liveprotocol"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/liveprotocol"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func TestACPNormalizerProjectsSemanticMessageDeltaWithoutSnapshotDiff(t *testing.T) {

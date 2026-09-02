@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/clients/market-go
+module github.com/xiaoheiCat/OpenTuttiVM/packages/clients/market-go
 
 go 1.24.3
 

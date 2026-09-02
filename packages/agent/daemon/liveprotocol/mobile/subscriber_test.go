@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/liveprotocol"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/liveprotocol"
 )
 
 func TestSubscriberAppliesContiguousFrame(t *testing.T) {

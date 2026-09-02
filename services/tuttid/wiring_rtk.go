@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 const tuttiBundledRTKPathEnv = "TUTTI_BUNDLED_RTK_PATH"

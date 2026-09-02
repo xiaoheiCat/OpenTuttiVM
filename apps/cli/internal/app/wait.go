@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/apps/cli/internal/daemon"
+	"github.com/xiaoheiCat/OpenTuttiVM/apps/cli/internal/daemon"
 )
 
 const appHandlerRequestTimeoutMargin = 30 * time.Second

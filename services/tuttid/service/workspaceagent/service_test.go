@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
-	workspaceagentbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceagent"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
+	workspaceagentbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceagent"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 type memoryAgentStore struct {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	modelplanbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelplan"
+	modelplanbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelplan"
 )
 
 type recordingNativeSubscriptionProbe struct {

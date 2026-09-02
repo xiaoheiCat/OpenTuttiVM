@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtimecmd"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtimecmd"
 )
 
 func codexRuntimeSelectionNeedsUserInput(runtime providerRuntimeResolution) bool {

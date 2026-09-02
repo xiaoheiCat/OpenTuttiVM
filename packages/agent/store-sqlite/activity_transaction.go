@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	agentactivityprojection "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agentactivityprojection "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func (s *Store) upsertAgentSession(

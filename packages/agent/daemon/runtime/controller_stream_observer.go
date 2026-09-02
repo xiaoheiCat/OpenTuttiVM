@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 type projectedActivityEventBatch struct {

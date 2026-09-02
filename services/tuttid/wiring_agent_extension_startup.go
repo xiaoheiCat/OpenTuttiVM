@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	agentextensionservice "github.com/tutti-os/tutti/services/tuttid/service/agentextension"
+	agentextensionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentextension"
 )
 
 func startAgentExtensionReconcilers(setup *agentextensionservice.SetupService) error {

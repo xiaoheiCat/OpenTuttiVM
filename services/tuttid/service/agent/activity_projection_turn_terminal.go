@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agentturnanalyticsbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentturnanalytics"
-	agentturnterminal "github.com/tutti-os/tutti/services/tuttid/service/reporter/events/agent/turn_terminal"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agentturnanalyticsbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentturnanalytics"
+	agentturnterminal "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter/events/agent/turn_terminal"
 )
 
 const (

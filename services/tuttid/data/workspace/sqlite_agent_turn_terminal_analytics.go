@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	agentturnanalyticsbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentturnanalytics"
+	agentturnanalyticsbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentturnanalytics"
 )
 
 const terminalAnalyticsClaimScanLimit = 64

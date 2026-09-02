@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	builtinapps "github.com/tutti-os/tutti/services/tuttid/builtin-apps"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	builtinapps "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/builtin-apps"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 func TestAppCenterServiceListDoesNotPreloadRuntimeForUninstalledApps(t *testing.T) {

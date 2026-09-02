@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	connectorhost "github.com/tutti-os/tutti/packages/connector/daemon/core"
+	connectorhost "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
 )
 
 func TestDirectFetcherDownloadsMarketArtifactDirectly(t *testing.T) {

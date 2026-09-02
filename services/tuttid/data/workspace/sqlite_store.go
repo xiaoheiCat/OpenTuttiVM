@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	agentstore "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	agentstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 	sqlitedriver "modernc.org/sqlite"
 )
 

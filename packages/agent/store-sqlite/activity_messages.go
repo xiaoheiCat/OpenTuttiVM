@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	agentactivityprojection "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agentactivityprojection "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func incrementAgentSessionMessageVersion(ctx context.Context, tx *sql.Tx, workspaceID, agentSessionID string) (uint64, error) {

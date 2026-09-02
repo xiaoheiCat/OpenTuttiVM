@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	preferencesservice "github.com/tutti-os/tutti/services/tuttid/service/preferences"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	preferencesservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/preferences"
 )
 
 type preferencesMutatorStub struct {

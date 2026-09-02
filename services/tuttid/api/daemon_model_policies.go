@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	modelpolicybiz "github.com/tutti-os/tutti/services/tuttid/biz/modelpolicy"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	modelpolicyservice "github.com/tutti-os/tutti/services/tuttid/service/modelpolicy"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	modelpolicybiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelpolicy"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	modelpolicyservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelpolicy"
 )
 
 type ModelPolicyService interface {

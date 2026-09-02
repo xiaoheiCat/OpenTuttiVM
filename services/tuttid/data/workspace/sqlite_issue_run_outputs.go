@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
 )
 
 // SearchRunOutputs matches output files by display name across one workspace,

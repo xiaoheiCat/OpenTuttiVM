@@ -37,6 +37,15 @@ Join the [Tutti · VM waitlist](https://tutti.sh/waitlist).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
 
+## OpenTuttiVM Standalone Boundary
+
+The checked-in OpenTuttiVM Go services are standalone collaboration building
+blocks, not the complete Tutti Desktop product. They do not yet provide
+Desktop Docker project orchestration, persistent Full Replica storage across
+room-sync restarts, or real Host-backed agent borrowing. Standalone room-sync
+uses a fail-closed observation-only host for borrowing and must not be read as
+implementing the full Desktop/Host integration.
+
 ## What is Tutti?
 
 Claude Code is powerful. So is Codex. So is Canvas. So is Claude Design.
@@ -247,7 +256,7 @@ No. Tutti is useful for coding, design, content, app workflows, and any work whe
 
 ## Contributors
 
-[![Contributors](https://contrib.rocks/image?repo=tutti-os/tutti)](https://github.com/tutti-os/tutti/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=tutti-os/tutti)](https://github.com/xiaoheiCat/OpenTuttiVM/graphs/contributors)
 
 ## Community & Contributing
 

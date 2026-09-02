@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	authbridge "github.com/tutti-os/tutti/packages/auth/bridge-go"
+	authbridge "github.com/xiaoheiCat/OpenTuttiVM/packages/auth/bridge-go"
 )
 
 type fixedAccountSession struct{ cookie string }

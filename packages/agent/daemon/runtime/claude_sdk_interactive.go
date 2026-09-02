@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 const claudeSDKInteractiveAckTimeout = 30 * time.Second

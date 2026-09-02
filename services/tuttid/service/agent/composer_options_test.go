@@ -6,9 +6,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/modelcatalog"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/modelcatalog"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 )
 
 func TestGetComposerOptionsUsesTargetDefaultsAndSparseRequestOverrides(t *testing.T) {

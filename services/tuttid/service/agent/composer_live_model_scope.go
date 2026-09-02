@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 const accountLiveModelCacheScope = "account"

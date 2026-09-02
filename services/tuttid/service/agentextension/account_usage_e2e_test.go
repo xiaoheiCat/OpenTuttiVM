@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	agentextensiondata "github.com/tutti-os/tutti/services/tuttid/data/agentextension"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	agentextensiondata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/agentextension"
 )
 
 func TestAccountUsageProbeE2EInstallsActualNPMPackage(t *testing.T) {

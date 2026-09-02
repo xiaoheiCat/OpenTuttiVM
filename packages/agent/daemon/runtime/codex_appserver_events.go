@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 // handleAppServerMessage routes codex app-server server->client traffic.

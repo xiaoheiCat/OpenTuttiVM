@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/composercatalog"
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/composercatalog"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 )
 
 func (s *Service) connectorCatalogVisible(ctx context.Context) (bool, error) {

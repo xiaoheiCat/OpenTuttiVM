@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	modelbindingbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelbinding"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	modelbindingservice "github.com/tutti-os/tutti/services/tuttid/service/modelbinding"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	modelbindingbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelbinding"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	modelbindingservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelbinding"
 )
 
 type AgentModelBindingService interface {

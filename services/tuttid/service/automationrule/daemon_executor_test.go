@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	automationrulebiz "github.com/tutti-os/tutti/services/tuttid/biz/automationrule"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	automationrulebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/automationrule"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 func TestAutomationLaunchPromptComposesInstructionMentionAndEventNote(t *testing.T) {

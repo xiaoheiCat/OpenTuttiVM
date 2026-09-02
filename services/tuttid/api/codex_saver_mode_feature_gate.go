@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 )
 
 func (api DaemonAPI) codexSaverModeEnabled(ctx context.Context) bool {

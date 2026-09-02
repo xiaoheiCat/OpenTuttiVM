@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
 )
 
 type submitProvenanceCaptureReporter struct {

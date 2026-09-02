@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 type unavailableAgentExtensionResumeResolver struct{}

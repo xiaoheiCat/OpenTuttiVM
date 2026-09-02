@@ -1,8 +1,8 @@
 package hostadapter
 
 import (
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	host "github.com/tutti-os/tutti/packages/agent/host"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	host "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
 )
 
 func runtimeMCPServerBindings(input []host.MCPServerBinding) []agentruntime.MCPServerBinding {

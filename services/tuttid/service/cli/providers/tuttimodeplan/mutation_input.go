@@ -7,9 +7,9 @@ import (
 	"io"
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 type mutationOperationInput struct {

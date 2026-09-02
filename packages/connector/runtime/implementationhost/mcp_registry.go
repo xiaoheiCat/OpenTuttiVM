@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	connectorruntime "github.com/tutti-os/tutti/packages/connector/runtime"
-	connectormcp "github.com/tutti-os/tutti/packages/connector/runtime/mcp"
+	connectorruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime"
+	connectormcp "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/mcp"
 )
 
 // MCPTool is the connector-scoped projection exposed by the local connector

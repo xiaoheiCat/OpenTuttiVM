@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
 )
 
 // ReleaseInstaller composes the same-machine artifact and optional CLI

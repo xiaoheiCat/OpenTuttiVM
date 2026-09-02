@@ -20,7 +20,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	"github.com/tutti-os/tutti/services/tuttid/service/usercommand"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/usercommand"
 )
 
 const testClaudeVersion = "2.1.201"

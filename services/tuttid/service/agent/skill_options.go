@@ -13,9 +13,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	"github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
 )
 
 const (

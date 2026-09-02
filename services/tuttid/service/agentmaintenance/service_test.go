@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 type maintenanceHostStub struct {

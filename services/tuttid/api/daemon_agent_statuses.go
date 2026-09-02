@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"strings"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	agentproviderbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	agentstatusservice "github.com/tutti-os/tutti/services/tuttid/service/agentstatus"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	agentproviderbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	agentstatusservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentstatus"
 )
 
 func agentStatusServiceUnavailableError() tuttigenerated.ServiceUnavailableErrorJSONResponse {

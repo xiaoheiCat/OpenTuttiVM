@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	userpresenceservice "github.com/tutti-os/tutti/services/tuttid/service/userpresence"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	userpresenceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/userpresence"
 )
 
 type userPresenceServiceStub struct {

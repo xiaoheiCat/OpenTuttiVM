@@ -6,11 +6,11 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
-	tuttimodeexecutionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
+	tuttimodeexecutionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
 )
 
 // Run lifecycle: create and settle. Tutti-mode checkpoint wakes are durable

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
 )
 
 func TestCursorAdapterInjectsPreparedContextIntoFirstProviderPromptOnly(t *testing.T) {

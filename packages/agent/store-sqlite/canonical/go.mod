@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical
+module github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical
 
 go 1.24.3
 

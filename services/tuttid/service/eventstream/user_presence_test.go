@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	userpresenceservice "github.com/tutti-os/tutti/services/tuttid/service/userpresence"
+	userpresenceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/userpresence"
 )
 
 func TestUserPresencePublisherEmitsRendererUpdate(t *testing.T) {

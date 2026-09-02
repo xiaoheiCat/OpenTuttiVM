@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 const (

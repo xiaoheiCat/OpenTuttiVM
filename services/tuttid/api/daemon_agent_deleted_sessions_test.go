@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"testing"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	agentmaintenance "github.com/tutti-os/tutti/services/tuttid/service/agentmaintenance"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	agentmaintenance "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentmaintenance"
 )
 
 type stubWorkspaceDeletedAgentSessionService struct {

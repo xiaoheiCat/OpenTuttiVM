@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	computersvc "github.com/tutti-os/tutti/services/tuttid/service/computer"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	computersvc "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/computer"
 )
 
 func TestNativeToolCommandsAreRegistered(t *testing.T) {

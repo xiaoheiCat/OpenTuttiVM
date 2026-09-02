@@ -36,8 +36,8 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	"github.com/tutti-os/tutti/services/tuttid/service/usercommand"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/usercommand"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 const (

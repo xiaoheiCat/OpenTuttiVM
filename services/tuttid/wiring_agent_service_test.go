@@ -3,8 +3,8 @@ package main
 import (
 	"testing"
 
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	eventstreamservice "github.com/tutti-os/tutti/services/tuttid/service/eventstream"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	eventstreamservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/eventstream"
 )
 
 type recordingAgentAuthInvalidationSessions struct {

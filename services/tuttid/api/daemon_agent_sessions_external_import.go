@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	userprojectservice "github.com/tutti-os/tutti/services/tuttid/service/userproject"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	userprojectservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/userproject"
 )
 
 func (api DaemonAPI) ScanWorkspaceExternalAgentSessionImports(ctx context.Context, request tuttigenerated.ScanWorkspaceExternalAgentSessionImportsRequestObject) (tuttigenerated.ScanWorkspaceExternalAgentSessionImportsResponseObject, error) {

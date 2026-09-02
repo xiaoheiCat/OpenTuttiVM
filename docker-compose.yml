@@ -1,0 +1,60 @@
+# OpenTuttiVM server deployment: the bare collaboration server only.
+# Agents NEVER run here — every user's agents run in their own Docker
+# Desktop Linux VM; this server is just the meeting room, the source of
+# truth for shared state, and the relay for cross-device traffic.
+services:
+  open-tutti-server:
+    build:
+      context: .
+      dockerfile: services/open-tutti-server/Dockerfile
+    restart: unless-stopped
+    networks:
+      - open-tutti
+    # Bridge networking is portable across Docker Desktop and Linux. Keep the
+    # host-side publication loopback-only; remote access needs an explicit TLS
+    # reverse-proxy override.
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      OPEN_TUTTI_SECRET: ${OPEN_TUTTI_SECRET:?set OPEN_TUTTI_SECRET in .env or the environment}
+      OPEN_TUTTI_LISTEN_ADDR: 127.0.0.1:8081
+      OPEN_TUTTI_PUBLIC_URL: http://localhost:8080
+    env_file:
+      - path: ./.env
+        required: false
+    volumes:
+      - open-tutti-data:/data
+    # The server remains loopback-only even inside the container. socat is the
+    # deliberately dumb container-internal forwarder for Docker's port map.
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - >-
+        set -u;
+        /usr/local/bin/open-tutti-server & server_pid=$$!;
+        socat TCP-LISTEN:8080,bind=0.0.0.0,reuseaddr,fork TCP:127.0.0.1:8081 & socat_pid=$$!;
+        watch_server() {
+          wait "$$server_pid" 2>/dev/null || true;
+          kill -TERM "$$socat_pid" 2>/dev/null || true;
+        };
+        watch_server & watcher_pid=$$!;
+        stop() {
+          trap - TERM INT;
+          kill -TERM "$$server_pid" "$$socat_pid" "$$watcher_pid" 2>/dev/null || true;
+          wait "$$server_pid" 2>/dev/null || true;
+          wait "$$socat_pid" 2>/dev/null || true;
+          wait "$$watcher_pid" 2>/dev/null || true;
+        };
+        trap stop TERM INT;
+        status=0;
+        wait "$$socat_pid" 2>/dev/null || status=$$?;
+        stop;
+        exit "$$status"
+
+volumes:
+  open-tutti-data:
+
+networks:
+  open-tutti:
+    driver: bridge

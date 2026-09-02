@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	agentextensionbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentextension"
+	agentextensionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentextension"
 )
 
 func TestSetupServiceCloseCancelsWorkerWaitsAndPersistsInterrupted(t *testing.T) {

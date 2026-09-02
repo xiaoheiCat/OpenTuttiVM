@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
 )
 
 // Codex app-server JSON-RPC methods used by the adapter. The app-server

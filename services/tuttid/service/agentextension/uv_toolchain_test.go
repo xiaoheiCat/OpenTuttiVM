@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func TestResolveManagedUVToolchainDownloadsVerifiesAndCaches(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 func testActiveTuttiModeSnapshot() *TuttiModeTurnSnapshot {

@@ -3,7 +3,7 @@ package tuttimodeplan
 import (
 	"fmt"
 
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
 )
 
 func validateRevisionPhase(checkpoint workflowbiz.WorkflowCheckpoint, phase PlanPhase) error {

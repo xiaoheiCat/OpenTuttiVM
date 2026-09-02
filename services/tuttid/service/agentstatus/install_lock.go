@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 const (

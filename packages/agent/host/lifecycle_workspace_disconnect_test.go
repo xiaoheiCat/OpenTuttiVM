@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 )
 
 type workspaceDisconnectRuntime struct {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 )
 
 type connectorModulePreferencesReader struct {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	activationbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeactivation"
+	activationbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeactivation"
 )
 
 type tuttiModeActivationRowQuerier interface {

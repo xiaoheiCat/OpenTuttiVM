@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
 )
 
 func TestSourceDeletionGuardRejectsWholeExactClosureAndReportsTerminalAttempt(t *testing.T) {

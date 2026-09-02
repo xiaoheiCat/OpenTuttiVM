@@ -6,10 +6,10 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	tuttimodeactivationbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeactivation"
-	tuttimodeactivationservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeactivation"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	tuttimodeactivationbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeactivation"
+	tuttimodeactivationservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeactivation"
 )
 
 type TuttiModeActivationService interface {

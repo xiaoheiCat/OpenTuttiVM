@@ -9,15 +9,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerstatus"
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerstatus"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 
-	agentproviderbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	externalagentregistry "github.com/tutti-os/tutti/services/tuttid/service/externalagentregistry"
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
+	agentproviderbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	externalagentregistry "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/externalagentregistry"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
 )
 
 type AvailabilityStatus string

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	replay "github.com/tutti-os/tutti/packages/agent/session-replay"
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func TestStreamingReportCoalescerKeepsLatestMessageSnapshot(t *testing.T) {

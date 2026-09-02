@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	managedcredentialsservice "github.com/tutti-os/tutti/services/tuttid/service/managedcredentials"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	managedcredentialsservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedcredentials"
 )
 
 const providerID = "managed-model"

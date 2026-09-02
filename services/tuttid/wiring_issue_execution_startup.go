@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	tuttimodeexecutionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	tuttimodeexecutionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 func recoverIssueExecutionsAtStartup(

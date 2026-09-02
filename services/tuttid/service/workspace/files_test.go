@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
-	localworkspace "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
+	localworkspace "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 )
 
 func TestFileServiceResolveWorkspaceRootDefaultsToUserHome(t *testing.T) {

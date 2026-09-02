@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	tuttimodeexecutionconformance "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution/conformance"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	tuttimodeexecutionconformance "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution/conformance"
 )
 
 func (driver *sqliteConformanceDriver) SeedLegacyExecution(

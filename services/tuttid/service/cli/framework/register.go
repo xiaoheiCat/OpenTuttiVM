@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 func Register[T any](spec CommandSpec[T]) cliservice.Command {

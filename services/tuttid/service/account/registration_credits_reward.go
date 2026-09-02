@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/commerce"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/commerce"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 const registrationCreditsRewardStateFile = "registration-credits-reward.json"

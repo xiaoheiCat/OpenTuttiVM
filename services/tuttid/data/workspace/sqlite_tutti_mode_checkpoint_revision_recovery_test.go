@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	executionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	executionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
 )
 
 func TestPrepareDueTuttiModeExecutionWatchdogsRebindsStaleActiveCheckpointRevision(

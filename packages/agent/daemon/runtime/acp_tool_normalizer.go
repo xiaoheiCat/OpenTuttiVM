@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
 )
 
 func acpToolCallEvent(session Session, turnID string, update map[string]any) (activityshared.Event, bool) {

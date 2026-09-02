@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentanalytics"
-	agentnoderesult "github.com/tutti-os/tutti/services/tuttid/service/reporter/events/agent/node_result"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentanalytics"
+	agentnoderesult "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter/events/agent/node_result"
 )
 
 type providerSetupNodeResultInput struct {

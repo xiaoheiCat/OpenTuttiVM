@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	browsersvc "github.com/tutti-os/tutti/services/tuttid/service/browser"
-	computersvc "github.com/tutti-os/tutti/services/tuttid/service/computer"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	browsersvc "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/browser"
+	computersvc "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/computer"
 )
 
 func configureAgentRuntimeAvailability(

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func (s *AppFactoryService) Cancel(ctx context.Context, workspaceID string, jobID string) (workspacebiz.AppFactoryJob, error) {

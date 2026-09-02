@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	hostconformance "github.com/tutti-os/tutti/packages/agent/host/conformance"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	hostconformance "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host/conformance"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func TestServiceAdapterDeletedSessionLifecycleConformance(t *testing.T) {

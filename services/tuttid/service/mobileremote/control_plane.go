@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
-	mobileremotebiz "github.com/tutti-os/tutti/services/tuttid/biz/mobileremote"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
+	mobileremotebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/mobileremote"
 )
 
 const (

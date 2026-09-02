@@ -5,8 +5,8 @@ package tuttigoalreview
 import (
 	"context"
 
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	tuttimodeexecutionservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeexecution"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	tuttimodeexecutionservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeexecution"
 )
 
 const appID = "tutti-goal-review"

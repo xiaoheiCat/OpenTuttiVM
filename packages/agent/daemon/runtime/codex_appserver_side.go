@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/runtime/codexproto"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime/codexproto"
 )
 
 const codexSideDeveloperInstructions = `You are operating in a Side conversation forked from a parent thread.

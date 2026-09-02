@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	managedruntime "github.com/tutti-os/tutti/services/tuttid/service/managedruntime"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	managedruntime "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/managedruntime"
 )
 
 const (

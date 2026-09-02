@@ -3,7 +3,7 @@ package framework
 import (
 	"context"
 
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 type CommandKind string

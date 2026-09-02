@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 	"golang.org/x/mod/semver"
 )
 

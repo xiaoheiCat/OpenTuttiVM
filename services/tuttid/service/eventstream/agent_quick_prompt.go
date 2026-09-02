@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	eventprotocol "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
-	agentquickpromptbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentquickprompt"
+	eventprotocol "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
+	agentquickpromptbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentquickprompt"
 )
 
 type AgentQuickPromptPublisher struct {

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 func TestListCliCapabilitiesAppliesProviderFiltersByDefault(t *testing.T) {

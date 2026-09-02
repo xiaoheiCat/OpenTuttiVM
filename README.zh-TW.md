@@ -255,7 +255,7 @@ Tutti · VM 要解決的是：當工作往外走，不同人、不同設備、�
 
 ## 貢獻者
 
-[![Contributors](https://contrib.rocks/image?repo=tutti-os/tutti)](https://github.com/tutti-os/tutti/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=tutti-os/tutti)](https://github.com/xiaoheiCat/OpenTuttiVM/graphs/contributors)
 
 ## 社群與貢獻
 

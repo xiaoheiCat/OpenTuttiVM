@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	activityshared "github.com/tutti-os/tutti/packages/agent/daemon/activity/events"
-	replay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	activityshared "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity/events"
+	replay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 var (

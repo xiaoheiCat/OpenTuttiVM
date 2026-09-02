@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	userprojectbiz "github.com/tutti-os/tutti/services/tuttid/biz/userproject"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	userprojectbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/userproject"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 func TestSQLiteStorePutUserProjectRepairsImportedSessionRail(t *testing.T) {

@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 )
 
 func (api DaemonAPI) agentSideConversationEnabled(ctx context.Context) bool {

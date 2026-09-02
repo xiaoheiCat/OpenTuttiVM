@@ -1,4 +1,4 @@
-module github.com/tutti-os/tutti/packages/desktop/update-admission
+module github.com/xiaoheiCat/OpenTuttiVM/packages/desktop/update-admission
 
 go 1.24.3
 

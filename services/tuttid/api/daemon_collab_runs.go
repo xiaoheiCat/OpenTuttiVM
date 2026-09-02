@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	collabrunbiz "github.com/tutti-os/tutti/services/tuttid/biz/collabrun"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	collabrunservice "github.com/tutti-os/tutti/services/tuttid/service/collabrun"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	collabrunbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/collabrun"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	collabrunservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/collabrun"
 )
 
 type CollaborationRunService interface {

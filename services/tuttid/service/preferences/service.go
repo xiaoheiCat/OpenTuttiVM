@@ -5,11 +5,11 @@ import (
 	"errors"
 	"strings"
 
-	agentproviderbiz "github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
-	reporterevents "github.com/tutti-os/tutti/services/tuttid/service/reporter/events"
+	agentproviderbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
+	reporterevents "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter/events"
 )
 
 type DesktopPreferencesPublisher interface {

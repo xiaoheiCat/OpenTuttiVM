@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	managedcredentialsbiz "github.com/tutti-os/tutti/services/tuttid/biz/managedcredentials"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
+	managedcredentialsbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/managedcredentials"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
 )
 
 const GrantCodeTTL = 5 * time.Hour

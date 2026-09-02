@@ -9,8 +9,8 @@ import (
 	"io"
 	"time"
 
-	devicelink "github.com/tutti-os/tutti/packages/device-link"
-	"github.com/tutti-os/tutti/packages/device-link/icequic"
+	devicelink "github.com/xiaoheiCat/OpenTuttiVM/packages/device-link"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/device-link/icequic"
 )
 
 const defaultProbeTimeout = 30 * time.Second

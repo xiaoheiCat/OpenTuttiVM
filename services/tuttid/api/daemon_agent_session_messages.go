@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
 )
 
 const maxWorkspaceAgentJSONSafeInteger = uint64(1<<53 - 1)

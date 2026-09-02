@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
+	workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
 )
 
 func TestDaemonAPIGeneratedRoutesCreateWorkspaceFileDirectoryMapsMissingParentTo404(t *testing.T) {

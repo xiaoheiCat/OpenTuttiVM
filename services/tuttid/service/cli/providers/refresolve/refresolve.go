@@ -8,8 +8,8 @@ import (
 	"errors"
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 const (

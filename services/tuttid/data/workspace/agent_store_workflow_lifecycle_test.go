@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
 )
 
 func TestSQLiteStoreDeletingSourceSessionDoesNotChooseWorkflowCancellationPolicy(t *testing.T) {

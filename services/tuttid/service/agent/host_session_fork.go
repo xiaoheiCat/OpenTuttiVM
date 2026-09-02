@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	storesqlite "github.com/tutti-os/tutti/packages/agent/store-sqlite"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	storesqlite "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
 )
 
 type serviceHostSessionForkContextPolicy struct{}

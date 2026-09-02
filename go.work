@@ -45,4 +45,12 @@ use (
 	./packages/agent/store-sqlite
 	./packages/agent/store-sqlite/canonical
 	./packages/appcli/core
+	./packages/workspace/vm-cas
+	./packages/agent/borrow
+	./packages/workspace/vm-protocol
+	./packages/workspace/vm-roomfs
+	./packages/workspace/vm-sync
+	./services/open-tutti-fs
+	./services/open-tutti-room-sync
+	./services/open-tutti-server
 )

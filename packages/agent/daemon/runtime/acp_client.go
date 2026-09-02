@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	sessionreplay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	sessionreplay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 type acpClient struct {

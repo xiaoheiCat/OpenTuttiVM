@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	userprojectbiz "github.com/tutti-os/tutti/services/tuttid/biz/userproject"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	userprojectbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/userproject"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 type sqlitePragmaExecutorStub struct {

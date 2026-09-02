@@ -17,12 +17,12 @@ import (
 	"sync"
 	"time"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	connectorruntime "github.com/tutti-os/tutti/packages/connector/runtime"
-	connectorartifact "github.com/tutti-os/tutti/packages/connector/runtime/artifact"
-	"github.com/tutti-os/tutti/packages/connector/runtime/command"
-	"github.com/tutti-os/tutti/packages/connector/runtime/mcp"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	connectorruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime"
+	connectorartifact "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/artifact"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/command"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/mcp"
 )
 
 type PreparedArtifactResolver interface {

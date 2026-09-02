@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"strings"
 
-	tuttiapi "github.com/tutti-os/tutti/services/tuttid/api"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttiapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 type Routes = tuttiapi.Routes

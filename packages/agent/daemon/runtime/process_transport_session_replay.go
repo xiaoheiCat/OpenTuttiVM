@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	sessionreplay "github.com/tutti-os/tutti/packages/agent/session-replay"
+	sessionreplay "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/session-replay"
 )
 
 // SessionReplayProcessRegistration binds one Replay Cassette and root Session to

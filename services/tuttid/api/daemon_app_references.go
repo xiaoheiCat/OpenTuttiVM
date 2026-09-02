@@ -5,10 +5,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	workspaceapi "github.com/tutti-os/tutti/services/tuttid/api/workspace"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	workspaceapi "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/workspace"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
 )
 
 const (

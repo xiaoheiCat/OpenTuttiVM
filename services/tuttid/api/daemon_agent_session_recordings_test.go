@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	agentsessionreplay "github.com/tutti-os/tutti/services/tuttid/service/agentsessionreplay"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	agentsessionreplay "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentsessionreplay"
 )
 
 type agentSessionRecordingServiceStub struct {

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	claudecodeservice "github.com/tutti-os/tutti/services/tuttid/service/claudecode"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	claudecodeservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/claudecode"
 )
 
 func TestCodexAccountUsageQuotaMapsProviderWindow(t *testing.T) {

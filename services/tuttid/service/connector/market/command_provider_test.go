@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	implementationhost "github.com/tutti-os/tutti/packages/connector/runtime/implementationhost"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	implementationhost "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/runtime/implementationhost"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 func TestConnectorCommandProviderReadsValidatedRouteProjection(t *testing.T) {

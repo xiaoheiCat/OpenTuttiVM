@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	agentsessionstore "github.com/tutti-os/tutti/packages/agent/daemon/activity"
+	agentsessionstore "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/activity"
 )
 
 type streamingReportCoalescer struct {

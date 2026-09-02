@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
-	workflowdata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
-	tuttimodeplanservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeplan"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
+	workflowdata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
+	tuttimodeplanservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeplan"
 )
 
 func agentPlanError(err error) error {

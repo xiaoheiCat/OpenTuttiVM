@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentgui"
-	workbenchbiz "github.com/tutti-os/tutti/services/tuttid/biz/workbench"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentgui"
+	workbenchbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workbench"
 )
 
 type AgentGUILaunchPublisher struct {

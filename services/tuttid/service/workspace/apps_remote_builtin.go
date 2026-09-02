@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	builtinapps "github.com/tutti-os/tutti/services/tuttid/builtin-apps"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	builtinapps "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/builtin-apps"
 )
 
 func remoteBuiltinWorkspaceApp(builtin builtinapps.App) (workspacebiz.WorkspaceApp, error) {

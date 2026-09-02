@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 func getAgentTurnTx(ctx context.Context, tx *sql.Tx, workspaceID string, agentSessionID string, turnID string) (Turn, bool, error) {

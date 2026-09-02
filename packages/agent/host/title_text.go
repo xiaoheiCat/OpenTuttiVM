@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	canonical "github.com/tutti-os/tutti/packages/agent/store-sqlite/canonical"
+	canonical "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite/canonical"
 )
 
 const MaxSessionTitleRunes = 120

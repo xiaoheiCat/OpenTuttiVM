@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	workspacebiz "github.com/tutti-os/tutti/services/tuttid/biz/workspace"
-	cliservice "github.com/tutti-os/tutti/services/tuttid/service/cli"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	workspacebiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspace"
+	cliservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/cli"
 )
 
 type fakeWorkspaceCatalog struct {

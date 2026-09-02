@@ -9,14 +9,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	modelgatewayservice "github.com/tutti-os/tutti/services/tuttid/service/modelgateway"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	modelgatewayservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelgateway"
 )
 
 func (s *Service) Create(ctx context.Context, workspaceID string, input CreateSessionInput) (Session, error) {

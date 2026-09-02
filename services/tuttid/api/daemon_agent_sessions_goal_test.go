@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	agentactivitybiz "github.com/tutti-os/tutti/packages/agent/store-sqlite"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	agentsessionreplay "github.com/tutti-os/tutti/services/tuttid/service/agentsessionreplay"
+	agentactivitybiz "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/store-sqlite"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	agentsessionreplay "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agentsessionreplay"
 )
 
 type goalClientSubmitService struct {

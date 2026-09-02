@@ -1,6 +1,6 @@
 package consumer
 
-import agenthost "github.com/tutti-os/tutti/packages/agent/host"
+import agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
 
 var (
 	_ = agenthost.New

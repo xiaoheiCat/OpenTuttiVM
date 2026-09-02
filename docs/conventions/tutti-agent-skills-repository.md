@@ -137,7 +137,7 @@ Initial manifest:
   "author": {
     "name": "Tutti"
   },
-  "repository": "https://github.com/tutti-os/tutti-agent-skills",
+  "repository": "https://github.com/xiaoheiCat/OpenTuttiVM-agent-skills",
   "license": "MIT",
   "keywords": ["tutti", "workspace-apps", "agent-skills"],
   "skills": "./skills/",
@@ -351,7 +351,7 @@ jobs:
             "version": "0.1.0",
             "description": "Tutti workspace app authoring tools for agent runtimes.",
             "author": { "name": "Tutti" },
-            "repository": "https://github.com/tutti-os/tutti-agent-skills",
+            "repository": "https://github.com/xiaoheiCat/OpenTuttiVM-agent-skills",
             "license": "MIT",
             "keywords": ["tutti", "workspace-apps", "agent-skills"],
             "skills": "./skills/",

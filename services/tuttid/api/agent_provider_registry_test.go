@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
 )
 
 func TestGeneratedAPIProviderContractsRemainOpen(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	modelbindingbiz "github.com/tutti-os/tutti/services/tuttid/biz/modelbinding"
-	modelbindingservice "github.com/tutti-os/tutti/services/tuttid/service/modelbinding"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	modelbindingbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/modelbinding"
+	modelbindingservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/modelbinding"
 )
 
 // policyRejectingBindingService reports a binding write against a missing

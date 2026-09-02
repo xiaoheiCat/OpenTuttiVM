@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentgui"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentgui"
 )
 
 func TestAgentGUILaunchPublisherPublishesWorkbenchNodeLaunch(t *testing.T) {

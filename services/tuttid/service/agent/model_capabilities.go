@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/httpx"
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentprovider"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/httpx"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentprovider"
 	"golang.org/x/sync/singleflight"
 )
 

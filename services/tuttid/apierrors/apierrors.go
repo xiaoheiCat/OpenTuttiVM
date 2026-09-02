@@ -4,15 +4,15 @@ import (
 	"errors"
 	"strings"
 
-	agentruntime "github.com/tutti-os/tutti/packages/agent/daemon/runtime"
-	runtimeprep "github.com/tutti-os/tutti/packages/agent/runtimeprep"
-	workspacefiles "github.com/tutti-os/tutti/packages/workspace/files"
-	workspaceissues "github.com/tutti-os/tutti/packages/workspace/issues"
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	executionbiz "github.com/tutti-os/tutti/services/tuttid/biz/tuttimodeexecution"
-	workspacedata "github.com/tutti-os/tutti/services/tuttid/data/workspace"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
+	agentruntime "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/runtime"
+	runtimeprep "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/runtimeprep"
+	workspacefiles "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/files"
+	workspaceissues "github.com/xiaoheiCat/OpenTuttiVM/packages/workspace/issues"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	executionbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/tuttimodeexecution"
+	workspacedata "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/data/workspace"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
 )
 
 const (

@@ -6,7 +6,7 @@ import (
 	"context"
 	"strings"
 
-	connectorhost "github.com/tutti-os/tutti/packages/connector/daemon/core"
+	connectorhost "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
 )
 
 const (

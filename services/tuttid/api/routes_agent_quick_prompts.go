@@ -6,9 +6,9 @@ import (
 	"io"
 	"net/http"
 
-	tuttigenerated "github.com/tutti-os/tutti/services/tuttid/api/generated"
-	"github.com/tutti-os/tutti/services/tuttid/apierrors"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	tuttigenerated "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/generated"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/apierrors"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 func registerAgentQuickPromptRoutes(mux *http.ServeMux, wrapper *tuttigenerated.ServerInterfaceWrapper) {

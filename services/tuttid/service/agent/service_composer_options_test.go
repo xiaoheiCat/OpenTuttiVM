@@ -8,10 +8,10 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	market "github.com/tutti-os/tutti/packages/connector/daemon/core"
-	agenttargetbiz "github.com/tutti-os/tutti/services/tuttid/biz/agenttarget"
-	preferencesbiz "github.com/tutti-os/tutti/services/tuttid/biz/preferences"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	market "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"
+	agenttargetbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agenttarget"
+	preferencesbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/preferences"
 )
 
 func TestServiceGetsComposerOptionsWithoutStartingRuntime(t *testing.T) {

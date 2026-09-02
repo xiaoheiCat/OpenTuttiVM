@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	workflowbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceworkflow"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	tuttimodeplanservice "github.com/tutti-os/tutti/services/tuttid/service/tuttimodeplan"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	workflowbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceworkflow"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	tuttimodeplanservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/tuttimodeplan"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 const tuttiModePlanFeedbackDispatchTimeout = 2 * time.Minute

@@ -3,7 +3,7 @@ package node_result
 import (
 	"strings"
 
-	"github.com/tutti-os/tutti/services/tuttid/biz/agentanalytics"
+	"github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/agentanalytics"
 )
 
 type NodeResultInput struct {

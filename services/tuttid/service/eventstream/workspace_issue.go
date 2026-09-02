@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	eventprotocol "github.com/tutti-os/tutti/services/tuttid/api/events/generated"
+	eventprotocol "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/api/events/generated"
 )
 
 type WorkspaceIssueChangeKind string

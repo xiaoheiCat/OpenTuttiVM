@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/tutti-os/tutti/packages/agent/daemon/providerregistry"
-	agenthost "github.com/tutti-os/tutti/packages/agent/host"
-	workspaceagentbiz "github.com/tutti-os/tutti/services/tuttid/biz/workspaceagent"
-	agentservice "github.com/tutti-os/tutti/services/tuttid/service/agent"
-	reporterservice "github.com/tutti-os/tutti/services/tuttid/service/reporter"
-	workspaceservice "github.com/tutti-os/tutti/services/tuttid/service/workspace"
-	tuttitypes "github.com/tutti-os/tutti/services/tuttid/types"
+	"github.com/xiaoheiCat/OpenTuttiVM/packages/agent/daemon/providerregistry"
+	agenthost "github.com/xiaoheiCat/OpenTuttiVM/packages/agent/host"
+	workspaceagentbiz "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/biz/workspaceagent"
+	agentservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/agent"
+	reporterservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/reporter"
+	workspaceservice "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/service/workspace"
+	tuttitypes "github.com/xiaoheiCat/OpenTuttiVM/services/tuttid/types"
 )
 
 type recordingIssueRunAgentSessionCreator struct {

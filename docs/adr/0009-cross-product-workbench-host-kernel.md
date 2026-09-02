@@ -12,11 +12,11 @@
 ## Implementation status
 
 Tutti completed the public package extraction in
-[#1194](https://github.com/tutti-os/tutti/pull/1194) and the direct desktop
-cutover in [#1196](https://github.com/tutti-os/tutti/pull/1196). The fixed npm
+[#1194](https://github.com/xiaoheiCat/OpenTuttiVM/pull/1194) and the direct desktop
+cutover in [#1196](https://github.com/xiaoheiCat/OpenTuttiVM/pull/1196). The fixed npm
 release group published `@tutti-os/workbench-host@0.0.104` under
 `packages-v0.0.104` through
-[workflow run 29440844430](https://github.com/tutti-os/tutti/actions/runs/29440844430).
+[workflow run 29440844430](https://github.com/xiaoheiCat/OpenTuttiVM/actions/runs/29440844430).
 
 TSH adoption is intentionally separate downstream work. It should consume the
 stable npm package and its public conformance subpath; it does not keep a Tutti

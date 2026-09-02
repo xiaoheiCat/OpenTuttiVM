@@ -27,7 +27,7 @@ test("accepts the intended Connector dependency direction", async () => {
     "packages/connector/renderer/src/ui/index.ts":
       "import type { Connector } from '../application/index.ts'; export type { Connector };",
     "packages/connector/runtime/runtime.go":
-      'package runtime\nimport _ "github.com/tutti-os/tutti/packages/connector/daemon/core"'
+      'package runtime\nimport _ "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/core"'
   });
 
   const result = runCheck(workspaceRoot);
@@ -43,7 +43,7 @@ test("rejects Renderer Application React imports and Runtime adapter dependencie
     "packages/connector/renderer/src/application/index.ts":
       "import { useState } from 'react'; export { useState };",
     "packages/connector/runtime/runtime.go":
-      'package runtime\nimport _ "github.com/tutti-os/tutti/packages/connector/daemon/adapters/sqlite"'
+      'package runtime\nimport _ "github.com/xiaoheiCat/OpenTuttiVM/packages/connector/daemon/adapters/sqlite"'
   });
 
   const result = runCheck(workspaceRoot);
